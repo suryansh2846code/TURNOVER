@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..brain import get_brain
 from ..config import get_settings
 from ..models import Message, get_provider
 from .agent import Agent, AgentMemory
@@ -65,11 +66,23 @@ def run_turn(agent_id: str, user_text: str, *,
     tools = build_tools(agent.tools)
 
     messages: list[Message] = [Message(role="system", content=agent.system_message())]
+
+    # Auto-recall: inject the relevant slice of the brain up front so the agent
+    # *already knows the user* regardless of whether the (possibly small) model
+    # decides to call search_brain. Tools remain for going deeper / live data.
+    trace: list[TraceStep] = []
+    recalled = get_brain().recall(user_text, limit=6)
+    if recalled["context"]:
+        messages.append(Message(role="system", content=recalled["context"]))
+        trace.append(TraceStep(
+            kind="tool_result", name="auto_recall",
+            result=f"{len(recalled['memory_hits'])} memories, "
+                   f"{len(recalled['entities'])} entities",
+        ))
+
     messages += _load_history(mem, agent)
     messages.append(Message(role="user", content=user_text))
     mem.append(agent.id, "user", user_text)
-
-    trace: list[TraceStep] = []
     reply = ""
     for _ in range(MAX_STEPS):
         result = provider.chat(messages, tools=tools, temperature=0.4)
