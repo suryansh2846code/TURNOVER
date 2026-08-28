@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..core.chunk import chunk_text
 from .base import Connector, SyncResult
 
 TEXT_EXT = {
@@ -42,20 +41,17 @@ class FilesConnector(Connector):
             except Exception as exc:  # unreadable file
                 result.errors.append(f"{fp.name}: {exc}")
                 continue
-            chunks = chunk_text(text)
-            for i, chunk in enumerate(chunks):
-                mem = self.store.add(
-                    text=chunk,
-                    source=self.name,
-                    kind="doc",
-                    title=fp.name if i == 0 else f"{fp.name} (part {i + 1})",
-                    uri=str(fp),
-                    metadata={"chunk": i, "chunks": len(chunks)},
-                )
-                if mem:
-                    result.added += 1
-                else:
-                    result.skipped += 1
+            # Route through the brain so the knowledge graph is built too.
+            # fast=True → offline heuristic extraction, so bulk imports stay quick.
+            from ..brain import get_brain
+            out = get_brain().ingest(
+                text, source=self.name, kind="doc", title=fp.name,
+                uri=str(fp), fast=True,
+            )
+            if out["memories"]:
+                result.added += out["memories"]
+            else:
+                result.skipped += 1
         result.detail = f"scanned {len(files)} files under {root}"
         return self._finish(result)
 

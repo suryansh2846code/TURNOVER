@@ -26,8 +26,14 @@ class Brain:
     # ── ingestion ────────────────────────────────────────────────────────
     def ingest(self, text: str, *, source: str = "manual", kind: str = "note",
                title: str | None = None, uri: str | None = None,
-               build_graph: bool = True, tags=None) -> dict[str, Any]:
-        """Ingest text into both the vector store and the knowledge graph."""
+               build_graph: bool = True, fast: bool = False,
+               tags=None) -> dict[str, Any]:
+        """Ingest text into both the vector store and the knowledge graph.
+
+        `fast=True` uses offline heuristic extraction only (no per-chunk LLM
+        call) — used for bulk connector syncs so importing a whole folder stays
+        quick instead of hitting the model hundreds of times.
+        """
         added_mem = 0
         entities = 0
         facts = 0
@@ -41,13 +47,14 @@ class Brain:
                 continue
             added_mem += 1
             if build_graph:
-                e, f = self._graph_from(chunk, mem.id)
+                e, f = self._graph_from(chunk, mem.id, fast=fast)
                 entities += e
                 facts += f
         return {"memories": added_mem, "entities": entities, "facts": facts}
 
-    def _graph_from(self, text: str, mem_id: str) -> tuple[int, int]:
-        data = extractor.extract(text)
+    def _graph_from(self, text: str, mem_id: str, fast: bool = False) -> tuple[int, int]:
+        data = (extractor.extract_heuristic(text) if fast
+                else extractor.extract(text))
         name_to_id: dict[str, str] = {}
         for ent in data.get("entities", []):
             eid = self.graph.upsert_entity(
