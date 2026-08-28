@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -52,6 +53,58 @@ def _load_history(mem: AgentMemory, agent: Agent) -> list[Message]:
         if row["role"] in ("user", "assistant") and row["content"]:
             msgs.append(Message(role=row["role"], content=row["content"]))
     return msgs
+
+
+_LEARN_SYS = (
+    "From the user's message, extract ONLY durable facts they revealed about "
+    "themselves, their work, people, preferences, or plans — things worth "
+    "remembering long-term. Ignore questions, commands, and small talk. "
+    'Return STRICT JSON: {"facts": ["...", "..."]}. Empty list if nothing durable. '
+    "Write each fact as a standalone third-person statement (e.g. 'The user "
+    "prefers X')."
+)
+
+# first-person cues that suggest the user is disclosing something durable
+_DISCLOSURE = re.compile(
+    r"\b(i am|i'm|my |i work|i live|i prefer|i like|i hate|i use|i build|"
+    r"i'm building|i want|i need|remember that|i usually|i always|i own)\b",
+    re.I,
+)
+
+
+def _auto_learn(user_text: str, provider) -> int:
+    text = user_text.strip()
+    # cheap gate: skip pure questions / anything with no self-disclosure
+    if text.endswith("?") and not _DISCLOSURE.search(text):
+        return 0
+    if not _DISCLOSURE.search(text):
+        return 0
+
+    facts: list[str] = []
+    ready, _ = provider.is_ready()
+    if provider.name != "mock" and ready:
+        try:
+            res = provider.chat(
+                [Message(role="system", content=_LEARN_SYS),
+                 Message(role="user", content=text[:1500])],
+                temperature=0, max_tokens=300,
+            )
+            raw = res.text
+            raw = raw[raw.find("{"): raw.rfind("}") + 1]
+            facts = [f for f in json.loads(raw).get("facts", []) if f.strip()]
+        except Exception:
+            facts = []
+    if not facts:
+        # heuristic fallback: store the disclosing sentence itself
+        facts = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text)
+                 if _DISCLOSURE.search(s)][:3]
+
+    brain = get_brain()
+    stored = 0
+    for fact in facts[:5]:
+        if brain.ingest(fact, source="agent", kind="fact", title="learned")["memories"]:
+            stored += 1
+    return stored
 
 
 def run_turn(agent_id: str, user_text: str, *,
@@ -108,6 +161,13 @@ def run_turn(agent_id: str, user_text: str, *,
 
     mem.append(agent.id, "assistant", reply,
                tool_json=json.dumps([s.name for s in trace if s.kind == "tool_call"]))
+
+    # Auto-learn: quietly capture durable facts the user revealed this turn, so
+    # simply talking to an agent grows the brain — no manual "add fact" step.
+    learned = _auto_learn(user_text, provider)
+    if learned:
+        trace.append(TraceStep(kind="tool_result", name="auto_learn",
+                               result=f"learned {learned} new fact(s)"))
     return TurnResult(
         agent_id=agent.id, reply=reply, trace=trace,
         provider=provider.name, model=provider.model,
