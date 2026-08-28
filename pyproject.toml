@@ -1,0 +1,46 @@
+[project]
+name = "lodestone"
+version = "0.1.0"
+description = "Local-first personal context layer for AI. Your knowledge lives on your machine; any model can recall it. A privacy-first alternative to Turnstone."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Suryansh Singh" }]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "python-dotenv>=1.0",
+    "numpy>=1.26",
+    "httpx>=0.27",
+    "mcp>=1.2.0",
+    "typer>=0.12",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+# Higher-quality local embeddings (bigger install). Optional — a pure-python
+# fallback embedding always works with zero extra deps.
+local-embeddings = ["sentence-transformers>=2.7"]
+# Connector SDKs. Installed only if you use the connector.
+gmail = ["google-api-python-client>=2.0", "google-auth-oauthlib>=1.2"]
+gdrive = ["google-api-python-client>=2.0", "google-auth-oauthlib>=1.2", "pypdf>=4.0"]
+notion = ["notion-client>=2.2"]
+all = [
+    "sentence-transformers>=2.7",
+    "google-api-python-client>=2.0",
+    "google-auth-oauthlib>=1.2",
+    "pypdf>=4.0",
+    "notion-client>=2.2",
+]
+
+[project.scripts]
+lodestone = "lodestone.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lodestone"]

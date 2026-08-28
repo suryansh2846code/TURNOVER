@@ -1,0 +1,105 @@
+"""Notion connector — ingests pages the integration can access."""
+from __future__ import annotations
+
+from typing import Any
+
+from ..config import get_settings
+from ..core.chunk import chunk_text
+from .base import Connector, SyncResult
+
+
+def _rich_text(items: list[dict]) -> str:
+    return "".join(i.get("plain_text", "") for i in items or [])
+
+
+def _block_text(block: dict) -> str:
+    btype = block.get("type", "")
+    data = block.get(btype, {})
+    if isinstance(data, dict) and "rich_text" in data:
+        text = _rich_text(data["rich_text"])
+        if btype.startswith("heading"):
+            return f"\n{text}\n"
+        if btype == "to_do":
+            check = "x" if data.get("checked") else " "
+            return f"- [{check}] {text}"
+        if "list_item" in btype:
+            return f"- {text}"
+        return text
+    return ""
+
+
+class NotionConnector(Connector):
+    name = "notion"
+    label = "Notion"
+
+    def is_configured(self) -> tuple[bool, str]:
+        if get_settings().notion_token:
+            return True, ""
+        return False, "set NOTION_TOKEN (internal integration secret)"
+
+    def sync(self, *, page_size: int = 50, **_: Any) -> SyncResult:
+        result = SyncResult(connector=self.name)
+        token = get_settings().notion_token
+        if not token:
+            result.errors.append("NOTION_TOKEN not set")
+            return self._finish(result)
+        try:
+            from notion_client import Client  # lazy
+        except ImportError:
+            result.errors.append("pip install .[notion] to use the Notion connector")
+            return self._finish(result)
+
+        try:
+            notion = Client(auth=token)
+            search = notion.search(
+                filter={"property": "object", "value": "page"},
+                page_size=page_size,
+            )
+            pages = search.get("results", [])
+            for page in pages:
+                title = self._page_title(page)
+                text = self._page_text(notion, page["id"])
+                if not text.strip():
+                    result.skipped += 1
+                    continue
+                for i, chunk in enumerate(chunk_text(text)):
+                    mem = self.store.add(
+                        text=chunk,
+                        source=self.name,
+                        kind="doc",
+                        title=title if i == 0 else f"{title} (part {i + 1})",
+                        uri=page.get("url"),
+                        metadata={"page_id": page["id"], "chunk": i},
+                    )
+                    if mem:
+                        result.added += 1
+                    else:
+                        result.skipped += 1
+            result.detail = f"{len(pages)} pages"
+        except Exception as exc:
+            result.errors.append(str(exc))
+            result.detail = "sync failed"
+        return self._finish(result)
+
+    def _page_title(self, page: dict) -> str:
+        props = page.get("properties", {})
+        for prop in props.values():
+            if prop.get("type") == "title":
+                return _rich_text(prop["title"]) or "Untitled"
+        return "Untitled"
+
+    def _page_text(self, notion, page_id: str) -> str:
+        lines: list[str] = []
+        cursor = None
+        while True:
+            resp = notion.blocks.children.list(
+                block_id=page_id, start_cursor=cursor, page_size=100
+            )
+            for block in resp.get("results", []):
+                t = _block_text(block)
+                if t:
+                    lines.append(t)
+            if not resp.get("has_more"):
+                break
+            cursor = resp.get("next_cursor")
+        return "\n".join(lines)

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lodestone</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- Left: agents -->
+    <aside class="sidebar">
+      <div class="brand"><span class="logo">◆</span><b>Lodestone</b></div>
+      <div class="side-label">Agents</div>
+      <nav id="agentList" class="agents"></nav>
+      <div class="side-foot">
+        <div class="side-label">Model</div>
+        <select id="provider"></select>
+      </div>
+    </aside>
+
+    <!-- Center: chat -->
+    <main class="chat">
+      <header class="chat-head">
+        <div>
+          <h2 id="agentName">—</h2>
+          <p id="agentRole" class="muted"></p>
+        </div>
+        <button id="clearBtn" class="ghost tiny">Clear chat</button>
+      </header>
+      <div id="messages" class="messages"></div>
+      <form id="composer" class="composer">
+        <input id="input" autocomplete="off"
+               placeholder="Ask your agent… it already knows you." />
+        <button id="send">Send</button>
+      </form>
+    </main>
+
+    <!-- Right: brain -->
+    <aside class="brainpanel">
+      <div class="side-label">Brain</div>
+      <div id="brainStats" class="brain-stats"></div>
+      <div class="addbox">
+        <textarea id="ingestText" rows="2" placeholder="Teach the brain something…"></textarea>
+        <button id="ingestBtn" class="tiny">Add to brain</button>
+      </div>
+      <div class="side-label">Knowledge graph</div>
+      <div id="entities" class="entities"></div>
+      <div class="side-label">Connectors</div>
+      <div id="connectors" class="connectors"></div>
+    </aside>
+  </div>
+  <div id="toast" class="toast"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
