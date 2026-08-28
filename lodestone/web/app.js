@@ -89,16 +89,43 @@ async function loadBrain() {
 }
 
 async function syncConn(name) {
-  let params = {};
-  if (name === "files") { const p = prompt("Folder/file to ingest:"); if (!p) return; params = { path: p }; }
+  if (name === "files") { openPicker(); return; }   // folder picker for local files
   toast(`syncing ${name}…`);
   try {
     const r = await api(`/api/connectors/${name}/sync`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ params }) });
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ params: {} }) });
     toast(r.errors?.length ? `${name}: ${r.errors[0]}` : `${name}: +${r.added} added`);
     loadBrain();
   } catch (e) { toast(String(e)); }
 }
+
+// ── folder picker ──────────────────────────────────────────────────────────
+let pickPath = null;
+async function openPicker(path) {
+  const d = await api("/api/fs/browse" + (path ? `?path=${encodeURIComponent(path)}` : ""));
+  pickPath = d.path;
+  $("#picker").hidden = false;
+  $("#pickPath").textContent = d.path;
+  $("#pickInfo").textContent = d.ingestible_here
+    ? `${d.ingestible_here} ingestible file(s) directly here` : "no text files directly here (subfolders may still have them)";
+  let rows = "";
+  if (d.parent) rows += `<div class="pick-row up" data-go="${esc(d.parent)}">⤴  ..</div>`;
+  rows += d.dirs.map((name) => `<div class="pick-row" data-go="${esc(d.path.replace(/\/$/, "") + "/" + name)}">📁  ${esc(name)}</div>`).join("");
+  $("#pickList").innerHTML = rows || `<div class="pick-row up">(no subfolders)</div>`;
+  document.querySelectorAll("#pickList [data-go]").forEach((el) => el.onclick = () => openPicker(el.dataset.go));
+}
+$("#pickClose").onclick = () => $("#picker").hidden = true;
+$("#pickIngest").onclick = async () => {
+  $("#picker").hidden = true;
+  toast(`ingesting ${pickPath.split("/").pop()}…`);
+  try {
+    const r = await api(`/api/connectors/files/sync`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ params: { path: pickPath } }) });
+    toast(r.errors?.length ? `files: ${r.errors[0]}` : `files: +${r.added} added from ${r.detail}`);
+    loadBrain();
+  } catch (e) { toast(String(e)); }
+};
 
 $("#composer").onsubmit = (e) => { e.preventDefault(); const v = $("#input").value.trim(); if (v && current) { $("#input").value = ""; send(v); } };
 $("#clearBtn").onclick = async () => { await api(`/api/agents/${current}/clear`, { method: "POST" }); selectAgent(current); toast("chat cleared"); };

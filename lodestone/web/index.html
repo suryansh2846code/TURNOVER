@@ -50,6 +50,22 @@
       <div id="connectors" class="connectors"></div>
     </aside>
   </div>
+  <!-- folder picker -->
+  <div id="picker" class="modal-bg" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <b>Pick a folder to ingest</b>
+        <button id="pickClose" class="ghost tiny">✕</button>
+      </div>
+      <div id="pickPath" class="pick-path"></div>
+      <div id="pickList" class="pick-list"></div>
+      <div class="modal-foot">
+        <span id="pickInfo" class="muted"></span>
+        <button id="pickIngest">Ingest this folder</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
   <script src="/static/app.js"></script>
 </body>

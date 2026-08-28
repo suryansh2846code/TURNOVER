@@ -112,6 +112,42 @@ def sync(name: str, body: SyncIn):
     return res.as_dict()
 
 
+# ── local filesystem browser (for the folder picker) ─────────────────────
+@app.get("/api/fs/browse")
+def fs_browse(path: str | None = None):
+    """List subdirectories of a path so the UI can offer a native-feeling
+    folder picker for the files connector. Read-only, dirs only."""
+    base = Path(path).expanduser() if path else Path.home()
+    try:
+        base = base.resolve()
+    except Exception:
+        base = Path.home()
+    if not base.exists() or not base.is_dir():
+        base = Path.home()
+
+    dirs, ingestible = [], 0
+    try:
+        for entry in sorted(base.iterdir(), key=lambda p: p.name.lower()):
+            if entry.name.startswith(".") or entry.name in {
+                "node_modules", "__pycache__", ".venv", "venv"}:
+                continue
+            if entry.is_dir():
+                dirs.append(entry.name)
+            elif entry.suffix.lower() in {
+                ".md", ".txt", ".py", ".js", ".ts", ".tsx", ".json",
+                ".yaml", ".yml", ".html", ".css", ".rst"}:
+                ingestible += 1
+    except PermissionError:
+        pass
+    return {
+        "path": str(base),
+        "parent": str(base.parent) if base.parent != base else None,
+        "home": str(Path.home()),
+        "dirs": dirs,
+        "ingestible_here": ingestible,
+    }
+
+
 # ── dashboard ─────────────────────────────────────────────────────────────
 @app.get("/")
 def index():
