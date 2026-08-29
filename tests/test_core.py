@@ -56,3 +56,18 @@ def test_provider_registry():
                tools=[Tool(name="search_brain", description="x", parameters={})])
     # with a search_brain tool available, mock chooses to call it first
     assert r.wants_tools
+
+
+def test_task_store_due_parsing():
+    import tempfile
+    from datetime import date, timedelta
+    from lodestone.tasks import TaskStore
+    ts = TaskStore(db_path=tempfile.mktemp(suffix=".db"))
+    t = ts.add("finish the launch page tomorrow")
+    assert t["title"] == "finish the launch page"          # date phrase stripped
+    assert t["due"] == (date.today() + timedelta(days=1)).isoformat()
+    ts.add("call supplier today")
+    assert len(ts.list(when="today")) == 1
+    assert ts.stats()["today"] == 1
+    ts.complete("call supplier")
+    assert ts.stats()["today"] == 0

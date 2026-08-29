@@ -150,6 +150,26 @@ def run_turn(agent_id: str, user_text: str, *,
                    f"{len(recalled['entities'])} entities",
         ))
 
+    # Ground task-capable agents in the ACTUAL current tasks (authoritative),
+    # so they never invent or regurgitate stale tasks from chat history.
+    if "list_tasks" in agent.tools:
+        from ..tasks import get_tasks
+        open_tasks = get_tasks().list()
+        if open_tasks:
+            lines = [f"- {t['title']}" + (f" (due {t['due']})" if t["due"] else "")
+                     for t in open_tasks[:20]]
+            messages.append(Message(
+                role="system",
+                content=("The user's CURRENT open tasks (this is the authoritative "
+                         "list — use it; never invent tasks not shown here):\n"
+                         + "\n".join(lines)),
+            ))
+        else:
+            messages.append(Message(
+                role="system",
+                content="The user currently has NO open tasks. Do not claim otherwise.",
+            ))
+
     messages += _load_history(mem, agent)
     # model sees the date adjacent to the question; stored memory stays clean
     messages.append(Message(
@@ -157,7 +177,8 @@ def run_turn(agent_id: str, user_text: str, *,
     mem.append(agent.id, "user", user_text)
     reply = ""
     for _ in range(MAX_STEPS):
-        result = provider.chat(messages, tools=tools, temperature=0.4)
+        # low temperature → more reliable instruction-following & tool use
+        result = provider.chat(messages, tools=tools, temperature=0.15)
         if result.wants_tools:
             messages.append(Message(
                 role="assistant", content=result.text, tool_calls=result.tool_calls,

@@ -112,6 +112,39 @@ def sync(name: str, body: SyncIn):
     return res.as_dict()
 
 
+# ── tasks ─────────────────────────────────────────────────────────────────
+class TaskIn(BaseModel):
+    title: str
+    due: str | None = None
+
+@app.get("/api/tasks")
+def list_tasks(when: str | None = None, include_done: bool = False):
+    from ..tasks import get_tasks
+    ts = get_tasks()
+    return {"tasks": ts.list(when=when, include_done=include_done),
+            "stats": ts.stats()}
+
+@app.post("/api/tasks")
+def add_task(body: TaskIn):
+    from ..tasks import get_tasks
+    return get_tasks().add(body.title, body.due)
+
+@app.post("/api/tasks/{tid}/complete")
+def complete_task(tid: str):
+    from ..tasks import get_tasks
+    t = get_tasks().complete(tid)
+    if not t:
+        raise HTTPException(404, "no task matched")
+    return t
+
+@app.delete("/api/tasks/{tid}")
+def delete_task(tid: str):
+    from ..tasks import get_tasks
+    if not get_tasks().delete(tid):
+        raise HTTPException(404, "no task matched")
+    return {"deleted": tid}
+
+
 # ── local filesystem browser (for the folder picker) ─────────────────────
 @app.get("/api/fs/browse")
 def fs_browse(path: str | None = None):

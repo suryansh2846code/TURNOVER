@@ -52,6 +52,32 @@ def _web_search(query: str) -> str:
 
 
 # ── connector tools (live app access) ─────────────────────────────────────
+def _add_task(title: str, due: str | None = None) -> str:
+    from ..tasks import get_tasks
+    t = get_tasks().add(title, due)
+    when = f" (due {t['due']})" if t["due"] else ""
+    return f"Added task: {t['title']}{when}"
+
+
+def _list_tasks(when: str | None = None) -> str:
+    from ..tasks import get_tasks
+    tasks = get_tasks().list(when=when)
+    if not tasks:
+        scope = when or "open"
+        return f"No {scope} tasks."
+    lines = []
+    for t in tasks:
+        due = f"  ·  due {t['due']}" if t["due"] else ""
+        lines.append(f"- {t['title']}{due}  (id {t['id'][:6]})")
+    return "\n".join(lines)
+
+
+def _complete_task(task: str) -> str:
+    from ..tasks import get_tasks
+    done = get_tasks().complete(task)
+    return f"Completed: {done['title']}" if done else f"No task matched '{task}'."
+
+
 def _gmail_search(query: str = "newer_than:30d", max_results: int = 10) -> str:
     from ..connectors import get_connector
     conn = get_connector("gmail")
@@ -70,6 +96,9 @@ TOOL_IMPLS = {
     "list_entities": _list_entities,
     "web_search": _web_search,
     "gmail_search": _gmail_search,
+    "add_task": _add_task,
+    "list_tasks": _list_tasks,
+    "complete_task": _complete_task,
 }
 
 TOOL_DEFS: dict[str, Tool] = {
@@ -119,6 +148,30 @@ TOOL_DEFS: dict[str, Tool] = {
         parameters={"type": "object", "properties": {
             "query": {"type": "string", "description": "Gmail search query"},
             "max_results": {"type": "integer", "default": 10}}},
+    ),
+    "add_task": Tool(
+        name="add_task",
+        description="Add a task/to-do/reminder for the user. Use whenever they "
+                    "ask to remember to do something or note a task.",
+        parameters={"type": "object", "properties": {
+            "title": {"type": "string", "description": "What to do"},
+            "due": {"type": "string", "description": "Optional due date phrase: "
+                    "today, tomorrow, monday, in 3 days, or YYYY-MM-DD"}},
+            "required": ["title"]},
+    ),
+    "list_tasks": Tool(
+        name="list_tasks",
+        description="List the user's tasks. Use for 'what's on today?', 'my "
+                    "to-dos', 'what am I behind on?'.",
+        parameters={"type": "object", "properties": {
+            "when": {"type": "string", "enum": ["today", "overdue", "upcoming"],
+                     "description": "Optional filter; omit for all open tasks"}}},
+    ),
+    "complete_task": Tool(
+        name="complete_task",
+        description="Mark a task done, by id prefix or a bit of its title.",
+        parameters={"type": "object", "properties": {
+            "task": {"type": "string"}}, "required": ["task"]},
     ),
 }
 

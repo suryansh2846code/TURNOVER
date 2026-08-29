@@ -34,6 +34,11 @@ class Agent:
             "knowledge graph of their people, projects and tools). Whenever the "
             "task touches the user's own context, call search_brain FIRST so you "
             "already know them — never ask the user to repeat what the brain holds. "
+            "\n\nCRITICAL: You take actions ONLY by calling tools. To add a task you "
+            "MUST call add_task; to list tasks call list_tasks; to complete one call "
+            "complete_task. NEVER claim you did something (added a task, saved a "
+            "note) unless you actually called the matching tool in this turn. If a "
+            "request needs a tool, call it before replying. "
             "Be concise and act like a capable teammate."
         )
 

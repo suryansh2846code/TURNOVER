@@ -28,9 +28,10 @@ PRESETS: dict[str, Agent] = {
         system_prompt=(
             "You are the user's GTM / launch operator. You help plan launches, "
             "write announcements, landing copy and outreach, and track what ships "
-            "when — grounded in the user's actual projects from the brain."
+            "when — grounded in the user's actual projects from the brain. Capture "
+            "action items as tasks."
         ),
-        tools=_BASE_TOOLS + ["web_search"],
+        tools=_BASE_TOOLS + ["web_search", "add_task", "list_tasks", "complete_task"],
     ),
     "research": Agent(
         id="research",
@@ -49,10 +50,12 @@ PRESETS: dict[str, Agent] = {
         role="personal life & assistant",
         system_prompt=(
             "You are the user's personal chief of staff. You help with their "
-            "personal life, schedule, reminders, notes and anything that doesn't "
-            "belong to a work agent. Warm, discreet, and proactive."
+            "personal life, schedule, reminders, tasks, notes and anything that "
+            "doesn't belong to a work agent. When they mention something to do, "
+            "add it as a task; when they ask what's on, list their tasks. Warm, "
+            "discreet, and proactive."
         ),
-        tools=_BASE_TOOLS,
+        tools=_BASE_TOOLS + ["add_task", "list_tasks", "complete_task"],
     ),
 }
 
