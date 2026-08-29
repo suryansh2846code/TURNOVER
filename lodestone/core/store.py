@@ -86,6 +86,12 @@ class MemoryStore:
             metadata=metadata or {},
         )
         chash = _content_hash(text, uri)
+        # Skip all work if we already have this exact content — makes repeated
+        # (background) syncs cheap: no re-embedding of unchanged items.
+        if self._conn.execute(
+            "SELECT 1 FROM memories WHERE content_hash=?", (chash,)
+        ).fetchone():
+            return None
         vec = self._embedder.embed_one(text)
         with self._lock:
             try:

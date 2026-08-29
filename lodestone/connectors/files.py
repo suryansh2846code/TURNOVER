@@ -85,7 +85,29 @@ class FilesConnector(Connector):
             else:
                 result.skipped += 1
         result.detail = f"scanned {len(files)} files under {root}"
+        self._remember_path(str(root))
         return self._finish(result)
+
+    def _remember_path(self, path: str) -> None:
+        """Record synced folders so background sync can re-index them."""
+        import json
+        state = self.store.get_connector_state(self.name) or {}
+        try:
+            paths = set(json.loads(state.get("cursor") or "[]"))
+        except Exception:
+            paths = set()
+        paths.add(path)
+        self.store.set_connector_state(
+            self.name, cursor=json.dumps(sorted(paths)), status="ok")
+
+    @classmethod
+    def synced_paths(cls, store) -> list[str]:
+        import json
+        state = store.get_connector_state(cls.name) or {}
+        try:
+            return json.loads(state.get("cursor") or "[]")
+        except Exception:
+            return []
 
     def _walk(self, root: Path, recursive: bool, allow: set[str]) -> list[Path]:
         if root.is_file():

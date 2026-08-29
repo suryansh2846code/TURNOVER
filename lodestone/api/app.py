@@ -16,8 +16,34 @@ from ..config import get_settings
 from ..connectors import REGISTRY, get_connector
 from ..models import list_providers
 
+from ..scheduler import get_scheduler
+
 WEB = Path(__file__).resolve().parent.parent / "web"
 app = FastAPI(title="Lodestone", version="0.2.0")
+
+
+@app.on_event("startup")
+def _start_scheduler():
+    get_scheduler().start()
+
+
+@app.get("/api/sync/status")
+def sync_status():
+    s = get_scheduler()
+    st = get_settings()
+    return {"enabled": st.sync_enabled, "interval_minutes": st.sync_interval_minutes,
+            "syncing": s.syncing, "last_run": s.last_run, "last_result": s.last_result}
+
+
+@app.post("/api/sync/now")
+def sync_now():
+    import threading
+    s = get_scheduler()
+    if s.syncing:
+        return {"started": False, "reason": "already syncing"}
+    threading.Thread(target=s.sync_all, kwargs={"interactive": False},
+                     daemon=True).start()
+    return {"started": True}
 
 
 class ChatIn(BaseModel):

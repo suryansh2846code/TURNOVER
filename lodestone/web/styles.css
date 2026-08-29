@@ -108,6 +108,9 @@ button.tiny { padding: 6px 11px; font-size: 12px; }
 .ent { cursor: pointer; }
 .ent:hover { border-color: var(--accent); }
 .ent .t { color: var(--muted); font-size: 11px; }
+.conn-head { display: flex; justify-content: space-between; align-items: center; }
+.conn-head button { margin: 0; }
+.sync-status { font-size: 10.5px; color: var(--muted); margin: -2px 0 4px; }
 .brain-search { width: 100%; background: var(--panel-2); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
   font: inherit; font-size: 12.5px; margin-bottom: 2px; }

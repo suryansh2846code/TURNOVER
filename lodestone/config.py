@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     # max files a single connector sync will ingest (guardrail; raise for big corpora)
     max_files: int = 2000
 
+    # continuous background sync: re-index ready connectors on a timer
+    sync_enabled: bool = True
+    sync_interval_minutes: int = 30
+
     # server
     host: str = "127.0.0.1"
     port: int = 8787

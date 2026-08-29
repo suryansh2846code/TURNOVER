@@ -173,7 +173,29 @@ async function loadBrain() {
   }).join("");
   document.querySelectorAll("[data-sync]").forEach((b) => b.onclick = () => syncConn(b.dataset.sync));
   document.querySelectorAll("[data-setup]").forEach((b) => b.onclick = () => connectorHelp(b.dataset.setup));
+  loadSyncStatus();
 }
+
+async function loadSyncStatus() {
+  try {
+    const s = await api("/api/sync/status");
+    const last = s.last_run ? new Date(s.last_run).toLocaleTimeString() : "not yet";
+    $("#syncStatus").textContent = s.syncing ? "syncing now…"
+      : (s.enabled ? `auto every ${s.interval_minutes}m · last ${last}` : "auto-sync off");
+    $("#syncAll").textContent = s.syncing ? "syncing…" : "sync all";
+    $("#syncAll").disabled = !!s.syncing;
+  } catch (_) {}
+}
+$("#syncAll").onclick = async () => {
+  const r = await api("/api/sync/now", { method: "POST" });
+  if (!r.started) { toast(r.reason || "already syncing"); return; }
+  toast("syncing all connectors…");
+  const poll = setInterval(async () => {
+    const s = await api("/api/sync/status");
+    loadSyncStatus();
+    if (!s.syncing) { clearInterval(poll); toast("sync complete"); loadBrain(); }
+  }, 3000);
+};
 
 async function syncConn(name) {
   if (name === "files") { openPicker(); return; }   // folder picker for local files
