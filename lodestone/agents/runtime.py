@@ -118,7 +118,24 @@ def run_turn(agent_id: str, user_text: str, *,
     mem = AgentMemory()
     tools = build_tools(agent.tools)
 
-    messages: list[Message] = [Message(role="system", content=agent.system_message())]
+    # Ground the agent in the present. LLMs have no clock, so without this they
+    # hallucinate the date. Small models ignore mid-context system notes, so we
+    # (a) state it in the system prompt AND (b) prepend it to the model-facing
+    # user turn — right next to the question, where even a 3B model can't miss it.
+    from datetime import datetime
+    now = datetime.now().astimezone()
+    date_line = f"{now:%A, %B %d, %Y}"
+    time_line = f"{now:%-I:%M %p} {now:%Z}"
+
+    messages: list[Message] = [Message(
+        role="system",
+        content=(
+            agent.system_message()
+            + f"\n\nRIGHT NOW it is {date_line}, {time_line}. This is the "
+              "authoritative current date — never state any other date as today. "
+              "Resolve 'today', 'tomorrow', 'this week' from this date."
+        ),
+    )]
 
     # Auto-recall: inject the relevant slice of the brain up front so the agent
     # *already knows the user* regardless of whether the (possibly small) model
@@ -134,7 +151,9 @@ def run_turn(agent_id: str, user_text: str, *,
         ))
 
     messages += _load_history(mem, agent)
-    messages.append(Message(role="user", content=user_text))
+    # model sees the date adjacent to the question; stored memory stays clean
+    messages.append(Message(
+        role="user", content=f"[Today is {date_line}.]\n{user_text}"))
     mem.append(agent.id, "user", user_text)
     reply = ""
     for _ in range(MAX_STEPS):
