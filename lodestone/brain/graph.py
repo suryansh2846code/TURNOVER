@@ -36,15 +36,16 @@ class GraphStore:
             return ""
         with self._lock:
             row = self._conn.execute(
-                "SELECT id, summary FROM entities WHERE norm=?", (norm,)
+                "SELECT id, summary, type FROM entities WHERE norm=?", (norm,)
             ).fetchone()
             if row:
                 new_summary = summary or row["summary"]
+                # upgrade a generic 'thing' to a better guessed type if we have one
+                new_type = row["type"] if row["type"] != "thing" else type
                 self._conn.execute(
                     "UPDATE entities SET mentions=mentions+1, updated_at=?, "
-                    "summary=?, type=COALESCE(NULLIF(type,'thing'), type) "
-                    "WHERE id=?",
-                    (_now(), new_summary, row["id"]),
+                    "summary=?, type=? WHERE id=?",
+                    (_now(), new_summary, new_type, row["id"]),
                 )
                 self._conn.commit()
                 return row["id"]

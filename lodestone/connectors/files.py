@@ -15,8 +15,26 @@ TEXT_EXT = {
 # Only prose feeds the knowledge graph; code is still stored + searchable, but
 # extracting entities from source produces junk (TitleCase identifiers).
 PROSE_EXT = {".md", ".markdown", ".txt", ".rst", ".org"}
-IGNORE_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
+IGNORE_DIRS = {
+    ".git", "node_modules", "__pycache__", ".venv", "venv", "env",
+    "dist", "build", "out", ".next", ".nuxt", "target", "coverage",
+    "vendor", ".cache", ".turbo", ".parcel-cache", "bower_components",
+    ".pytest_cache", ".mypy_cache", ".gradle", ".idea", ".vscode",
+    "site-packages", "migrations", ".terraform",
+}
+# generated / lock / minified files that are noise in a knowledge base
+IGNORE_FILES = {
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock",
+    "composer.lock", "cargo.lock", "go.sum",
+}
+def _is_junk_file(name: str) -> bool:
+    n = name.lower()
+    if n in IGNORE_FILES:
+        return True
+    return n.endswith((".min.js", ".min.css", ".map", ".bundle.js", ".lock"))
+
 MAX_BYTES = 2_000_000
+MAX_FILES = 2000            # guardrail: refuse to bulk-ingest an enormous tree
 
 
 class FilesConnector(Connector):
@@ -35,6 +53,13 @@ class FilesConnector(Connector):
 
         allow = {e if e.startswith(".") else f".{e}" for e in (exts or [])} or TEXT_EXT
         files = self._walk(root, recursive, allow)
+        if len(files) > MAX_FILES:
+            result.errors.append(
+                f"{len(files)} files found — that's a lot. Refusing to ingest more "
+                f"than {MAX_FILES} at once. Point at a smaller/more specific folder "
+                "(e.g. a notes or docs subfolder), or raise MAX_FILES.")
+            result.detail = f"too many files ({len(files)}) under {root}"
+            return self._finish(result)
         for fp in files:
             try:
                 if fp.stat().st_size > MAX_BYTES:
@@ -67,7 +92,7 @@ class FilesConnector(Connector):
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
             for fn in filenames:
-                if Path(fn).suffix.lower() in allow:
+                if Path(fn).suffix.lower() in allow and not _is_junk_file(fn):
                     out.append(Path(dirpath) / fn)
             if not recursive:
                 break

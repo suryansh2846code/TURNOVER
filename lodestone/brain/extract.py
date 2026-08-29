@@ -80,8 +80,12 @@ def is_good_entity(name: str) -> bool:
     w = words[0]
     if w.lower() in _NOISE:
         return False
-    if _INTERNAL_CAP.search(w) or _HAS_DIGIT.search(w):
-        return True                     # WhatsApp, SokoArena, S3, GPT4
+    if re.fullmatch(r"[A-Za-z]\d{1,2}", w):
+        return False                    # L2, L6, S3, v2 — cache-level / version noise
+    if _INTERNAL_CAP.search(w):
+        return True                     # WhatsApp, SokoArena, OpenRouter
+    if _HAS_DIGIT.search(w):
+        return len(w) >= 4              # GPT4, H100 — but not L6/v2 (caught above)
     if w.isupper():
         return len(w) >= 3 and w.lower() not in _NOISE  # real acronyms: NASA, SIH
     return len(w) >= 4                   # plain Title word, e.g. Groq, Notion
@@ -92,13 +96,44 @@ def _clean_name(name: str) -> str:
     return _ARTICLE.sub("", name).strip()
 
 
+# Curated hints so the offline heuristic can type entities instead of "thing".
+_KNOWN_TOOLS = {
+    "cloudflare", "workers", "groq", "typescript", "javascript", "python",
+    "react", "next.js", "nextjs", "node", "sqlite", "postgres", "d1", "kv", "r2",
+    "vectorize", "wrangler", "oauth", "jwt", "docker", "kubernetes", "redis",
+    "openai", "anthropic", "claude", "gpt", "gemini", "ollama", "llama", "qwen",
+    "langchain", "fastapi", "flask", "django", "vite", "tailwind", "supabase",
+    "firebase", "vercel", "netlify", "stripe", "razorpay", "twilio", "resend",
+    "notion", "linear", "slack", "gmail", "sheets", "drive", "webhook", "api",
+    "sdk", "mcp", "llm", "rag", "crm", "ui", "cli",
+}
+_ORG_HINTS = {"inc", "llc", "ltd", "corp", "labs", "technologies", "agency",
+              "meta", "google", "microsoft", "amazon", "apple", "openai",
+              "anthropic", "cloudflare", "algorand"}
+_PERSON_HINT = re.compile(r"^[A-Z][a-z]+ [A-Z][a-z]+$")   # First Last
+
+
+def guess_type(name: str) -> str:
+    low = name.lower()
+    words = low.split()
+    if any(w in _KNOWN_TOOLS for w in words):
+        return "tool"
+    if any(w in _ORG_HINTS for w in words):
+        return "org"
+    if _PERSON_HINT.match(name):
+        return "person"
+    if len(words) >= 2 and name[0].isupper():
+        return "project"      # multi-word proper noun, not a known tool/org
+    return "thing"
+
+
 def extract_heuristic(text: str) -> dict:
     entities: dict[str, dict] = {}
     for m in _CAP.finditer(text):
         name = _clean_name(m.group(1))
         if not is_good_entity(name):
             continue
-        entities.setdefault(name, {"name": name, "type": "thing", "summary": ""})
+        entities.setdefault(name, {"name": name, "type": guess_type(name), "summary": ""})
 
     facts = []
     for sent in re.split(r"(?<=[.!?])\s+", text):
