@@ -161,6 +161,13 @@ class Brain:
                 "entities": self.graph.stats()["entities"],
                 "facts": self.graph.stats()["relations"]}
 
+    def reembed(self) -> dict[str, Any]:
+        """Recompute all vectors (memories + entities) with the current embedder.
+        Run after switching LODESTONE_EMBEDDING_PROVIDER."""
+        n = self.store.reembed_all()
+        g = self.rebuild_graph()   # re-extracts + re-embeds entities too
+        return {"reembedded_memories": n, "graph_entities": g["entities"]}
+
     def stats(self) -> dict[str, Any]:
         s = self.store.stats()
         s["graph"] = self.graph.stats()

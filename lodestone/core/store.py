@@ -240,6 +240,27 @@ class MemoryStore:
                 break
         return hits
 
+    # ── re-embedding ──────────────────────────────────────────────────────
+    def reembed_all(self, batch: int = 128) -> int:
+        """Recompute every memory's vector with the current embedder. Needed
+        after switching embedding providers (dimensions/model change)."""
+        rows = self._conn.execute("SELECT id, text FROM memories").fetchall()
+        n = 0
+        for i in range(0, len(rows), batch):
+            chunk = rows[i : i + batch]
+            vecs = self._embedder.embed([r["text"] for r in chunk])
+            with self._lock:
+                for r, v in zip(chunk, vecs):
+                    self._conn.execute(
+                        "UPDATE memories SET embedding=?, embed_dim=?, embed_model=? "
+                        "WHERE id=?",
+                        (v.tobytes(), len(v), self._embedder.name, r["id"]),
+                    )
+                self._conn.commit()
+            n += len(chunk)
+        self._dirty = True
+        return n
+
     # ── connector state ───────────────────────────────────────────────────
     def set_connector_state(
         self, connector: str, *, cursor=None, status=None, detail=None, last_sync=None

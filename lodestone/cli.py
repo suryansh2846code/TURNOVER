@@ -89,6 +89,15 @@ def rebuild_graph():
 
 
 @app.command()
+def reembed():
+    """Re-embed the whole brain with the current embedder (after switching providers)."""
+    from .brain import get_brain
+    with console.status("re-embedding brain…"):
+        out = get_brain().reembed()
+    console.print(out)
+
+
+@app.command()
 def providers():
     """List model providers and readiness."""
     from .models import list_providers

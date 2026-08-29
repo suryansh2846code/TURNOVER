@@ -79,7 +79,10 @@ class SentenceTransformerEmbedder(Embedder):
 
         self.model_name = model or "all-MiniLM-L6-v2"
         self._model = SentenceTransformer(self.model_name)
-        self.dim = self._model.get_sentence_embedding_dimension()
+        try:
+            self.dim = self._model.get_embedding_dimension()
+        except AttributeError:  # older sentence-transformers
+            self.dim = self._model.get_sentence_embedding_dimension()
 
     def embed(self, texts: list[str]) -> np.ndarray:
         vecs = self._model.encode(texts, normalize_embeddings=True)
