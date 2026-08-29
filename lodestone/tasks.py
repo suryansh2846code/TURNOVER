@@ -61,7 +61,8 @@ def parse_due(text: str | None) -> str | None:
 def _strip_due_phrase(title: str) -> str:
     """Remove a trailing date phrase from a title, so 'call Sam tomorrow' stores
     as title 'call Sam' with the due date on the side."""
-    pat = (r"\s*\b(due\s+)?(today|tonight|tomorrow|tmrw|in \d+ days?|"
+    pat = (r"\s*\b(on|by|before|due(\s+on)?)?\s*"
+           r"(today|tonight|tomorrow|tmrw|in \d+ days?|"
            + "|".join(_WEEKDAYS) + r"|\d{4}-\d{2}-\d{2})\b\.?\s*$")
     cleaned = re.sub(pat, "", title, flags=re.I).strip(" ,.-")
     return cleaned or title

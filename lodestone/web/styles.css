@@ -88,6 +88,29 @@ button.tiny { padding: 6px 11px; font-size: 12px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .dot.ok { background: var(--accent-2); } .dot.off { background: #5a6473; }
 
+/* tasks panel */
+.addtask { display: flex; gap: 6px; }
+.addtask input { flex: 1; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  font: inherit; margin: 0; }
+.addtask input:focus { outline: none; border-color: var(--accent); }
+.tasks { display: flex; flex-direction: column; gap: 5px; margin-bottom: 4px; }
+.task { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  font-size: 13px; }
+.task .check { cursor: pointer; width: 16px; height: 16px; border-radius: 5px;
+  border: 1.5px solid var(--muted); flex: 0 0 auto; margin-top: 1px;
+  display: flex; align-items: center; justify-content: center; color: transparent; }
+.task .check:hover { border-color: var(--accent-2); }
+.task .body { flex: 1; min-width: 0; }
+.task .ttl { line-height: 1.35; }
+.task .due { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.task .due.today { color: var(--accent-2); }
+.task .due.over { color: var(--danger); }
+.task .del { color: var(--muted); cursor: pointer; opacity: 0; font-size: 12px; }
+.task:hover .del { opacity: 1; }
+.tasks-empty { color: var(--muted); font-size: 12.5px; padding: 2px; }
+
 /* folder picker modal */
 .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55);
   display: flex; align-items: center; justify-content: center; z-index: 50; }

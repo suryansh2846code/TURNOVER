@@ -68,6 +68,7 @@ async function send(text) {
     addTrace(res.trace || []);
     addMsg("assistant", res.reply);
     loadBrain();
+    loadTasks();   // an agent may have added/completed a task this turn
   } catch (e) { spin.remove(); addMsg("assistant", "⚠️ " + e); }
 }
 
@@ -98,6 +99,60 @@ async function syncConn(name) {
     loadBrain();
   } catch (e) { toast(String(e)); }
 }
+
+// ── tasks ────────────────────────────────────────────────────────────────
+function dueLabel(iso) {
+  if (!iso) return { text: "", cls: "" };
+  const today = new Date().toISOString().slice(0, 10);
+  const d = new Date(iso + "T00:00:00");
+  const nice = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  if (iso < today) return { text: "overdue · " + nice, cls: "over" };
+  if (iso === today) return { text: "today", cls: "today" };
+  return { text: nice, cls: "" };
+}
+
+async function loadTasks() {
+  const d = await api("/api/tasks");
+  const n = d.stats.today, o = d.stats.overdue;
+  $("#taskCount").textContent =
+    d.tasks.length ? `· ${n} today${o ? ", " + o + " overdue" : ""}` : "";
+  if (!d.tasks.length) {
+    $("#taskList").innerHTML = `<div class="tasks-empty">No open tasks. Add one, or ask an agent.</div>`;
+    return;
+  }
+  $("#taskList").innerHTML = d.tasks.map((t) => {
+    const due = dueLabel(t.due);
+    return `<div class="task">
+      <span class="check" data-done="${t.id}">✓</span>
+      <div class="body">
+        <div class="ttl">${esc(t.title)}</div>
+        ${due.text ? `<div class="due ${due.cls}">${due.text}</div>` : ""}
+      </div>
+      <span class="del" data-del-task="${t.id}">✕</span>
+    </div>`;
+  }).join("");
+  document.querySelectorAll("[data-done]").forEach((el) => el.onclick = async () => {
+    await api(`/api/tasks/${el.dataset.done}/complete`, { method: "POST" });
+    toast("Done ✓"); loadTasks();
+  });
+  document.querySelectorAll("[data-del-task]").forEach((el) => el.onclick = async () => {
+    await api(`/api/tasks/${el.dataset.delTask}`, { method: "DELETE" });
+    loadTasks();
+  });
+}
+
+async function addTask() {
+  const title = $("#taskInput").value.trim();
+  if (!title) return;
+  await api("/api/tasks", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  $("#taskInput").value = "";
+  toast("Task added"); loadTasks();
+}
+$("#taskAdd").onclick = addTask;
+$("#taskInput").addEventListener("keydown", (e) => { if (e.key === "Enter") addTask(); });
 
 // ── folder picker ──────────────────────────────────────────────────────────
 let pickPath = null;
@@ -135,4 +190,4 @@ $("#ingestBtn").onclick = async () => {
   $("#ingestText").value = ""; toast("added to brain"); loadBrain();
 };
 
-loadAgents(); loadProviders(); loadBrain();
+loadAgents(); loadProviders(); loadBrain(); loadTasks();
