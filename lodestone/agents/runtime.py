@@ -48,7 +48,9 @@ class TurnResult:
 
 def _load_history(mem: AgentMemory, agent: Agent) -> list[Message]:
     msgs: list[Message] = []
-    for row in mem.history(agent.id, limit=20):
+    # keep a short window — long histories confuse small models and let stale
+    # turns bleed into unrelated answers. Facts persist in the brain anyway.
+    for row in mem.history(agent.id, limit=6):
         # replay only clean user/assistant turns for context (skip tool plumbing)
         if row["role"] in ("user", "assistant") and row["content"]:
             msgs.append(Message(role=row["role"], content=row["content"]))

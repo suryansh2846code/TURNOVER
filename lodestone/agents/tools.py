@@ -34,21 +34,26 @@ def _list_entities(limit: int = 15) -> str:
     return "\n".join(f"- {e['name']} ({e['type']}, {e['mentions']}×)" for e in ents)
 
 
-def _web_search(query: str) -> str:
-    """Lightweight web search via DuckDuckGo's instant-answer + HTML endpoint."""
+def _web_search(query: str, max_results: int = 5) -> str:
+    """Real web search via DuckDuckGo (ddgs). Returns titles + snippets + links
+    so the model can answer with current, external information and cite sources."""
     try:
-        r = httpx.get(
-            "https://duckduckgo.com/html/",
-            params={"q": query}, timeout=15,
-            headers={"User-Agent": "Mozilla/5.0 Lodestone"},
-        )
-        import re
-        snippets = re.findall(r'result__snippet[^>]*>(.*?)</a>', r.text)[:5]
-        clean = [re.sub(r"<[^>]+>", "", s).strip() for s in snippets]
-        clean = [c for c in clean if c]
-        return "\n".join(f"- {c}" for c in clean) or "No web results."
+        from ddgs import DDGS
+    except ImportError:
+        return "web_search unavailable (pip install ddgs)."
+    try:
+        results = DDGS().text(query, max_results=max_results)
     except Exception as exc:
         return f"web_search failed: {exc}"
+    if not results:
+        return "No web results found."
+    lines = []
+    for r in results:
+        title = (r.get("title") or "").strip()
+        body = (r.get("body") or "").strip()
+        href = (r.get("href") or "").strip()
+        lines.append(f"- {title}: {body}\n  ({href})")
+    return "\n".join(lines)
 
 
 # ── connector tools (live app access) ─────────────────────────────────────
@@ -137,9 +142,14 @@ TOOL_DEFS: dict[str, Tool] = {
     ),
     "web_search": Tool(
         name="web_search",
-        description="Search the public web for current information.",
+        description="Search the live public internet for current or external "
+                    "information the user's brain does NOT contain — news, "
+                    "weather, prices, facts, docs, anything happening now. Use "
+                    "this whenever search_brain has no relevant answer.",
         parameters={"type": "object", "properties": {
-            "query": {"type": "string"}}, "required": ["query"]},
+            "query": {"type": "string"},
+            "max_results": {"type": "integer", "default": 5}},
+            "required": ["query"]},
     ),
     "gmail_search": Tool(
         name="gmail_search",
@@ -178,7 +188,11 @@ TOOL_DEFS: dict[str, Tool] = {
 
 def build_tools(names: list[str]) -> list[Tool]:
     tools = []
+    seen = set()
     for n in names:
+        if n in seen:
+            continue
+        seen.add(n)
         if n in TOOL_DEFS:
             t = TOOL_DEFS[n]
             tools.append(Tool(name=t.name, description=t.description,

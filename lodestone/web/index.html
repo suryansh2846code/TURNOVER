@@ -16,6 +16,7 @@
       <div class="side-foot">
         <div class="side-label">Model</div>
         <select id="provider"></select>
+        <button id="helpBtn" class="ghost tiny" style="margin-top:8px">? Getting started</button>
       </div>
     </aside>
 
@@ -58,6 +59,41 @@
       <div id="connectors" class="connectors"></div>
     </aside>
   </div>
+  <!-- onboarding -->
+  <div id="onboard" class="modal-bg" hidden>
+    <div class="modal onboard">
+      <div class="onboard-head">
+        <span class="logo big">◆</span>
+        <h2>Welcome to Lodestone</h2>
+        <p class="muted">Your agents get smart by knowing <b>you</b>. Fill your
+          brain once — then every agent already knows your world.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <span class="num">1</span>
+          <div><b>Connect a folder</b><p class="muted">Point it at your notes or a
+            project. It reads them into your brain automatically.</p>
+            <button id="obConnect" class="tiny">Choose a folder…</button></div>
+        </div>
+        <div class="step">
+          <span class="num">2</span>
+          <div><b>Or just tell it a fact</b><p class="muted">Add anything you want
+            your agents to know.</p>
+            <button id="obFact" class="tiny ghost">Add a fact</button></div>
+        </div>
+        <div class="step">
+          <span class="num">3</span>
+          <div><b>Then chat</b><p class="muted">Ask an agent anything — it answers
+            using your brain, and searches the web when needed.</p></div>
+        </div>
+      </div>
+      <div class="onboard-foot">
+        <button id="obSkip" class="ghost tiny">Skip for now</button>
+        <button id="obDone">Start using Lodestone</button>
+      </div>
+    </div>
+  </div>
+
   <!-- folder picker -->
   <div id="picker" class="modal-bg" hidden>
     <div class="modal">

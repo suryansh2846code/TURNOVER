@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from .agent import Agent
 
-_BASE_TOOLS = ["search_brain", "remember", "list_entities"]
+_BASE_TOOLS = ["search_brain", "remember", "list_entities", "web_search"]
 
 PRESETS: dict[str, Agent] = {
     "inbox": Agent(

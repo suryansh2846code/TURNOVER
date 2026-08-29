@@ -24,6 +24,7 @@ async function loadProviders() {
 }
 
 async function selectAgent(id) {
+  if (busy) { toast("finishing current reply…"); return; }
   current = id;
   const a = agents.find((x) => x.id === id);
   $("#agentName").textContent = a.name;
@@ -56,7 +57,19 @@ function addTrace(steps) {
   $("#messages").appendChild(el); $("#messages").scrollTop = 1e9;
 }
 
+let busy = false;   // one turn at a time per the whole workspace
+
+function setBusy(on) {
+  busy = on;
+  $("#input").disabled = on;
+  $("#send").disabled = on;
+  $("#send").textContent = on ? "…" : "Send";
+  if (!on) $("#input").focus();
+}
+
 async function send(text) {
+  if (busy) return;               // guard: ignore sends while a turn is running
+  setBusy(true);
   addMsg("user", text);
   const spin = addMsg("assistant", ""); spin.classList.add("spin"); spin.textContent = "thinking…";
   try {
@@ -70,6 +83,7 @@ async function send(text) {
     loadBrain();
     loadTasks();   // an agent may have added/completed a task this turn
   } catch (e) { spin.remove(); addMsg("assistant", "⚠️ " + e); }
+  finally { setBusy(false); }
 }
 
 async function loadBrain() {
@@ -190,4 +204,25 @@ $("#ingestBtn").onclick = async () => {
   $("#ingestText").value = ""; toast("added to brain"); loadBrain();
 };
 
-loadAgents(); loadProviders(); loadBrain(); loadTasks();
+// ── onboarding ───────────────────────────────────────────────────────────
+function openOnboard() { $("#onboard").hidden = false; }
+function closeOnboard() {
+  $("#onboard").hidden = true;
+  localStorage.setItem("lodestone_onboarded", "1");
+}
+$("#obSkip").onclick = closeOnboard;
+$("#obDone").onclick = closeOnboard;
+$("#obConnect").onclick = () => { closeOnboard(); openPicker(); };
+$("#obFact").onclick = () => { closeOnboard(); $("#ingestText").focus();
+  $("#ingestText").scrollIntoView({ behavior: "smooth" }); };
+$("#helpBtn").onclick = openOnboard;
+
+async function maybeOnboard() {
+  // show on a fresh brain, or the first time this browser opens the app
+  try {
+    const s = await api("/api/brain/stats");
+    if (s.total === 0 || !localStorage.getItem("lodestone_onboarded")) openOnboard();
+  } catch (_) {}
+}
+
+loadAgents(); loadProviders(); loadBrain(); loadTasks(); maybeOnboard();
