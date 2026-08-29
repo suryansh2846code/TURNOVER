@@ -27,7 +27,8 @@ class Brain:
     def ingest(self, text: str, *, source: str = "manual", kind: str = "note",
                title: str | None = None, uri: str | None = None,
                build_graph: bool = True, fast: bool = False,
-               event_date: str | None = None, tags=None) -> dict[str, Any]:
+               event_date: str | None = None, metadata: dict | None = None,
+               tags=None) -> dict[str, Any]:
         """Ingest text into both the vector store and the knowledge graph.
 
         `fast=True` uses offline heuristic extraction only (no per-chunk LLM
@@ -42,6 +43,7 @@ class Brain:
                 text=chunk, source=source, kind=kind,
                 title=title if i == 0 else f"{title} (part {i+1})" if title else None,
                 uri=uri, tags=tags or [], event_date=event_date,
+                metadata=metadata,
             )
             if not mem:
                 continue

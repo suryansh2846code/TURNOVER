@@ -15,8 +15,8 @@ class GoogleCalendarConnector(Connector):
     def is_configured(self) -> tuple[bool, str]:
         return google_ready()
 
-    def sync(self, *, days_back: int = 14, days_ahead: int = 30,
-             max_results: int = 100, interactive: bool = True, **_: Any) -> SyncResult:
+    def sync(self, *, days_back: int = 180, days_ahead: int = 180,
+             max_results: int = 250, interactive: bool = True, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)
         try:
             from googleapiclient.discovery import build  # lazy
