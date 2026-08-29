@@ -126,6 +126,41 @@ class Brain:
             "entities": ents,
         }
 
+    _PROSE_EXT = (".md", ".markdown", ".txt", ".rst", ".org")
+
+    def _is_prose(self, mem) -> bool:
+        if mem.source in {"notes", "agent", "gmail", "notion", "manual"}:
+            return True
+        if mem.uri and mem.uri.lower().endswith(self._PROSE_EXT):
+            return True
+        return mem.kind in {"note", "fact", "email"}
+
+    def rebuild_graph(self) -> dict[str, Any]:
+        """Wipe the knowledge graph and re-extract it from prose memories only,
+        applying the current (stricter) extractor. Fixes graphs built by older,
+        looser extraction; leaves searchable memories untouched."""
+        with self.store._lock:
+            self.store._conn.execute("DELETE FROM relations")
+            self.store._conn.execute("DELETE FROM entities")
+            self.store._conn.commit()
+        entities = facts = scanned = 0
+        offset = 0
+        while True:
+            batch = self.store.list(limit=500, offset=offset)
+            if not batch:
+                break
+            for mem in batch:
+                if not self._is_prose(mem):
+                    continue
+                e, f = self._graph_from(mem.text, mem.id, fast=True)
+                entities += e
+                facts += f
+                scanned += 1
+            offset += len(batch)
+        return {"scanned_prose_memories": scanned,
+                "entities": self.graph.stats()["entities"],
+                "facts": self.graph.stats()["relations"]}
+
     def stats(self) -> dict[str, Any]:
         s = self.store.stats()
         s["graph"] = self.graph.stats()

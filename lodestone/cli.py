@@ -72,6 +72,23 @@ def stats():
 
 
 @app.command()
+def clean():
+    """Prune junk entities/facts from the knowledge graph (quality filter)."""
+    from .brain import get_brain
+    out = get_brain().graph.prune_noise()
+    console.print(f"removed [red]{out['removed_entities']}[/] noisy entities, "
+                  f"[red]{out['removed_facts']}[/] facts")
+    console.print_json(data=get_brain().stats()["graph"])
+
+
+@app.command("rebuild-graph")
+def rebuild_graph():
+    """Rebuild the knowledge graph from prose memories with the current extractor."""
+    from .brain import get_brain
+    console.print(get_brain().rebuild_graph())
+
+
+@app.command()
 def providers():
     """List model providers and readiness."""
     from .models import list_providers

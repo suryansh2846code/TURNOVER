@@ -12,6 +12,9 @@ TEXT_EXT = {
     ".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".yaml", ".yml",
     ".html", ".css", ".sh", ".java", ".go", ".rs", ".c", ".cpp", ".sql",
 }
+# Only prose feeds the knowledge graph; code is still stored + searchable, but
+# extracting entities from source produces junk (TitleCase identifiers).
+PROSE_EXT = {".md", ".markdown", ".txt", ".rst", ".org"}
 IGNORE_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
 MAX_BYTES = 2_000_000
 
@@ -43,10 +46,12 @@ class FilesConnector(Connector):
                 continue
             # Route through the brain so the knowledge graph is built too.
             # fast=True → offline heuristic extraction, so bulk imports stay quick.
+            # Only prose builds the graph; code is stored + searchable but skipped.
             from ..brain import get_brain
             out = get_brain().ingest(
                 text, source=self.name, kind="doc", title=fp.name,
                 uri=str(fp), fast=True,
+                build_graph=fp.suffix.lower() in PROSE_EXT,
             )
             if out["memories"]:
                 result.added += out["memories"]

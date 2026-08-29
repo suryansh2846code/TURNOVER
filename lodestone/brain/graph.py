@@ -120,6 +120,23 @@ class GraphStore:
         return {"entities": e, "relations": r,
                 "by_type": {t["type"]: t["c"] for t in types}}
 
+    def prune_noise(self) -> dict:
+        """Delete entities that fail the quality filter (and their relations).
+        Cleans up junk left by earlier, looser extraction."""
+        from .extract import is_good_entity
+        rows = self._conn.execute("SELECT id, name FROM entities").fetchall()
+        bad = [r["id"] for r in rows if not is_good_entity(r["name"])]
+        removed_facts = 0
+        with self._lock:
+            for eid in bad:
+                cur = self._conn.execute(
+                    "DELETE FROM relations WHERE subject_id=? OR object_id=?",
+                    (eid, eid))
+                removed_facts += cur.rowcount
+                self._conn.execute("DELETE FROM entities WHERE id=?", (eid,))
+            self._conn.commit()
+        return {"removed_entities": len(bad), "removed_facts": removed_facts}
+
     def top_entities(self, limit: int = 20) -> list[dict]:
         rows = self._conn.execute(
             "SELECT id,name,type,summary,mentions FROM entities "
