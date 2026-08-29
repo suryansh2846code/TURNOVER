@@ -146,10 +146,19 @@ async function loadBrain() {
   document.querySelectorAll("[data-entity]").forEach((el) =>
     el.onclick = () => openEntity(el.dataset.entity));
   const { connectors } = await api("/api/connectors");
-  $("#connectors").innerHTML = connectors.map((c) =>
-    `<div class="conn"><span><span class="dot ${c.ready ? "ok" : "off"}"></span>${c.label}</span>
-     <button class="tiny ghost" data-sync="${c.name}">sync</button></div>`).join("");
+  $("#connectors").innerHTML = connectors.map((c) => {
+    const last = c.state?.last_sync ? new Date(c.state.last_sync).toLocaleDateString() : "";
+    const sub = c.ready ? (last ? `synced ${last}` : "ready") : (c.reason || "not configured");
+    const btn = c.ready
+      ? `<button class="tiny ghost" data-sync="${c.name}">sync</button>`
+      : `<button class="tiny" data-setup="${c.name}">setup</button>`;
+    return `<div class="conn">
+      <span class="conn-meta"><span class="dot ${c.ready ? "ok" : "off"}"></span>
+        <span><span class="conn-name">${c.label}</span><span class="conn-sub">${esc(sub)}</span></span></span>
+      ${btn}</div>`;
+  }).join("");
   document.querySelectorAll("[data-sync]").forEach((b) => b.onclick = () => syncConn(b.dataset.sync));
+  document.querySelectorAll("[data-setup]").forEach((b) => b.onclick = () => connectorHelp(b.dataset.setup));
 }
 
 async function syncConn(name) {
@@ -203,6 +212,28 @@ async function searchBrain(q) {
 $("#brainSearch").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.target.value.trim()) searchBrain(e.target.value.trim());
 });
+
+const CONNECTOR_HELP = {
+  gmail: `<p>Read-only access to your Gmail.</p><ol>
+    <li>In <b>Google Cloud Console</b> → APIs & Services → Credentials, create an
+        <b>OAuth client ID</b> of type <b>Desktop app</b>.</li>
+    <li>Download the <code>client_secret.json</code>.</li>
+    <li>Set <code>GOOGLE_CLIENT_SECRETS</code> to its path, or drop it at
+        <code>~/Library/Lodestone/google_client_secret.json</code>.</li>
+    <li>Run a sync — a browser opens once to authorize (read-only).</li></ol>`,
+  gdrive: `<p>Read-only access to your Google Drive (Docs, text, PDFs).</p>
+    <p>Uses the <b>same Google OAuth Desktop client</b> as Gmail — set it up once
+    (see the Gmail setup) and Drive works too.</p>`,
+  notion: `<p>Read the Notion pages you share with an integration.</p><ol>
+    <li>Create an internal integration at
+        <b>notion.so/my-integrations</b> and copy its secret.</li>
+    <li>Set <code>NOTION_TOKEN</code> to that secret.</li>
+    <li><b>Share</b> the pages/databases you want with the integration (⋯ → Connections).</li></ol>`,
+};
+function connectorHelp(name) {
+  openBrainModal(`Set up ${name}`, (CONNECTOR_HELP[name] || "<p>No setup needed.</p>")
+    + `<p class="t" style="margin-top:10px">Add the value to your <code>.env</code> and restart Lodestone.</p>`);
+}
 
 // ── tasks ────────────────────────────────────────────────────────────────
 function dueLabel(iso) {
