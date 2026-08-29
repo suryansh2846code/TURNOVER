@@ -100,7 +100,32 @@ button.tiny { padding: 6px 11px; font-size: 12px; }
 .entities, .connectors { display: flex; flex-direction: column; gap: 5px; }
 .ent, .conn { background: var(--panel-2); border: 1px solid var(--border);
   border-radius: 8px; padding: 7px 10px; font-size: 12.5px; }
+.ent { cursor: pointer; }
+.ent:hover { border-color: var(--accent); }
 .ent .t { color: var(--muted); font-size: 11px; }
+.brain-search { width: 100%; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
+  font: inherit; font-size: 12.5px; margin-bottom: 2px; }
+.brain-search:focus { outline: none; border-color: var(--accent); }
+/* entity type badges */
+.etype { font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px;
+  padding: 1px 5px; border-radius: 4px; margin-right: 5px; background: #2a3350; color: var(--muted); }
+.etype.tool { background: #16323a; color: #5fd0e0; }
+.etype.project { background: #2b2340; color: #b79cf0; }
+.etype.org { background: #33291a; color: #e0b45f; }
+.etype.person { background: #16321f; color: var(--accent-2); }
+/* brain modal body */
+.bm-body { padding: 14px 16px; overflow-y: auto; }
+.bm-sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.bm-facts { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.bm-facts li { margin: 4px 0; }
+.bm-facts .t { color: var(--muted); list-style: none; }
+.bm-mem { background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 11px; margin-bottom: 8px; }
+.bm-mem-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+.bm-score { color: var(--accent-2); font-size: 11px; margin-right: 6px; }
+.bm-mem-body { color: var(--muted); font-size: 12px; margin-top: 4px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .conn { display: flex; justify-content: space-between; align-items: center; }
 .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .dot.ok { background: var(--accent-2); } .dot.off { background: #5a6473; }

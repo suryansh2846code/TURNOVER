@@ -54,11 +54,24 @@
         <button id="ingestBtn" class="tiny">Add to brain</button>
       </div>
       <div class="side-label">Knowledge graph</div>
+      <input id="brainSearch" class="brain-search" autocomplete="off"
+             placeholder="🔍 Search your brain…" />
       <div id="entities" class="entities"></div>
       <div class="side-label">Connectors</div>
       <div id="connectors" class="connectors"></div>
     </aside>
   </div>
+  <!-- brain detail (entity facts / memory search) -->
+  <div id="brainModal" class="modal-bg" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <b id="bmTitle">Details</b>
+        <button id="bmClose" class="ghost tiny">✕</button>
+      </div>
+      <div id="bmBody" class="bm-body"></div>
+    </div>
+  </div>
+
   <!-- onboarding -->
   <div id="onboard" class="modal-bg" hidden>
     <div class="modal onboard">

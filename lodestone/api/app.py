@@ -75,6 +75,21 @@ def brain_stats():
 def entities(limit: int = 30):
     return {"entities": get_brain().graph.top_entities(limit=limit)}
 
+@app.get("/api/brain/entities/{entity_id}/facts")
+def entity_facts(entity_id: str):
+    g = get_brain().graph
+    row = g._conn.execute(
+        "SELECT id,name,type,summary,mentions FROM entities WHERE id=?",
+        (entity_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "entity not found")
+    return {"entity": dict(row), "facts": g.facts_for(entity_id, limit=15)}
+
+@app.get("/api/brain/search")
+def brain_search(q: str, limit: int = 20):
+    hits = get_brain().store.search(q, limit=limit)
+    return {"memories": [{"score": h.score, **h.memory.model_dump()} for h in hits]}
+
 @app.post("/api/brain/ingest")
 def ingest(body: IngestIn):
     out = get_brain().ingest(body.text, source=body.source, title=body.title)

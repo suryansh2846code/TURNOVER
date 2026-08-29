@@ -141,8 +141,10 @@ async function loadBrain() {
     <div class="b"><div class="num">${s.graph.relations}</div><div class="lbl">facts</div></div>`;
   const { entities } = await api("/api/brain/entities?limit=20");
   $("#entities").innerHTML = entities.length ? entities.map((e) =>
-    `<div class="ent">${esc(e.name)} <span class="t">${e.type} · ${e.mentions}×</span></div>`).join("")
+    `<div class="ent" data-entity="${e.id}" title="click for facts"><span class="etype ${e.type}">${e.type}</span> ${esc(e.name)} <span class="t">${e.mentions}×</span></div>`).join("")
     : `<div class="ent t">empty — add notes or sync a connector</div>`;
+  document.querySelectorAll("[data-entity]").forEach((el) =>
+    el.onclick = () => openEntity(el.dataset.entity));
   const { connectors } = await api("/api/connectors");
   $("#connectors").innerHTML = connectors.map((c) =>
     `<div class="conn"><span><span class="dot ${c.ready ? "ok" : "off"}"></span>${c.label}</span>
@@ -160,6 +162,47 @@ async function syncConn(name) {
     loadBrain();
   } catch (e) { toast(String(e)); }
 }
+
+// ── brain detail modal (entity facts / memory search) ──────────────────────
+function openBrainModal(title, bodyHtml) {
+  $("#bmTitle").textContent = title;
+  $("#bmBody").innerHTML = bodyHtml;
+  $("#brainModal").hidden = false;
+}
+$("#bmClose").onclick = () => $("#brainModal").hidden = true;
+$("#brainModal").onclick = (e) => { if (e.target.id === "brainModal") $("#brainModal").hidden = true; };
+
+async function openEntity(id) {
+  const d = await api(`/api/brain/entities/${id}/facts`);
+  const e = d.entity;
+  const facts = d.facts.length
+    ? d.facts.map((f) => `<li>${esc(f)}</li>`).join("")
+    : "<li class='t'>no facts recorded</li>";
+  openBrainModal(`${e.name}`,
+    `<div class="bm-sub"><span class="etype ${e.type}">${e.type}</span> · ${e.mentions} mentions</div>
+     ${e.summary ? `<p>${esc(e.summary)}</p>` : ""}
+     <ul class="bm-facts">${facts}</ul>`);
+}
+
+async function searchBrain(q) {
+  const d = await api(`/api/brain/search?q=${encodeURIComponent(q)}`);
+  if (!d.memories.length) { openBrainModal(`Search: "${q}"`, `<p class="t">No matches.</p>`); return; }
+  const rows = d.memories.map((m) =>
+    `<div class="bm-mem">
+       <div class="bm-mem-head"><b>${esc(m.title || m.source)}</b>
+         <span><span class="bm-score">${m.score}</span>
+         <button class="tiny ghost" data-delmem="${m.id}">✕</button></span></div>
+       <div class="bm-mem-body">${esc(m.text)}</div>
+     </div>`).join("");
+  openBrainModal(`Search: "${q}"`, rows);
+  document.querySelectorAll("[data-delmem]").forEach((b) => b.onclick = async () => {
+    await api(`/api/memories/${b.dataset.delmem}`, { method: "DELETE" });
+    toast("Deleted"); b.closest(".bm-mem").remove(); loadBrain();
+  });
+}
+$("#brainSearch").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.value.trim()) searchBrain(e.target.value.trim());
+});
 
 // ── tasks ────────────────────────────────────────────────────────────────
 function dueLabel(iso) {
