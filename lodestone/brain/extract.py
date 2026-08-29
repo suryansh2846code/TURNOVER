@@ -63,6 +63,11 @@ _NOISE = {
     # weekdays / http verbs / misc
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
     "patch", "head", "options", "trace", "connect",
+    # email / html boilerplate
+    "subject", "doctype", "arial", "helvetica", "verdana", "sans", "serif",
+    "mailto", "unsubscribe", "viewport", "charset", "span", "div", "href",
+    "email", "inbox", "reply", "forward", "cc", "bcc", "sender", "recipient",
+    "newsletter", "webkit", "margin", "padding", "font", "img", "src", "alt",
 }
 
 

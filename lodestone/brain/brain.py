@@ -129,11 +129,14 @@ class Brain:
     _PROSE_EXT = (".md", ".markdown", ".txt", ".rst", ".org")
 
     def _is_prose(self, mem) -> bool:
-        if mem.source in {"notes", "agent", "gmail", "notion", "manual"}:
+        # The knowledge graph is the user's CURATED knowledge — notes, facts,
+        # and prose docs. Bulk email (HTML boilerplate) and Drive files are noisy,
+        # so they stay fully searchable as memories but do NOT build the graph.
+        if mem.source in {"notes", "agent", "manual", "notion"}:
             return True
         if mem.uri and mem.uri.lower().endswith(self._PROSE_EXT):
             return True
-        return mem.kind in {"note", "fact", "email"}
+        return mem.kind in {"note", "fact"}
 
     def rebuild_graph(self) -> dict[str, Any]:
         """Wipe the knowledge graph and re-extract it from prose memories only,
