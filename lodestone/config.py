@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     model_provider: str = "mock"  # subscription | anthropic | openai | openrouter | ollama | mock
     model_name: str | None = None
 
+    # max files a single connector sync will ingest (guardrail; raise for big corpora)
+    max_files: int = 2000
+
     # server
     host: str = "127.0.0.1"
     port: int = 8787

@@ -34,7 +34,7 @@ def _is_junk_file(name: str) -> bool:
     return n.endswith((".min.js", ".min.css", ".map", ".bundle.js", ".lock"))
 
 MAX_BYTES = 2_000_000
-MAX_FILES = 2000            # guardrail: refuse to bulk-ingest an enormous tree
+# guardrail default; overridable via LODESTONE_MAX_FILES for large corpora
 
 
 class FilesConnector(Connector):
@@ -53,11 +53,13 @@ class FilesConnector(Connector):
 
         allow = {e if e.startswith(".") else f".{e}" for e in (exts or [])} or TEXT_EXT
         files = self._walk(root, recursive, allow)
-        if len(files) > MAX_FILES:
+        from ..config import get_settings
+        max_files = get_settings().max_files
+        if len(files) > max_files:
             result.errors.append(
                 f"{len(files)} files found — that's a lot. Refusing to ingest more "
-                f"than {MAX_FILES} at once. Point at a smaller/more specific folder "
-                "(e.g. a notes or docs subfolder), or raise MAX_FILES.")
+                f"than {max_files} at once. Point at a smaller/more specific folder, "
+                "or raise the limit with LODESTONE_MAX_FILES.")
             result.detail = f"too many files ({len(files)}) under {root}"
             return self._finish(result)
         for fp in files:
