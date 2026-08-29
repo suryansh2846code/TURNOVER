@@ -66,7 +66,23 @@ class GoogleDriveConnector(Connector):
                 page_token = listing.get("nextPageToken")
                 if not page_token:
                     break
+            # skip files we already have at the same modified date — no re-download
+            import json as _json
+            existing = set()
+            for row in self.store._conn.execute(
+                "SELECT metadata, event_date FROM memories WHERE source=?", (self.name,)):
+                try:
+                    fid = _json.loads(row["metadata"] or "{}").get("file_id")
+                except Exception:
+                    fid = None
+                if fid:
+                    existing.add((fid, row["event_date"]))
+
             for f in files:
+                sig = (f["id"], (f.get("modifiedTime") or "")[:10] or None)
+                if sig in existing:
+                    result.skipped += 1
+                    continue
                 try:
                     text = self._read_file(service, f, MediaIoBaseDownload)
                 except Exception as exc:
