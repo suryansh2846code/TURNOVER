@@ -6,6 +6,38 @@ let agents = [];
 function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
 function esc(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
+// tiny, safe markdown renderer (escapes first, then applies a subset)
+function mdInline(s) {
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/(^|[\s(])((https?:\/\/[^\s<)]+))/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+}
+function md(src) {
+  const lines = esc(src).split("\n");
+  let html = "", inList = false, inCode = false;
+  const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
+  for (const raw of lines) {
+    if (/^```/.test(raw)) {
+      if (inCode) { html += "</code></pre>"; inCode = false; }
+      else { closeList(); html += "<pre><code>"; inCode = true; }
+      continue;
+    }
+    if (inCode) { html += raw + "\n"; continue; }
+    const h = raw.match(/^(#{1,4})\s+(.*)/);
+    if (h) { closeList(); const lvl = Math.min(h[1].length + 2, 6); html += `<h${lvl}>${mdInline(h[2])}</h${lvl}>`; continue; }
+    const li = raw.match(/^\s*[-*]\s+(.*)/) || raw.match(/^\s*\d+\.\s+(.*)/);
+    if (li) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${mdInline(li[1])}</li>`; continue; }
+    if (raw.trim() === "") { closeList(); continue; }
+    closeList(); html += `<p>${mdInline(raw)}</p>`;
+  }
+  closeList(); if (inCode) html += "</code></pre>";
+  return html;
+}
+
 async function loadAgents() {
   const d = await api("/api/agents");
   agents = d.agents;
@@ -38,13 +70,15 @@ function renderHistory(history) {
   const box = $("#messages");
   if (!history.length) { box.innerHTML = `<div class="msg empty">This agent shares your brain. Say hello — it already knows you.</div>`; return; }
   box.innerHTML = history.filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => `<div class="msg ${m.role}">${esc(m.content)}</div>`).join("");
+    .map((m) => `<div class="msg ${m.role}">${m.role === "assistant" ? md(m.content) : esc(m.content)}</div>`).join("");
   box.scrollTop = box.scrollHeight;
 }
 
 function addMsg(role, text) {
   const el = document.createElement("div");
-  el.className = "msg " + role; el.textContent = text;
+  el.className = "msg " + role;
+  if (role === "assistant") el.innerHTML = md(text);   // render markdown
+  else el.textContent = text;                          // user text stays literal
   $("#messages").appendChild(el); $("#messages").scrollTop = 1e9; return el;
 }
 function addTrace(steps) {
@@ -57,33 +91,46 @@ function addTrace(steps) {
   $("#messages").appendChild(el); $("#messages").scrollTop = 1e9;
 }
 
-let busy = false;   // one turn at a time per the whole workspace
+let busy = false;               // one turn at a time per the whole workspace
+let controller = null;          // AbortController for the in-flight turn
 
 function setBusy(on) {
   busy = on;
   $("#input").disabled = on;
-  $("#send").disabled = on;
-  $("#send").textContent = on ? "…" : "Send";
-  if (!on) $("#input").focus();
+  $("#send").textContent = on ? "Stop" : "Send";
+  $("#send").classList.toggle("stopbtn", on);
+  if (!on) { $("#input").focus(); autoGrow(); }
 }
 
 async function send(text) {
-  if (busy) return;               // guard: ignore sends while a turn is running
+  if (busy) return;             // guard: ignore sends while a turn is running
   setBusy(true);
+  controller = new AbortController();
   addMsg("user", text);
   const spin = addMsg("assistant", ""); spin.classList.add("spin"); spin.textContent = "thinking…";
   try {
     const res = await api(`/api/agents/${current}/chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: text, provider: $("#provider").value }),
+      signal: controller.signal,
     });
     spin.remove();
     addTrace(res.trace || []);
     addMsg("assistant", res.reply);
     loadBrain();
     loadTasks();   // an agent may have added/completed a task this turn
-  } catch (e) { spin.remove(); addMsg("assistant", "⚠️ " + e); }
-  finally { setBusy(false); }
+  } catch (e) {
+    spin.remove();
+    if (controller && controller.signal.aborted) addMsg("assistant", "⏹ stopped");
+    else addMsg("assistant", "⚠️ " + e);
+  }
+  finally { controller = null; setBusy(false); }
+}
+
+function autoGrow() {
+  const t = $("#input"); if (!t) return;
+  t.style.height = "auto";
+  t.style.height = Math.min(t.scrollHeight, 140) + "px";
 }
 
 async function loadBrain() {
@@ -196,7 +243,16 @@ $("#pickIngest").onclick = async () => {
   } catch (e) { toast(String(e)); }
 };
 
-$("#composer").onsubmit = (e) => { e.preventDefault(); const v = $("#input").value.trim(); if (v && current) { $("#input").value = ""; send(v); } };
+$("#composer").onsubmit = (e) => {
+  e.preventDefault();
+  if (busy) { if (controller) controller.abort(); return; }   // Stop
+  const v = $("#input").value.trim();
+  if (v && current) { $("#input").value = ""; autoGrow(); send(v); }
+};
+$("#input").addEventListener("input", autoGrow);
+$("#input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); }
+});
 $("#clearBtn").onclick = async () => { await api(`/api/agents/${current}/clear`, { method: "POST" }); selectAgent(current); toast("chat cleared"); };
 $("#ingestBtn").onclick = async () => {
   const t = $("#ingestText").value.trim(); if (!t) return;
