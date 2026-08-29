@@ -115,6 +115,65 @@ class GoogleDriveConnector(Connector):
             result.detail = "sync failed"
         return self._finish(result)
 
+    def search_and_ingest(self, terms: str, max_files: int = 5,
+                          interactive: bool = False) -> list[str]:
+        """Live, targeted Drive search (name + full-text, across My Drive + shared)
+        that ingests matching files ON DEMAND. Powers lazy loading: fetch a file
+        only when the user asks for it, instead of syncing everything up front.
+        Returns the titles of files it ingested."""
+        terms = (terms or "").strip().replace("'", "")
+        if not terms:
+            return []
+        try:
+            from googleapiclient.discovery import build
+            from googleapiclient.http import MediaIoBaseDownload
+        except ImportError:
+            return []
+        try:
+            creds = get_credentials(interactive=interactive)
+            service = build("drive", "v3", credentials=creds, cache_discovery=False)
+            q = (f"(name contains '{terms}' or fullText contains '{terms}') "
+                 "and trashed=false and mimeType != "
+                 "'application/vnd.google-apps.folder'")
+            files = service.files().list(
+                q=q, pageSize=max_files, includeItemsFromAllDrives=True,
+                supportsAllDrives=True, corpora="allDrives",
+                fields="files(id,name,mimeType,webViewLink,modifiedTime,"
+                       "owners(displayName))").execute().get("files", [])
+            from ..brain import get_brain
+            brain = get_brain()
+            # file_ids already in the brain → don't re-download, just report found
+            import json as _json
+            have = set()
+            for row in self.store._conn.execute(
+                "SELECT metadata FROM memories WHERE source=?", (self.name,)):
+                try:
+                    fid = _json.loads(row["metadata"] or "{}").get("file_id")
+                except Exception:
+                    fid = None
+                if fid:
+                    have.add(fid)
+            found = []
+            for f in files:
+                found.append(f["name"])
+                if f["id"] in have:
+                    continue                     # already ingested — skip download
+                try:
+                    text = self._read_file(service, f, MediaIoBaseDownload)
+                except Exception:
+                    continue
+                if not text.strip():
+                    continue
+                ev = (f.get("modifiedTime") or "")[:10] or None
+                owner = (f.get("owners") or [{}])[0].get("displayName", "")
+                brain.ingest(text, source=self.name, kind="doc", title=f["name"],
+                             uri=f.get("webViewLink"), fast=True, event_date=ev,
+                             metadata={"file_id": f["id"], "owner": owner,
+                                       "on_demand": True})
+            return found
+        except Exception:
+            return []
+
     def _read_file(self, service, f: dict, downloader_cls) -> str:
         mime = f["mimeType"]
         # Google-native docs/slides export straight to text

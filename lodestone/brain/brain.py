@@ -132,13 +132,59 @@ class Brain:
                 return (src, label, block)
         return None
 
+    # detect "find/get a document" intent for on-demand Drive fetch
+    _FIND_RE = None
+    _DOC_RE = None
+    _FIND_STOP = {
+        "find", "get", "pull", "fetch", "open", "show", "locate", "bring", "give",
+        "me", "my", "the", "a", "an", "of", "in", "from", "on", "for", "please",
+        "can", "you", "do", "have", "is", "there", "where", "wheres", "search",
+        "file", "files", "doc", "docs", "document", "documents", "pdf", "note",
+        "notes", "sheet", "slides", "slide", "presentation", "drive", "google",
+        "folder", "and", "all", "any", "some", "this", "that", "year", "notess",
+    }
+
+    def _drive_find_terms(self, query: str):
+        import re
+        if self._FIND_RE is None:
+            Brain._FIND_RE = re.compile(
+                r"\b(find|get|pull|fetch|open|show|locate|bring|where'?s?|"
+                r"do you have|is there)\b", re.I)
+            Brain._DOC_RE = re.compile(
+                r"\b(file|files|doc|docs|document|documents|pdf|notes?|resume|cv|"
+                r"sheet|slides?|presentation|drive)\b", re.I)
+        if not (self._FIND_RE.search(query) and self._DOC_RE.search(query)):
+            return None
+        words = [w for w in re.findall(r"[a-z0-9]{2,}", query.lower())
+                 if w not in self._FIND_STOP]
+        return " ".join(words[:4]) if words else None
+
+    def _maybe_fetch_drive(self, query: str) -> list[str]:
+        """On-demand: if the user asks for a document not already in the brain,
+        live-search Drive for it and ingest it, then it's recalled normally."""
+        terms = self._drive_find_terms(query)
+        if not terms:
+            return []
+        from ..connectors import REGISTRY, get_connector
+        gd = REGISTRY.get("gdrive")
+        if not gd or not gd().is_configured()[0]:
+            return []
+        # Always do a quick live Drive search on a find-intent query; the
+        # connector skips re-downloading files already in the brain, so this is
+        # cheap when the file is already present and fetches it when it isn't.
+        return get_connector("gdrive").search_and_ingest(terms, max_files=5)
+
     def recall(self, query: str, *, limit: int = 8, max_tokens: int = 1400,
                source: str | None = None, prefer: list[str] | None = None) -> dict[str, Any]:
         """Fuse graph + vector recall into an injectable context block.
 
         If the query references a date/range ("emails on July 14", "last week"),
         recall is filtered to items whose real event_date falls in that range.
+        Also lazily fetches a requested document from Drive if it isn't yet in
+        the brain, then includes it.
         """
+        fetched = self._maybe_fetch_drive(query)   # on-demand Drive load
+
         from ..core.dateparse import parse_date_range
         dr = parse_date_range(query)
         date_start, date_end = dr if dr else (None, None)
@@ -199,6 +245,10 @@ class Brain:
             joiner = "\n" if compact else "\n\n---\n\n"
             parts.append(label + "\n" + joiner.join(blocks))
         context = ""
+        fetch_note = ""
+        if fetched:
+            fetch_note = ("[Just fetched from Drive on demand: "
+                          + ", ".join(fetched) + "]\n")
         date_note = ""
         if dr:
             date_note = (f"[Date filter applied: showing only items dated "
@@ -206,11 +256,11 @@ class Brain:
                          + (f" to {date_end}" if date_end != date_start else "")
                          + (". Nothing in the brain matches that date."
                             if not kept else ".") + "]\n")
-        if parts or date_note:
+        if parts or date_note or fetch_note:
             context = (
                 "Context recalled from the user's personal Lodestone brain. "
                 "Use it to act without asking them to repeat themselves.\n\n"
-                + date_note
+                + fetch_note + date_note
                 + "\n\n".join(parts)
             )
         return {
@@ -218,6 +268,7 @@ class Brain:
             "memory_hits": [{"score": h.score, **h.memory.model_dump()} for h in kept],
             "entities": ents,
             "date_range": dr,
+            "fetched": fetched,
         }
 
     _PROSE_EXT = (".md", ".markdown", ".txt", ".rst", ".org")
