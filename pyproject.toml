@@ -26,7 +26,7 @@ dependencies = [
 local-embeddings = ["sentence-transformers>=2.7"]
 # Connector SDKs. Installed only if you use the connector.
 gmail = ["google-api-python-client>=2.0", "google-auth-oauthlib>=1.2"]
-gdrive = ["google-api-python-client>=2.0", "google-auth-oauthlib>=1.2", "pypdf>=4.0"]
+gdrive = ["google-api-python-client>=2.0", "google-auth-oauthlib>=1.2", "pypdf>=4.0", "python-docx>=1.1", "python-pptx>=0.6"]
 notion = ["notion-client>=2.2"]
 all = [
     "sentence-transformers>=2.7",

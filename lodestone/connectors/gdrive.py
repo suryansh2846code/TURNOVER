@@ -12,6 +12,10 @@ from .google_auth import get_credentials, google_ready
 EXPORT_AS_TEXT = "application/vnd.google-apps.document"
 PLAIN_TYPES = {"text/plain", "text/markdown", "text/csv"}
 PDF_TYPE = "application/pdf"
+DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+PPTX_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+# Google-native Slides/Sheets export to text too
+GSLIDES = "application/vnd.google-apps.presentation"
 
 
 class GoogleDriveConnector(Connector):
@@ -34,19 +38,31 @@ class GoogleDriveConnector(Connector):
         try:
             creds = get_credentials(interactive=interactive)
             service = build("drive", "v3", credentials=creds, cache_discovery=False)
+            all_types = [EXPORT_AS_TEXT, PDF_TYPE, DOCX_TYPE, PPTX_TYPE,
+                         GSLIDES, *PLAIN_TYPES]
             mime_filter = (
-                f"(mimeType='{EXPORT_AS_TEXT}' or mimeType='{PDF_TYPE}' or "
-                + " or ".join(f"mimeType='{m}'" for m in PLAIN_TYPES)
+                "(" + " or ".join(f"mimeType='{m}'" for m in all_types)
                 + ")"
             )
             q = query or f"{mime_filter} and trashed=false"
-            listing = (
-                service.files()
-                .list(q=q, pageSize=max_results,
-                      fields="files(id,name,mimeType,webViewLink)")
-                .execute()
-            )
-            files = listing.get("files", [])
+            # paginate + include Shared-with-me and Shared Drives
+            files: list[dict] = []
+            page_token = None
+            while len(files) < max_results:
+                listing = (
+                    service.files()
+                    .list(q=q, pageSize=min(100, max_results - len(files)),
+                          pageToken=page_token,
+                          includeItemsFromAllDrives=True, supportsAllDrives=True,
+                          corpora="allDrives",
+                          fields="nextPageToken,files(id,name,mimeType,webViewLink,"
+                                 "modifiedTime,owners(displayName))")
+                    .execute()
+                )
+                files += listing.get("files", [])
+                page_token = listing.get("nextPageToken")
+                if not page_token:
+                    break
             for f in files:
                 try:
                     text = self._read_file(service, f, MediaIoBaseDownload)
@@ -56,6 +72,10 @@ class GoogleDriveConnector(Connector):
                 if not text.strip():
                     result.skipped += 1
                     continue
+                event_date = (f.get("modifiedTime") or "")[:10] or None
+                owner = ""
+                if f.get("owners"):
+                    owner = f["owners"][0].get("displayName", "")
                 for i, chunk in enumerate(chunk_text(text)):
                     mem = self.store.add(
                         text=chunk,
@@ -63,7 +83,8 @@ class GoogleDriveConnector(Connector):
                         kind="doc",
                         title=f["name"] if i == 0 else f"{f['name']} (part {i + 1})",
                         uri=f.get("webViewLink"),
-                        metadata={"file_id": f["id"], "chunk": i},
+                        event_date=event_date,
+                        metadata={"file_id": f["id"], "chunk": i, "owner": owner},
                     )
                     if mem:
                         result.added += 1
@@ -77,14 +98,15 @@ class GoogleDriveConnector(Connector):
 
     def _read_file(self, service, f: dict, downloader_cls) -> str:
         mime = f["mimeType"]
-        if mime == EXPORT_AS_TEXT:
+        # Google-native docs/slides export straight to text
+        if mime in (EXPORT_AS_TEXT, GSLIDES):
             data = service.files().export(
                 fileId=f["id"], mimeType="text/plain"
             ).execute()
             return data.decode("utf-8", errors="ignore") if isinstance(data, bytes) else data
 
         buf = io.BytesIO()
-        request = service.files().get_media(fileId=f["id"])
+        request = service.files().get_media(fileId=f["id"], supportsAllDrives=True)
         downloader = downloader_cls(buf, request)
         done = False
         while not done:
@@ -92,6 +114,10 @@ class GoogleDriveConnector(Connector):
         raw = buf.getvalue()
         if mime == PDF_TYPE:
             return self._pdf_text(raw)
+        if mime == DOCX_TYPE:
+            return self._docx_text(raw)
+        if mime == PPTX_TYPE:
+            return self._pptx_text(raw)
         return raw.decode("utf-8", errors="ignore")
 
     def _pdf_text(self, raw: bytes) -> str:
@@ -101,3 +127,30 @@ class GoogleDriveConnector(Connector):
             return ""
         reader = PdfReader(io.BytesIO(raw))
         return "\n".join((page.extract_text() or "") for page in reader.pages)
+
+    def _docx_text(self, raw: bytes) -> str:
+        try:
+            from docx import Document  # python-docx, lazy
+        except ImportError:
+            return ""
+        doc = Document(io.BytesIO(raw))
+        parts = [p.text for p in doc.paragraphs if p.text.strip()]
+        for table in doc.tables:
+            for row in table.rows:
+                cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                if cells:
+                    parts.append(" | ".join(cells))
+        return "\n".join(parts)
+
+    def _pptx_text(self, raw: bytes) -> str:
+        try:
+            from pptx import Presentation  # python-pptx, lazy
+        except ImportError:
+            return ""
+        prs = Presentation(io.BytesIO(raw))
+        parts = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if shape.has_text_frame and shape.text_frame.text.strip():
+                    parts.append(shape.text_frame.text)
+        return "\n".join(parts)
