@@ -292,6 +292,33 @@ class MemoryStore:
         self._dirty = True
         return n
 
+    def dedupe(self) -> int:
+        """Self-heal: remove duplicate memories of the same sourced item
+        (same source+uri+title), keeping the newest. Runs automatically so no
+        user ever needs a manual dedup. Only touches rows with a uri, so
+        user-entered notes are never merged."""
+        from collections import defaultdict
+        rows = self._conn.execute(
+            "SELECT id, source, uri, title, created_at FROM memories "
+            "WHERE uri IS NOT NULL"
+        ).fetchall()
+        groups: dict = defaultdict(list)
+        for r in rows:
+            groups[(r["source"], r["uri"], r["title"])].append(
+                (r["created_at"], r["id"]))
+        to_delete = []
+        for lst in groups.values():
+            if len(lst) > 1:
+                lst.sort()                       # oldest first
+                to_delete += [i for _, i in lst[:-1]]   # keep newest
+        if to_delete:
+            with self._lock:
+                self._conn.executemany(
+                    "DELETE FROM memories WHERE id=?", [(i,) for i in to_delete])
+                self._conn.commit()
+                self._dirty = True
+        return len(to_delete)
+
     # ── connector state ───────────────────────────────────────────────────
     def set_connector_state(
         self, connector: str, *, cursor=None, status=None, detail=None, last_sync=None

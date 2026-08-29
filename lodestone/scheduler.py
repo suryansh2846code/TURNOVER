@@ -69,6 +69,11 @@ class Scheduler:
             except Exception as exc:
                 summary[f"files:{path}"] = {"added": 0, "errors": [str(exc)[:120]]}
 
+        # self-heal: never leave duplicates behind (no manual dedup needed)
+        removed = store.dedupe()
+        if removed:
+            summary["_deduped"] = removed
+
         self.last_run = datetime.now(timezone.utc).isoformat()
         self.last_result = summary
         return summary
@@ -77,8 +82,14 @@ class Scheduler:
     def _loop(self) -> None:
         settings = get_settings()
         interval = max(1, settings.sync_interval_minutes) * 60
-        # small initial delay so startup isn't blocked
-        if self._stop.wait(30):
+        # startup self-heal: dedupe immediately so any user recovers automatically
+        try:
+            from .core.store import get_store
+            get_store().dedupe()
+        except Exception:
+            pass
+        # small initial delay, then an immediate first sync (no manual CLI needed)
+        if self._stop.wait(20):
             return
         while not self._stop.is_set():
             try:
