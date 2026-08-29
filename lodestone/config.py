@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     sync_enabled: bool = True
     sync_interval_minutes: int = 30
 
+    # max Gmail messages to pull per full sync (raise for a bigger archive)
+    gmail_max: int = 1500
+
     # server
     host: str = "127.0.0.1"
     port: int = 8787
