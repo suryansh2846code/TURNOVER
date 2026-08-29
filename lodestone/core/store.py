@@ -201,33 +201,40 @@ class MemoryStore:
         *,
         limit: int = 8,
         source: str | None = None,
+        prefer: list[str] | None = None,
         min_score: float = 0.0,
     ) -> list[RecallHit]:
-        """Semantic recall with a lexical safety net, the way it gets injected."""
+        """Semantic recall with a lexical safety net, the way it gets injected.
+
+        `prefer` softly boosts memories from those sources (e.g. the Inbox agent
+        prefers 'gmail') so a domain agent's own data isn't drowned out by a
+        larger source.
+        """
         query = (query or "").strip()
         if not query or self.count() == 0:
             return []
         self._ensure_vectors()
+        prefer = set(prefer or [])
 
         scores: dict[str, float] = {}
         if self._vecs is not None:
-            qv = self._embedder.embed_one(query)
+            qv = self._embedder.embed_query(query)
             sims = self._vecs @ qv  # cosine, vectors are normalized
             for idx, mid in enumerate(self._ids):
                 scores[mid] = float(sims[idx])
 
-        # lexical overlap boost — catches exact keywords the vector may miss
+        # lexical overlap boost (+ source preference) in one scan
         q_tokens = {t for t in _tokenize(query)}
-        if q_tokens:
-            for row in self._conn.execute(
-                "SELECT id, text, title FROM memories"
-            ).fetchall():
+        for row in self._conn.execute(
+            "SELECT id, text, title, source FROM memories"
+        ).fetchall():
+            if q_tokens:
                 toks = set(_tokenize(f"{row['title'] or ''} {row['text']}"))
-                if not toks:
-                    continue
-                overlap = len(q_tokens & toks) / len(q_tokens)
+                overlap = len(q_tokens & toks) / len(q_tokens) if toks else 0
                 if overlap:
                     scores[row["id"]] = scores.get(row["id"], 0.0) + 0.25 * overlap
+            if prefer and row["source"] in prefer and row["id"] in scores:
+                scores[row["id"]] += 0.15   # soft nudge toward the agent's domain
 
         if not scores:
             return []

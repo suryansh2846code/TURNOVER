@@ -20,6 +20,7 @@ PRESETS: dict[str, Agent] = {
             "gmail_search when useful."
         ),
         tools=_BASE_TOOLS + ["gmail_search", "web_search"],
+        recall_sources=["gmail", "gcal"],
     ),
     "launch": Agent(
         id="launch",

@@ -82,9 +82,9 @@ class Brain:
 
     # ── recall ───────────────────────────────────────────────────────────
     def recall(self, query: str, *, limit: int = 8, max_tokens: int = 1400,
-               source: str | None = None) -> dict[str, Any]:
+               source: str | None = None, prefer: list[str] | None = None) -> dict[str, Any]:
         """Fuse graph + vector recall into an injectable context block."""
-        hits = self.store.search(query, limit=limit, source=source)
+        hits = self.store.search(query, limit=limit, source=source, prefer=prefer)
         ents = self.graph.match_entities(query, limit=4)
 
         graph_lines: list[str] = []

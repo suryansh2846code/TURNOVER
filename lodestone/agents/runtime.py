@@ -154,7 +154,8 @@ def run_turn(agent_id: str, user_text: str, *,
     # *already knows the user* regardless of whether the (possibly small) model
     # decides to call search_brain. Tools remain for going deeper / live data.
     trace: list[TraceStep] = []
-    recalled = get_brain().recall(user_text, limit=6)
+    recalled = get_brain().recall(
+        user_text, limit=10, prefer=agent.recall_sources or None)
     if recalled["context"]:
         messages.append(Message(role="system", content=recalled["context"]))
         trace.append(TraceStep(

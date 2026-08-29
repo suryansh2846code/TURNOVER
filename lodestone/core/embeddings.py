@@ -29,6 +29,11 @@ class Embedder:
     def embed_one(self, text: str) -> np.ndarray:
         return self.embed([text])[0]
 
+    def embed_query(self, text: str) -> np.ndarray:
+        """Embed a search query. Retrieval models (BGE/E5) want an instruction
+        prefix on queries only; the default treats query == passage."""
+        return self.embed_one(text)
+
 
 def _normalize(v: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(v, axis=-1, keepdims=True)
@@ -101,11 +106,22 @@ class SentenceTransformerEmbedder(Embedder):
             self.dim = self._model.get_embedding_dimension()
         except AttributeError:  # older sentence-transformers
             self.dim = self._model.get_sentence_embedding_dimension()
+        # retrieval models rank far better with an instruction on the QUERY only
+        low = self.model_name.lower()
+        if "bge" in low:
+            self._query_prefix = "Represent this sentence for searching relevant passages: "
+        elif "e5" in low:
+            self._query_prefix = "query: "
+        else:
+            self._query_prefix = ""
 
     def embed(self, texts: list[str]) -> np.ndarray:
         vecs = self._model.encode(
             texts, normalize_embeddings=True, show_progress_bar=False)
         return np.asarray(vecs, dtype=np.float32)
+
+    def embed_query(self, text: str) -> np.ndarray:
+        return self.embed_one(self._query_prefix + text)
 
 
 class OpenAIEmbedder(Embedder):
