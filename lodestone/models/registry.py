@@ -18,6 +18,7 @@ from functools import lru_cache
 from ..config import get_settings
 from .anthropic import AnthropicProvider
 from .base import ChatResult, LLMProvider, Message, ToolCall
+from .claude_code import ClaudeCodeProvider
 from .openai_compat import OllamaProvider, OpenAICompatProvider, OpenRouterProvider
 
 
@@ -69,6 +70,7 @@ class MockProvider(LLMProvider):
 
 
 _REGISTRY: dict[str, type[LLMProvider]] = {
+    "claude-code": ClaudeCodeProvider,
     "subscription": SubscriptionProvider,
     "anthropic": AnthropicProvider,
     "openai": OpenAICompatProvider,

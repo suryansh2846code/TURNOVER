@@ -75,17 +75,36 @@ class SentenceTransformerEmbedder(Embedder):
     name = "local"
 
     def __init__(self, model: str | None = None) -> None:
+        import logging
+        import os
+
+        # quiet the noisy HF/transformers startup logging
+        for name in ("transformers", "sentence_transformers", "httpx",
+                     "huggingface_hub"):
+            logging.getLogger(name).setLevel(logging.ERROR)
+
         from sentence_transformers import SentenceTransformer  # lazy
 
         self.model_name = model or "all-MiniLM-L6-v2"
-        self._model = SentenceTransformer(self.model_name)
+        # Local-first: after the first download the model is cached, so load
+        # OFFLINE (no network, fast, no HF update checks). Fall back to an online
+        # load only if it isn't cached yet.
+        try:
+            os.environ["HF_HUB_OFFLINE"] = "1"
+            os.environ["TRANSFORMERS_OFFLINE"] = "1"
+            self._model = SentenceTransformer(self.model_name)
+        except Exception:
+            os.environ.pop("HF_HUB_OFFLINE", None)
+            os.environ.pop("TRANSFORMERS_OFFLINE", None)
+            self._model = SentenceTransformer(self.model_name)  # downloads + caches
         try:
             self.dim = self._model.get_embedding_dimension()
         except AttributeError:  # older sentence-transformers
             self.dim = self._model.get_sentence_embedding_dimension()
 
     def embed(self, texts: list[str]) -> np.ndarray:
-        vecs = self._model.encode(texts, normalize_embeddings=True)
+        vecs = self._model.encode(
+            texts, normalize_embeddings=True, show_progress_bar=False)
         return np.asarray(vecs, dtype=np.float32)
 
 

@@ -17,6 +17,29 @@ def serve():
 
 
 @app.command()
+def mcp():
+    """Run the MCP bridge (stdio) so terminal Claude / Cursor can use the brain."""
+    from .mcp_server.server import main
+    main()
+
+
+@app.command("mcp-install")
+def mcp_install():
+    """Print the command to connect the Lodestone brain to Claude Code."""
+    import sys
+    from .config import get_settings
+    py = sys.executable
+    home = get_settings().home
+    console.print("[bold]Connect Lodestone to your terminal Claude:[/]\n")
+    console.print(
+        f'  claude mcp add lodestone --env LODESTONE_HOME="{home}" '
+        f'-- "{py}" -m lodestone.mcp_server.server\n'
+    )
+    console.print("Then in Claude Code, tools search_brain / remember / list_tasks "
+                  "/ add_task / complete_task / brain_stats are available.")
+
+
+@app.command()
 def chat(agent: str = typer.Argument("research"), message: str = typer.Argument(...),
          provider: str = typer.Option(None, help="override model provider")):
     """Send one message to an agent from the terminal."""
