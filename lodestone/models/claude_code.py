@@ -38,25 +38,35 @@ class ClaudeCodeProvider(LLMProvider):
             return False, "Claude Code CLI ('claude') not found on PATH"
         return True, ""
 
-    def _flatten(self, messages: list[Message]) -> str:
-        parts: list[str] = []
-        for m in messages:
-            if m.role == "system":
-                parts.append(m.content)
-            elif m.role == "user":
-                parts.append(f"User: {m.content}")
-            elif m.role == "assistant" and m.content:
-                parts.append(f"Assistant: {m.content}")
-            elif m.role == "tool":
-                parts.append(f"[tool result] {m.content}")
-        parts.append("Assistant:")
-        return "\n\n".join(parts)
+    def _split(self, messages: list[Message]) -> tuple[str, str]:
+        """Return (system_prompt, user_prompt).
+
+        Claude Code's `-p` expects a real instruction, not a fake User:/Assistant:
+        transcript (that trips its stop-sequence handling and errors out). So we
+        send the latest user message as the prompt, and everything else — our
+        system instructions, injected brain/date/task context, and prior turns —
+        via --append-system-prompt.
+        """
+        system_parts = [m.content for m in messages if m.role == "system" and m.content]
+        convo = [m for m in messages if m.role in ("user", "assistant", "tool")]
+        last_user = next((m for m in reversed(convo) if m.role == "user"), None)
+        prompt = last_user.content if last_user else ""
+        prior = convo[: convo.index(last_user)] if last_user in convo else convo
+        hist = "\n".join(
+            f"{'User' if m.role == 'user' else 'Assistant' if m.role == 'assistant' else 'Tool'}: {m.content}"
+            for m in prior if m.content
+        )
+        if hist:
+            system_parts.append("Recent conversation so far:\n" + hist)
+        return "\n\n".join(system_parts), prompt
 
     def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
         if not self._bin:
             return ChatResult(text="Claude Code CLI not available.")
-        prompt = self._flatten(messages)
+        system_prompt, prompt = self._split(messages)
         cmd = [self._bin, "-p", "--output-format", "json"]
+        if system_prompt:
+            cmd += ["--append-system-prompt", system_prompt]
         if self.model and self.model != "claude-code":
             cmd += ["--model", self.model]
         try:
@@ -64,12 +74,22 @@ class ClaudeCodeProvider(LLMProvider):
                 cmd, input=prompt, capture_output=True, text=True, timeout=180,
             )
         except subprocess.TimeoutExpired:
-            return ChatResult(text="(Claude Code timed out.)")
-        if proc.returncode != 0:
-            return ChatResult(text=f"(Claude Code error: {proc.stderr.strip()[:300]})")
-        try:
-            data = json.loads(proc.stdout)
-            text = data.get("result") or ""
-        except json.JSONDecodeError:
-            text = proc.stdout.strip()
-        return ChatResult(text=text.strip(), finish_reason="stop")
+            return ChatResult(text="⚠️ Claude Code timed out. Try again or switch model.")
+
+        data = {}
+        if proc.stdout.strip().startswith("{"):
+            try:
+                data = json.loads(proc.stdout)
+            except json.JSONDecodeError:
+                data = {}
+        text = (data.get("result") or "").strip()
+
+        if proc.returncode != 0 or data.get("is_error"):
+            if text:                       # Claude returned a usable message anyway
+                return ChatResult(text=text, finish_reason="stop")
+            detail = (proc.stderr.strip() or data.get("subtype")
+                      or data.get("stop_reason") or "unknown error")
+            return ChatResult(
+                text=f"⚠️ Claude Code couldn't answer ({detail}). "
+                     "Try rephrasing, or switch to a different model in the sidebar.")
+        return ChatResult(text=text or proc.stdout.strip(), finish_reason="stop")
