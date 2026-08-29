@@ -28,14 +28,19 @@ def html_to_text(html: str) -> str:
     return html.strip()
 
 
+def _looks_html(t: str) -> bool:
+    return bool(re.search(r"<[a-z/][^>]*>", t) or
+                re.search(r"\{[^{}]*(margin|padding|font|px|color)[^{}]*\}", t))
+
+
 def _extract_body(payload: dict) -> str:
     """Best readable body: prefer text/plain, else strip text/html."""
     plain, html = _walk_body(payload)
-    if plain.strip():
-        return plain
-    if html.strip():
-        return html_to_text(html)
-    return ""
+    body = plain.strip() or html_to_text(html)
+    # safety net: some senders stuff HTML/CSS into the "plain" part
+    if _looks_html(body):
+        body = html_to_text(body)
+    return body
 
 
 def _walk_body(payload: dict) -> tuple[str, str]:
