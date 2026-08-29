@@ -53,6 +53,7 @@ class GoogleCalendarConnector(Connector):
                 out = brain.ingest(
                     text, source=self.name, kind="event", title=summary,
                     uri=ev.get("htmlLink"), fast=True,
+                    event_date=(start[:10] if start else None),
                     metadata={"start": start, "event_id": ev.get("id")},
                 )
                 result.added += out["memories"]

@@ -43,6 +43,7 @@ def _row_to_memory(row: sqlite3.Row) -> Memory:
         metadata=json.loads(row["metadata"]),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
+        event_date=row["event_date"] if "event_date" in row.keys() else None,
     )
 
 
@@ -70,6 +71,7 @@ class MemoryStore:
         uri: str | None = None,
         tags: Iterable[str] | None = None,
         metadata: dict[str, Any] | None = None,
+        event_date: str | None = None,
     ) -> Memory | None:
         """Add one memory. Returns None if it is a duplicate (same content+uri)."""
         text = (text or "").strip()
@@ -83,6 +85,7 @@ class MemoryStore:
             title=title,
             uri=uri,
             tags=list(tags or []),
+            event_date=event_date,
             metadata=metadata or {},
         )
         chash = _content_hash(text, uri)
@@ -99,13 +102,14 @@ class MemoryStore:
                     """INSERT INTO memories
                        (id, text, source, kind, title, uri, tags, metadata,
                         created_at, updated_at, embedding, embed_dim, embed_model,
-                        content_hash)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        content_hash, event_date)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         mem.id, mem.text, mem.source, mem.kind, mem.title, mem.uri,
                         json.dumps(mem.tags), json.dumps(mem.metadata),
                         mem.created_at, mem.updated_at,
                         vec.tobytes(), len(vec), self._embedder.name, chash,
+                        mem.event_date,
                     ),
                 )
                 self._conn.commit()
@@ -202,6 +206,8 @@ class MemoryStore:
         limit: int = 8,
         source: str | None = None,
         prefer: list[str] | None = None,
+        date_start: str | None = None,
+        date_end: str | None = None,
         min_score: float = 0.0,
     ) -> list[RecallHit]:
         """Semantic recall with a lexical safety net, the way it gets injected.
@@ -215,6 +221,16 @@ class MemoryStore:
             return []
         self._ensure_vectors()
         prefer = set(prefer or [])
+
+        # date filter: restrict to memories whose real event_date is in range
+        date_ids: set[str] | None = None
+        if date_start or date_end:
+            rows = self._conn.execute(
+                "SELECT id FROM memories WHERE event_date IS NOT NULL "
+                "AND event_date>=? AND event_date<=?",
+                (date_start or "0000-01-01", date_end or "9999-12-31"),
+            ).fetchall()
+            date_ids = {r["id"] for r in rows}
 
         scores: dict[str, float] = {}
         if self._vecs is not None:
@@ -242,6 +258,8 @@ class MemoryStore:
         hits: list[RecallHit] = []
         for mid, score in ranked:
             if score < min_score:
+                continue
+            if date_ids is not None and mid not in date_ids:
                 continue
             mem = self.get(mid)
             if mem is None:

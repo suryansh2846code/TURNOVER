@@ -68,13 +68,21 @@ class GmailConnector(Connector):
                     result.skipped += 1
                     continue
                 text = f"From: {sender}\nSubject: {subject}\n\n{snippet[:4000]}"
+                event_date = None
+                if msg.get("internalDate"):
+                    from datetime import datetime, timezone
+                    event_date = datetime.fromtimestamp(
+                        int(msg["internalDate"]) / 1000, timezone.utc
+                    ).date().isoformat()
                 mem = self.store.add(
                     text=text,
                     source=self.name,
                     kind="email",
                     title=subject,
                     uri=f"https://mail.google.com/mail/#all/{meta['id']}",
-                    metadata={"from": sender, "message_id": meta["id"]},
+                    event_date=event_date,
+                    metadata={"from": sender, "message_id": meta["id"],
+                              "date": event_date},
                 )
                 if mem:
                     result.added += 1

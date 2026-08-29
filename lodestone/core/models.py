@@ -23,6 +23,7 @@ class Memory(BaseModel):
     tags: list[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=_now)
     updated_at: str = Field(default_factory=_now)
+    event_date: str | None = None       # real date of the item (email/event)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     def as_context(self) -> str:

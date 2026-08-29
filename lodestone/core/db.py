@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS memories (
     embedding   BLOB,
     embed_dim   INTEGER,
     embed_model TEXT,
-    content_hash TEXT
+    content_hash TEXT,
+    event_date  TEXT          -- real date of the item (email/event), ISO YYYY-MM-DD
 );
 
 CREATE INDEX IF NOT EXISTS idx_memories_source ON memories(source);
@@ -69,4 +70,15 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive migrations for existing databases."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(memories)")}
+    if "event_date" not in cols:
+        conn.execute("ALTER TABLE memories ADD COLUMN event_date TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_mem_event_date "
+                 "ON memories(event_date)")
+    conn.commit()
