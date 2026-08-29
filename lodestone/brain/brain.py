@@ -83,6 +83,55 @@ class Brain:
         return len(name_to_id), n_facts
 
     # ── recall ───────────────────────────────────────────────────────────
+    # keyword → (source, human label) for "what's in my X" overview queries
+    _SOURCE_KW = [
+        (("inbox", "email", "emails", "mail", "mails", "gmail"), "gmail", "Gmail"),
+        (("drive", "google drive", "document", "documents", "docs"), "gdrive", "Google Drive"),
+        (("calendar", "event", "events", "meeting", "meetings", "schedule"), "gcal", "Calendar"),
+        (("message", "messages", "imessage", "texts"), "imessage", "iMessage"),
+        (("notion",), "notion", "Notion"),
+    ]
+    _OVERVIEW_RE = None
+
+    def _overview(self, query: str):
+        """If the query asks 'what's in / summarize / list my <source>', return
+        (source, label, listing-block); else None. Lists the items of that source
+        so the agent can answer overview questions semantic search can't."""
+        import re
+        if self._OVERVIEW_RE is None:
+            Brain._OVERVIEW_RE = re.compile(
+                r"\b(what'?s?\s+in|summar|list|show me|overview|everything|"
+                r"all (my|the)|what do i have|do i have (any|some)|contents? of|"
+                r"how many|go through|run through)\b", re.I)
+        q = query.lower()
+        if not self._OVERVIEW_RE.search(q):
+            return None
+        for kws, src, label in self._SOURCE_KW:
+            if any(re.search(rf"\b{re.escape(k)}\b", q) for k in kws):
+                # DISTINCT files/emails — group by uri (or title) so multi-chunk
+                # PDFs count once, not once per chunk.
+                rows = self.store._conn.execute(
+                    "SELECT title, uri, MAX(event_date) AS d FROM memories "
+                    "WHERE source=? GROUP BY COALESCE(uri, title) "
+                    "ORDER BY d DESC, MAX(created_at) DESC LIMIT 200",
+                    (src,),
+                ).fetchall()
+                seen, titles = set(), []
+                for r in rows:
+                    base = (r["title"] or "").split(" (part")[0].strip()
+                    if base and base.lower() not in seen:
+                        seen.add(base.lower())
+                        titles.append((r["d"], base))
+                if not titles:
+                    return (src, label, f"You have NO {label} items in the brain yet.")
+                shown = titles[:60]
+                lines = [f"- {t}" + (f"  ({d})" if d else "") for d, t in shown]
+                more = f"\n…and {len(titles) - len(shown)} more" if len(titles) > len(shown) else ""
+                block = (f"OVERVIEW — the user's {label} in the brain "
+                         f"({len(titles)} items):\n" + "\n".join(lines) + more)
+                return (src, label, block)
+        return None
+
     def recall(self, query: str, *, limit: int = 8, max_tokens: int = 1400,
                source: str | None = None, prefer: list[str] | None = None) -> dict[str, Any]:
         """Fuse graph + vector recall into an injectable context block.
@@ -93,6 +142,15 @@ class Brain:
         from ..core.dateparse import parse_date_range
         dr = parse_date_range(query)
         date_start, date_end = dr if dr else (None, None)
+
+        # "what's in my drive/inbox/calendar" → a listing, which semantic search
+        # can't produce. Inject an overview of that source and prefer it.
+        ov = self._overview(query)
+        overview_block = ""
+        if ov:
+            ov_src, _ov_label, overview_block = ov
+            prefer = list(set((prefer or []) + [ov_src]))
+
         # a dated query usually wants MORE of that day's items, so widen the window
         eff_limit = 25 if dr else limit
         hits = self.store.search(
@@ -132,6 +190,8 @@ class Brain:
             kept.append(h)
 
         parts = []
+        if overview_block:                       # source listing first
+            parts.append(overview_block)
         if graph_lines and not compact:
             parts.append("KNOWN ENTITIES & FACTS:\n" + "\n".join(graph_lines))
         if blocks:
