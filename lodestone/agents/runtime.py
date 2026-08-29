@@ -117,6 +117,16 @@ def run_turn(agent_id: str, user_text: str, *,
         provider_name or agent.model_provider or settings.model_provider,
         agent.model_name or settings.model_name,
     )
+    # Fail fast with a helpful message if the chosen backend isn't usable.
+    ready, why = provider.is_ready()
+    if not ready:
+        return TurnResult(
+            agent_id=agent_id,
+            reply=f"⚠️ The **{provider.name}** model isn't ready: {why}.\n\n"
+                  "Pick another model in the Model dropdown, or fix the backend "
+                  "(e.g. run `ollama serve`, or set the API key).",
+            provider=provider.name, model=provider.model,
+        )
     mem = AgentMemory()
     tools = build_tools(agent.tools)
 
@@ -180,7 +190,20 @@ def run_turn(agent_id: str, user_text: str, *,
     reply = ""
     for _ in range(MAX_STEPS):
         # low temperature → more reliable instruction-following & tool use
-        result = provider.chat(messages, tools=tools, temperature=0.15)
+        try:
+            result = provider.chat(messages, tools=tools, temperature=0.15)
+        except Exception as exc:
+            hint = ""
+            if provider.name == "ollama":
+                hint = " Is Ollama running? Start it with `ollama serve`."
+            elif provider.name in ("anthropic", "openai", "openrouter"):
+                hint = " Check the API key and your connection."
+            return TurnResult(
+                agent_id=agent_id,
+                reply=f"⚠️ The **{provider.name}** model failed: "
+                      f"{str(exc)[:200]}.{hint}",
+                trace=trace, provider=provider.name, model=provider.model,
+            )
         if result.wants_tools:
             messages.append(Message(
                 role="assistant", content=result.text, tool_calls=result.tool_calls,

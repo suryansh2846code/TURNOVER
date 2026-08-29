@@ -55,6 +55,9 @@ def chat(agent_id: str, body: ChatIn):
         result = run_turn(agent_id, body.message, provider_name=body.provider)
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'")
+    except Exception as exc:  # never 500 the chat — return a readable message
+        return {"agent_id": agent_id, "provider": "", "model": "", "trace": [],
+                "reply": f"⚠️ Something went wrong: {str(exc)[:200]}"}
     return result.as_dict()
 
 @app.post("/api/agents/{agent_id}/clear")
