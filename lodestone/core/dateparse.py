@@ -31,29 +31,30 @@ def parse_date_range(text: str, today: date | None = None) -> tuple[str, str] | 
     if m := re.search(r"(\d{4}-\d{2}-\d{2})", t):
         return m.group(1), m.group(1)
 
-    # relative words
-    if re.search(r"\byesterday\b", t):
+    # relative words (allow possessive/plural: today's, todays, yesterdays…)
+    _s = r"(?:'?s)?"   # optional 's or s suffix
+    if re.search(rf"\byesterday{_s}\b", t):
         d = today - timedelta(days=1)
         return _iso(d), _iso(d)
-    if re.search(r"\btoday\b", t):
+    if re.search(rf"\btoday{_s}\b", t) or re.search(r"\btonight\b", t):
         return _iso(today), _iso(today)
-    if re.search(r"\btomorrow\b", t):
+    if re.search(rf"\btomorrow{_s}\b", t):
         d = today + timedelta(days=1)
         return _iso(d), _iso(d)
-    if re.search(r"\b(this|current) week\b", t):
+    if re.search(rf"\b(this|current) week{_s}\b", t):
         start = today - timedelta(days=today.weekday())
         return _iso(start), _iso(start + timedelta(days=6))
-    if re.search(r"\blast week\b", t):
+    if re.search(rf"\blast week{_s}\b", t):
         start = today - timedelta(days=today.weekday() + 7)
         return _iso(start), _iso(start + timedelta(days=6))
     if re.search(r"\b(past|last)\s+(\d+)\s+days?\b", t):
         n = int(re.search(r"(\d+)\s+days?", t).group(1))
         return _iso(today - timedelta(days=n)), _iso(today)
-    if re.search(r"\bthis month\b", t):
+    if re.search(rf"\bthis month{_s}\b", t):
         start = today.replace(day=1)
         end = today.replace(day=monthrange(today.year, today.month)[1])
         return _iso(start), _iso(end)
-    if re.search(r"\blast month\b", t):
+    if re.search(rf"\blast month{_s}\b", t):
         first = today.replace(day=1)
         end = first - timedelta(days=1)
         start = end.replace(day=1)
