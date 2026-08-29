@@ -8,3 +8,7 @@ __pycache__/
 *.db-wal
 *.db-shm
 google_token.json
+
+# never commit OAuth secrets
+client_secret*.json
+google_client_secret.json

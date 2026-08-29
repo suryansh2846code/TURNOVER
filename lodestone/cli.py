@@ -65,6 +65,19 @@ def agents():
 
 
 @app.command()
+def sync(connector: str = typer.Argument(..., help="gmail|gcal|gdrive|notion|imessage|files"),
+         path: str = typer.Option(None, help="folder path (files connector only)")):
+    """Sync a connector. Runs interactive browser auth if needed (Gmail/Calendar/Drive)."""
+    from .connectors import get_connector
+    params = {"path": path} if path else {}
+    console.print(f"[dim]syncing {connector}…[/]")
+    res = get_connector(connector).sync(**params)
+    if res.errors:
+        console.print(f"[red]errors:[/] {res.errors}")
+    console.print(f"[green]+{res.added}[/] added, {res.skipped} skipped — {res.detail}")
+
+
+@app.command()
 def ingest(path: str = typer.Option(None), text: str = typer.Option(None)):
     """Add data to the brain (a file/folder path or raw text)."""
     from .brain import get_brain
