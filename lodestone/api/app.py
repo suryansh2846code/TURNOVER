@@ -23,6 +23,7 @@ app = FastAPI(title="Lodestone", version="0.2.0")
 class ChatIn(BaseModel):
     message: str
     provider: str | None = None
+    model: str | None = None
 
 
 class IngestIn(BaseModel):
@@ -52,7 +53,8 @@ def history(agent_id: str):
 @app.post("/api/agents/{agent_id}/chat")
 def chat(agent_id: str, body: ChatIn):
     try:
-        result = run_turn(agent_id, body.message, provider_name=body.provider)
+        result = run_turn(agent_id, body.message,
+                          provider_name=body.provider, model_name=body.model)
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'")
     except Exception as exc:  # never 500 the chat — return a readable message

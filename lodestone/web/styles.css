@@ -35,6 +35,11 @@ select {
   width: 100%; background: var(--panel-2); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px; padding: 8px; font: inherit;
 }
+.model-input { width: 100%; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px;
+  font: inherit; font-size: 12.5px; margin-top: 6px; }
+.model-input:focus { outline: none; border-color: var(--accent); }
+.model-hint { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
 
 /* chat */
 .chat { display: flex; flex-direction: column; min-width: 0; }
@@ -203,4 +208,24 @@ button.tiny { padding: 6px 11px; font-size: 12px; }
   padding: 9px 16px; border-radius: 9px; opacity: 0; transition: .2s; pointer-events: none; }
 .toast.show { opacity: 1; }
 .spin { color: var(--muted); font-style: italic; }
-@media (max-width: 900px) { .app { grid-template-columns: 1fr; } .sidebar,.brainpanel{display:none;} }
+/* subtle custom scrollbars */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+*::-webkit-scrollbar-thumb:hover { background: #33405a; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* focus-visible accessibility ring */
+button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible,
+.agent:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* responsive: on narrow screens stack agents on top, keep brain reachable */
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; min-height: 100vh; }
+  .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px;
+    border-right: 0; border-bottom: 1px solid var(--border); }
+  .sidebar .agents { flex-direction: row; flex-wrap: wrap; }
+  .sidebar .side-label, .sidebar .side-foot { display: none; }
+  .brainpanel { border-left: 0; border-top: 1px solid var(--border); }
+  .chat { min-height: 60vh; }
+}

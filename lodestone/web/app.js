@@ -49,10 +49,23 @@ async function loadAgents() {
   if (!current && agents.length) selectAgent(agents[0].id);
 }
 
+const MODEL_HINTS = {
+  ollama: "e.g. llama3.2, qwen2.5:3b", "claude-code": "leave blank (uses your Claude)",
+  anthropic: "e.g. claude-sonnet-5", openai: "e.g. gpt-4o-mini",
+  openrouter: "e.g. anthropic/claude-3.5-sonnet", mock: "offline test model",
+};
+function applyModelHint() { $("#modelHint").textContent = MODEL_HINTS[$("#provider").value] || ""; }
+
 async function loadProviders() {
   const d = await api("/api/providers");
+  const savedP = localStorage.getItem("lodestone_provider");
+  const active = savedP || d.active;
   $("#provider").innerHTML = d.providers.map((p) =>
-    `<option value="${p.name}" ${p.name === d.active ? "selected" : ""}>${p.name}${p.ready ? "" : " (not ready)"}</option>`).join("");
+    `<option value="${p.name}" ${p.name === active ? "selected" : ""}>${p.name}${p.ready ? "" : " (not ready)"}</option>`).join("");
+  $("#modelName").value = localStorage.getItem("lodestone_model") || "";
+  applyModelHint();
+  $("#provider").onchange = () => { localStorage.setItem("lodestone_provider", $("#provider").value); applyModelHint(); };
+  $("#modelName").onchange = () => localStorage.setItem("lodestone_model", $("#modelName").value.trim());
 }
 
 async function selectAgent(id) {
@@ -111,7 +124,8 @@ async function send(text) {
   try {
     const res = await api(`/api/agents/${current}/chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, provider: $("#provider").value }),
+      body: JSON.stringify({ message: text, provider: $("#provider").value,
+        model: $("#modelName").value.trim() || null }),
       signal: controller.signal,
     });
     spin.remove();

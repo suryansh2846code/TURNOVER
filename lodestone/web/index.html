@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Lodestone</title>
+  <title>Lodestone — your AI that knows you</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='25' x='3' font-size='24' fill='%236ea8fe'%3E%E2%97%86%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
@@ -16,6 +17,8 @@
       <div class="side-foot">
         <div class="side-label">Model</div>
         <select id="provider"></select>
+        <input id="modelName" class="model-input" autocomplete="off" placeholder="model name (optional)" />
+        <div id="modelHint" class="model-hint"></div>
         <button id="helpBtn" class="ghost tiny" style="margin-top:8px">? Getting started</button>
       </div>
     </aside>

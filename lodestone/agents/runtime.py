@@ -110,12 +110,13 @@ def _auto_learn(user_text: str, provider) -> int:
 
 
 def run_turn(agent_id: str, user_text: str, *,
-             provider_name: str | None = None) -> TurnResult:
+             provider_name: str | None = None,
+             model_name: str | None = None) -> TurnResult:
     agent = get_agent(agent_id)
     settings = get_settings()
     provider = get_provider(
         provider_name or agent.model_provider or settings.model_provider,
-        agent.model_name or settings.model_name,
+        model_name or agent.model_name or settings.model_name,
     )
     # Fail fast with a helpful message if the chosen backend isn't usable.
     ready, why = provider.is_ready()
