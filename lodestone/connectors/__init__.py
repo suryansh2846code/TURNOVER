@@ -7,13 +7,17 @@ from .notes import NotesConnector
 from .gmail import GmailConnector
 from .notion import NotionConnector
 from .gdrive import GoogleDriveConnector
+from .gcal import GoogleCalendarConnector
+from .imessage import IMessageConnector
 
 REGISTRY: dict[str, type[Connector]] = {
     FilesConnector.name: FilesConnector,
     NotesConnector.name: NotesConnector,
     GmailConnector.name: GmailConnector,
+    GoogleCalendarConnector.name: GoogleCalendarConnector,
     NotionConnector.name: NotionConnector,
     GoogleDriveConnector.name: GoogleDriveConnector,
+    IMessageConnector.name: IMessageConnector,
 }
 
 

@@ -238,6 +238,14 @@ const CONNECTOR_HELP = {
   gdrive: `<p>Read-only access to your Google Drive (Docs, text, PDFs).</p>
     <p>Uses the <b>same Google OAuth Desktop client</b> as Gmail — set it up once
     (see the Gmail setup) and Drive works too.</p>`,
+  gcal: `<p>Read-only access to your Google Calendar events.</p>
+    <p>Uses the <b>same Google OAuth Desktop client</b> as Gmail — set it up once
+    (see the Gmail setup). Then re-authorize once so Calendar scope is granted.</p>`,
+  imessage: `<p>Reads your local iMessages (fully on-device, no cloud).</p><ol>
+    <li>Open <b>System Settings → Privacy & Security → Full Disk Access</b>.</li>
+    <li>Add your <b>Terminal</b> (or whatever runs Lodestone) and enable it.</li>
+    <li>Restart Lodestone, then click sync.</li></ol>
+    <p class="t">macOS only. Lodestone only reads, never sends.</p>`,
   notion: `<p>Read the Notion pages you share with an integration.</p><ol>
     <li>Create an internal integration at
         <b>notion.so/my-integrations</b> and copy its secret.</li>
