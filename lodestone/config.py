@@ -45,8 +45,9 @@ class Settings(BaseSettings):
     sync_enabled: bool = True
     sync_interval_minutes: int = 30
 
-    # max Gmail messages to pull per full sync (raise for a bigger archive)
+    # max Gmail messages / Drive files to pull per full sync (raise for more)
     gmail_max: int = 1500
+    drive_max: int = 500
 
     # server
     host: str = "127.0.0.1"

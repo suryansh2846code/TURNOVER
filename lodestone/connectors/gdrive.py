@@ -25,7 +25,7 @@ class GoogleDriveConnector(Connector):
     def is_configured(self) -> tuple[bool, str]:
         return google_ready()
 
-    def sync(self, *, query: str | None = None, max_results: int = 50,
+    def sync(self, *, query: str | None = None, max_results: int | None = None,
              interactive: bool = True, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)
         try:
@@ -34,6 +34,9 @@ class GoogleDriveConnector(Connector):
         except ImportError:
             result.errors.append("pip install .[gdrive] to use the Drive connector")
             return self._finish(result)
+
+        from ..config import get_settings
+        max_results = max_results or get_settings().drive_max
 
         try:
             creds = get_credentials(interactive=interactive)
