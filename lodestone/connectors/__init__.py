@@ -11,6 +11,8 @@ from .gcal import GoogleCalendarConnector
 from .imessage import IMessageConnector
 from .apple_mail import AppleMailConnector
 from .apple_calendar import AppleCalendarConnector
+from .linear import LinearConnector
+from .github import GitHubConnector
 
 REGISTRY: dict[str, type[Connector]] = {
     FilesConnector.name: FilesConnector,
@@ -22,6 +24,8 @@ REGISTRY: dict[str, type[Connector]] = {
     IMessageConnector.name: IMessageConnector,
     AppleMailConnector.name: AppleMailConnector,
     AppleCalendarConnector.name: AppleCalendarConnector,
+    LinearConnector.name: LinearConnector,
+    GitHubConnector.name: GitHubConnector,
 }
 
 

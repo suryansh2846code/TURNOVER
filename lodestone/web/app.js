@@ -393,6 +393,8 @@ const CONNECTOR_HELP = {
     <li>Restart Lodestone, then click sync.</li></ol>
     <p class="t">macOS only. Lodestone only reads, never sends.</p>`,
   notion: `Read-only access to the Notion pages you share with an integration.`,
+  linear: `Read-only access to your Linear issues (status, priority, team).`,
+  github: `Read-only access to the GitHub issues & PRs you're involved in.`,
 };
 function connectorHelp(name) {
   const c = CONNECTORS.find((x) => x.name === name);
