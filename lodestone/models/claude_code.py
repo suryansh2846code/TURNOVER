@@ -14,10 +14,45 @@ usage, so it is not free like the local Ollama backend.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+from pathlib import Path
 
 from .base import ChatResult, LLMProvider, Message
+
+# Bin dirs GUI apps miss: apps launched from Finder/.app get a minimal PATH
+# (/usr/bin:/bin:/usr/sbin:/sbin), so Homebrew, npm-global and the Claude Code
+# local install are invisible to shutil.which. Search them explicitly.
+_EXTRA_BIN_DIRS = [
+    "/opt/homebrew/bin", "/usr/local/bin",
+    str(Path.home() / ".local" / "bin"),
+    str(Path.home() / ".claude" / "local"),
+    str(Path.home() / ".npm-global" / "bin"),
+    str(Path.home() / "bin"),
+    "/opt/homebrew/sbin",
+]
+
+
+def _augmented_path() -> str:
+    """PATH extended with well-known bin dirs missing from a GUI-launched app."""
+    parts = os.environ.get("PATH", "").split(os.pathsep)
+    for d in _EXTRA_BIN_DIRS:
+        if d and d not in parts and os.path.isdir(d):
+            parts.append(d)
+    return os.pathsep.join(parts)
+
+
+def find_claude() -> str | None:
+    """Locate the `claude` binary even when PATH is the stripped GUI default."""
+    found = shutil.which("claude", path=_augmented_path())
+    if found:
+        return found
+    for d in _EXTRA_BIN_DIRS:
+        cand = Path(d) / "claude"
+        if cand.exists() and os.access(cand, os.X_OK):
+            return str(cand)
+    return None
 
 
 class ClaudeCodeProvider(LLMProvider):
@@ -25,7 +60,7 @@ class ClaudeCodeProvider(LLMProvider):
     model = "claude-code"
 
     def __init__(self, model: str | None = None, **_: object) -> None:
-        self._bin = shutil.which("claude")
+        self._bin = find_claude()
         # Only honor a model name that is actually a Claude model — the global
         # LODESTONE_MODEL_NAME may be set for another backend (e.g. an Ollama tag).
         if model and any(k in model.lower()
@@ -35,7 +70,9 @@ class ClaudeCodeProvider(LLMProvider):
 
     def is_ready(self) -> tuple[bool, str]:
         if not self._bin:
-            return False, "Claude Code CLI ('claude') not found on PATH"
+            return False, ("Claude Code CLI ('claude') not found. Install it "
+                           "(npm i -g @anthropic-ai/claude-code or brew install "
+                           "claude-code), or pick another model in the dropdown.")
         return True, ""
 
     def _split(self, messages: list[Message]) -> tuple[str, str]:
@@ -69,9 +106,11 @@ class ClaudeCodeProvider(LLMProvider):
             cmd += ["--append-system-prompt", system_prompt]
         if self.model and self.model != "claude-code":
             cmd += ["--model", self.model]
+        env = {**os.environ, "PATH": _augmented_path()}
         try:
             proc = subprocess.run(
                 cmd, input=prompt, capture_output=True, text=True, timeout=180,
+                env=env,
             )
         except subprocess.TimeoutExpired:
             return ChatResult(text="⚠️ Claude Code timed out. Try again or switch model.")
