@@ -45,8 +45,10 @@ class Settings(BaseSettings):
     sync_enabled: bool = True
     sync_interval_minutes: int = 30
 
-    # max Gmail messages / Drive files to pull per full sync (raise for more)
-    gmail_max: int = 1500
+    # Bounded-by-default sync: recent window + on-demand fetch for the tail.
+    gmail_recent_days: int = 90       # default bounded window
+    gmail_recent_max: int = 600       # cap for the bounded window
+    gmail_max: int = 3000             # cap when full_history (escape hatch)
     drive_max: int = 500
 
     # server

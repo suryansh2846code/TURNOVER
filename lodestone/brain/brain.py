@@ -144,35 +144,69 @@ class Brain:
         "folder", "and", "all", "any", "some", "this", "that", "year", "notess",
     }
 
-    def _drive_find_terms(self, query: str):
+    def _find_terms(self, query: str):
         import re
         if self._FIND_RE is None:
             Brain._FIND_RE = re.compile(
                 r"\b(find|get|pull|fetch|open|show|locate|bring|where'?s?|"
-                r"do you have|is there)\b", re.I)
+                r"do you have|is there|search)\b", re.I)
             Brain._DOC_RE = re.compile(
                 r"\b(file|files|doc|docs|document|documents|pdf|notes?|resume|cv|"
-                r"sheet|slides?|presentation|drive)\b", re.I)
+                r"sheet|slides?|presentation|drive|email|emails|mail|mails|inbox|"
+                r"message|messages)\b", re.I)
         if not (self._FIND_RE.search(query) and self._DOC_RE.search(query)):
             return None
-        words = [w for w in re.findall(r"[a-z0-9]{2,}", query.lower())
+        words = [w for w in re.findall(r"[a-z0-9@.]{2,}", query.lower())
                  if w not in self._FIND_STOP]
-        return " ".join(words[:4]) if words else None
+        return " ".join(words[:5]) if words else None
 
-    def _maybe_fetch_drive(self, query: str) -> list[str]:
-        """On-demand: if the user asks for a document not already in the brain,
-        live-search Drive for it and ingest it, then it's recalled normally."""
-        terms = self._drive_find_terms(query)
+    def _maybe_fetch(self, query: str):
+        """On-demand fetch: if the user asks for a specific email/document not in
+        the brain, live-search the right source (Gmail or Drive) and ingest it.
+        Returns (fetched_titles, source)."""
+        import re
+        terms = self._find_terms(query)
         if not terms:
-            return []
+            return [], ""
         from ..connectors import REGISTRY, get_connector
-        gd = REGISTRY.get("gdrive")
-        if not gd or not gd().is_configured()[0]:
-            return []
-        # Always do a quick live Drive search on a find-intent query; the
-        # connector skips re-downloading files already in the brain, so this is
-        # cheap when the file is already present and fetches it when it isn't.
-        return get_connector("gdrive").search_and_ingest(terms, max_files=5)
+        # route by what the user mentioned
+        if re.search(r"\b(email|emails|inbox|mail|mails|gmail|sent|from)\b",
+                     query.lower()):
+            src, kw = "gmail", "max_results"
+        else:
+            src, kw = "gdrive", "max_files"
+        cls = REGISTRY.get(src)
+        if not cls or not cls().is_configured()[0]:
+            return [], ""
+        conn = get_connector(src)
+        fetched = conn.search_and_ingest(terms, **{kw: 8 if src == "gmail" else 5})
+        return fetched, src
+
+    def _escape_hatch(self, query: str):
+        """For all-history/aggregate questions, note that only a recent window is
+        indexed and offer to sync the full archive; trigger it if the user asks."""
+        import re
+        ql = query.lower()
+        if not re.search(r"\b(email|emails|inbox|mail|mails)\b", ql):
+            return ""
+        # explicit request → kick off a full-history sync in the background
+        if re.search(r"\bsync\b.*\b(all|full|entire|everything)\b", ql) or \
+           re.search(r"\b(all|full|entire)\b.*\b(email|mail|inbox|archive)\b.*\bsync\b", ql):
+            import threading
+            from ..connectors import get_connector
+            threading.Thread(
+                target=lambda: get_connector("gmail").sync(full_history=True),
+                daemon=True).start()
+            return ("[Started syncing the user's FULL email archive in the "
+                    "background — tell them it's indexing and will be ready shortly.]\n")
+        # aggregate/all-history intent → offer the escape hatch
+        if re.search(r"\b(all my|entire|whole|every|all[- ]time|top senders?|"
+                     r"how many|last year|this year|overall|in total)\b", ql):
+            return ("[NOTE: for speed, only recent mail (~last 90 days) is indexed. "
+                    "This is an all-history/aggregate question, so answer from what's "
+                    "here and OFFER to sync the full archive — the user can say "
+                    "'sync all my email' or use the Connectors panel.]\n")
+        return ""
 
     def recall(self, query: str, *, limit: int = 8, max_tokens: int = 1400,
                source: str | None = None, prefer: list[str] | None = None) -> dict[str, Any]:
@@ -183,7 +217,8 @@ class Brain:
         Also lazily fetches a requested document from Drive if it isn't yet in
         the brain, then includes it.
         """
-        fetched = self._maybe_fetch_drive(query)   # on-demand Drive load
+        fetched, fetched_src = self._maybe_fetch(query)   # on-demand Gmail/Drive
+        hatch_note = self._escape_hatch(query)            # all-history escape hatch
 
         from ..core.dateparse import parse_date_range
         dr = parse_date_range(query)
@@ -247,8 +282,10 @@ class Brain:
         context = ""
         fetch_note = ""
         if fetched:
-            fetch_note = ("[Just fetched from Drive on demand: "
-                          + ", ".join(fetched) + "]\n")
+            where = "Gmail" if fetched_src == "gmail" else "Drive"
+            fetch_note = (f"[Just fetched from {where} on demand: "
+                          + ", ".join(fetched[:8]) + "]\n")
+        fetch_note += hatch_note
         date_note = ""
         if dr:
             date_note = (f"[Date filter applied: showing only items dated "

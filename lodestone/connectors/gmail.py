@@ -67,75 +67,109 @@ class GmailConnector(Connector):
     def is_configured(self) -> tuple[bool, str]:
         return google_ready()
 
-    def sync(self, *, query: str = "-in:spam -in:trash",
-             max_results: int | None = None, interactive: bool = True,
+    def sync(self, *, query: str | None = None, max_results: int | None = None,
+             full_history: bool = False, interactive: bool = True,
              **_: Any) -> SyncResult:
+        """Bounded by default: sync recent mail (fast, lean). Pass
+        full_history=True to pull the whole archive (the escape hatch)."""
         result = SyncResult(connector=self.name)
-        try:
-            from googleapiclient.discovery import build  # lazy
-        except ImportError:
-            result.errors.append("pip install .[gmail] to use the Gmail connector")
+        service = self._service(result, interactive)
+        if service is None:
             return self._finish(result)
 
         from ..config import get_settings
-        max_results = max_results or get_settings().gmail_max
+        s = get_settings()
+        if query is None:
+            query = ("-in:spam -in:trash" if full_history
+                     else f"newer_than:{s.gmail_recent_days}d -in:spam -in:trash")
+        max_results = max_results or (s.gmail_max if full_history else s.gmail_recent_max)
         try:
-            creds = get_credentials(interactive=interactive)
-            service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-            # paginate to gather up to max_results across pages
-            messages: list[dict] = []
-            page_token = None
-            while len(messages) < max_results:
-                resp = (
-                    service.users().messages()
-                    .list(userId="me", q=query, pageToken=page_token,
-                          maxResults=min(500, max_results - len(messages)))
-                    .execute()
-                )
-                messages += resp.get("messages", [])
-                page_token = resp.get("nextPageToken")
-                if not page_token:
-                    break
+            messages = self._list(service, query, max_results)
             for meta in messages:
-                msg = (
-                    service.users().messages()
-                    .get(userId="me", id=meta["id"], format="full")
-                    .execute()
-                )
-                headers = {
-                    h["name"].lower(): h["value"]
-                    for h in msg.get("payload", {}).get("headers", [])
-                }
-                subject = headers.get("subject", "(no subject)")
-                sender = headers.get("from", "")
-                body = _extract_body(msg.get("payload", {})).strip()
-                snippet = body or msg.get("snippet", "")
-                if not snippet:
-                    result.skipped += 1
-                    continue
-                text = f"From: {sender}\nSubject: {subject}\n\n{snippet[:4000]}"
-                event_date = None
-                if msg.get("internalDate"):
-                    from datetime import datetime, timezone
-                    event_date = datetime.fromtimestamp(
-                        int(msg["internalDate"]) / 1000, timezone.utc
-                    ).date().isoformat()
-                mem = self.store.add(
-                    text=text,
-                    source=self.name,
-                    kind="email",
-                    title=subject,
-                    uri=f"https://mail.google.com/mail/#all/{meta['id']}",
-                    event_date=event_date,
-                    metadata={"from": sender, "message_id": meta["id"],
-                              "date": event_date},
-                )
-                if mem:
+                if self._ingest_message(service, meta):
                     result.added += 1
                 else:
                     result.skipped += 1
-            result.detail = f"query '{query}', {len(messages)} messages"
+            scope = "all mail" if full_history else f"last {s.gmail_recent_days}d"
+            result.detail = f"{scope}, {len(messages)} messages"
         except Exception as exc:
             result.errors.append(str(exc))
             result.detail = "sync failed"
         return self._finish(result)
+
+    def search_and_ingest(self, terms: str, max_results: int = 8,
+                          interactive: bool = False) -> list[str]:
+        """On-demand: live Gmail search (full-text + operators) that ingests
+        matching messages so a specific/older email is fetched only when asked."""
+        terms = (terms or "").strip()
+        if not terms:
+            return []
+        service = self._service(None, interactive)
+        if service is None:
+            return []
+        try:
+            q = f"({terms}) -in:spam -in:trash"
+            messages = self._list(service, q, max_results)
+            found = []
+            for meta in messages:
+                title = self._ingest_message(service, meta, return_title=True)
+                if title:
+                    found.append(title)
+            return found
+        except Exception:
+            return []
+
+    # ── helpers ──────────────────────────────────────────────────────────
+    def _service(self, result, interactive):
+        try:
+            from googleapiclient.discovery import build  # lazy
+        except ImportError:
+            if result is not None:
+                result.errors.append("pip install .[gmail] to use Gmail")
+            return None
+        try:
+            creds = get_credentials(interactive=interactive)
+            return build("gmail", "v1", credentials=creds, cache_discovery=False)
+        except Exception as exc:
+            if result is not None:
+                result.errors.append(str(exc))
+            return None
+
+    def _list(self, service, query, max_results) -> list[dict]:
+        messages: list[dict] = []
+        page_token = None
+        while len(messages) < max_results:
+            resp = (service.users().messages()
+                    .list(userId="me", q=query, pageToken=page_token,
+                          maxResults=min(500, max_results - len(messages))).execute())
+            messages += resp.get("messages", [])
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+        return messages
+
+    def _ingest_message(self, service, meta, return_title=False):
+        msg = (service.users().messages()
+               .get(userId="me", id=meta["id"], format="full").execute())
+        headers = {h["name"].lower(): h["value"]
+                   for h in msg.get("payload", {}).get("headers", [])}
+        subject = headers.get("subject", "(no subject)")
+        sender = headers.get("from", "")
+        body = _extract_body(msg.get("payload", {})).strip()
+        snippet = body or msg.get("snippet", "")
+        if not snippet:
+            return None if return_title else False
+        text = f"From: {sender}\nSubject: {subject}\n\n{snippet[:4000]}"
+        event_date = None
+        if msg.get("internalDate"):
+            from datetime import datetime, timezone
+            event_date = datetime.fromtimestamp(
+                int(msg["internalDate"]) / 1000, timezone.utc).date().isoformat()
+        mem = self.store.add(
+            text=text, source=self.name, kind="email", title=subject,
+            uri=f"https://mail.google.com/mail/#all/{meta['id']}",
+            event_date=event_date,
+            metadata={"from": sender, "message_id": meta["id"], "date": event_date})
+        if return_title:
+            return subject
+        return bool(mem)
