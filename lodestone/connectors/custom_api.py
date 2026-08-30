@@ -156,22 +156,25 @@ class CustomAPIConnector(Connector):
             brain = get_brain()
             tf, bf = self.app.get("title_field"), self.app.get("body_field")
             for it in items[:max_items]:
-                if not isinstance(it, dict):
-                    it = {"value": it}
-                # Missing field → None; str(None) is "None" (truthy), so guard
-                # explicitly rather than relying on `or` fallback, else field-less
-                # records all collapse to an identical "None" and get deduped away.
-                tval = _dig(it, tf) if tf else None
-                bval = _dig(it, bf) if bf else None
-                title = str(tval) if tval is not None else self.label
-                body = (str(bval) if bval is not None
-                        else json.dumps(it, ensure_ascii=False)[:2000])
-                text = f"{self.label} — {title}\n\n{body}"
-                out = brain.ingest(text, source=self.name, kind="record",
-                                   title=title, fast=True)
-                result.added += out["memories"]
-                if not out["memories"]:
-                    result.skipped += 1
+                try:
+                    if not isinstance(it, dict):
+                        it = {"value": it}
+                    # Missing field → None; str(None) is "None" (truthy), so guard
+                    # explicitly rather than relying on `or` fallback, else field-less
+                    # records all collapse to an identical "None" and get deduped away.
+                    tval = _dig(it, tf) if tf else None
+                    bval = _dig(it, bf) if bf else None
+                    title = str(tval) if tval is not None else self.label
+                    body = (str(bval) if bval is not None
+                            else json.dumps(it, ensure_ascii=False)[:2000])
+                    text = f"{self.label} — {title}\n\n{body}"
+                    out = brain.ingest(text, source=self.name, kind="record",
+                                       title=title, fast=True)
+                    result.added += out["memories"]
+                    if not out["memories"]:
+                        result.skipped += 1
+                except Exception:
+                    result.skipped += 1        # one bad record never aborts the sync
             result.detail = f"{len(items)} records from {self.label}"
         except urllib.error.HTTPError as exc:
             result.errors.append(

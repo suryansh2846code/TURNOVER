@@ -79,26 +79,29 @@ class GoogleCalendarConnector(Connector):
             from ..brain import get_brain
             brain = get_brain()
             for ev in events:
-                summary = ev.get("summary", "(no title)")
-                start = ev.get("start", {}).get("dateTime") or ev.get("start", {}).get("date", "")
-                end = ev.get("end", {}).get("dateTime") or ev.get("end", {}).get("date", "")
-                where = ev.get("location", "")
-                attendees = ", ".join(
-                    a.get("email", "") for a in ev.get("attendees", []) or [])
-                desc = (ev.get("description", "") or "")[:1000]
-                text = (f"Event: {summary}\nWhen: {start} → {end}"
-                        + (f"\nWhere: {where}" if where else "")
-                        + (f"\nWith: {attendees}" if attendees else "")
-                        + (f"\n\n{desc}" if desc else ""))
-                out = brain.ingest(
-                    text, source=self.name, kind="event", title=summary,
-                    uri=ev.get("htmlLink"), fast=True,
-                    event_date=(start[:10] if start else None),
-                    metadata={"start": start, "event_id": ev.get("id")},
-                )
-                result.added += out["memories"]
-                if not out["memories"]:
-                    result.skipped += 1
+                try:
+                    summary = ev.get("summary", "(no title)")
+                    start = ev.get("start", {}).get("dateTime") or ev.get("start", {}).get("date", "")
+                    end = ev.get("end", {}).get("dateTime") or ev.get("end", {}).get("date", "")
+                    where = ev.get("location", "")
+                    attendees = ", ".join(
+                        a.get("email", "") for a in ev.get("attendees", []) or [])
+                    desc = (ev.get("description", "") or "")[:1000]
+                    text = (f"Event: {summary}\nWhen: {start} → {end}"
+                            + (f"\nWhere: {where}" if where else "")
+                            + (f"\nWith: {attendees}" if attendees else "")
+                            + (f"\n\n{desc}" if desc else ""))
+                    out = brain.ingest(
+                        text, source=self.name, kind="event", title=summary,
+                        uri=ev.get("htmlLink"), fast=True,
+                        event_date=(start[:10] if start else None),
+                        metadata={"start": start, "event_id": ev.get("id")},
+                    )
+                    result.added += out["memories"]
+                    if not out["memories"]:
+                        result.skipped += 1
+                except Exception:
+                    result.skipped += 1        # one bad event never aborts the sync
             result.detail = f"{len(events)} events ({days_back}d back, {days_ahead}d ahead)"
         except Exception as exc:
             result.errors.append(str(exc))

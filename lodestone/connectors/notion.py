@@ -70,24 +70,27 @@ class NotionConnector(Connector):
             )
             pages = search.get("results", [])
             for page in pages:
-                title = self._page_title(page)
-                text = self._page_text(notion, page["id"])
-                if not text.strip():
-                    result.skipped += 1
-                    continue
-                for i, chunk in enumerate(chunk_text(text)):
-                    mem = self.store.add(
-                        text=chunk,
-                        source=self.name,
-                        kind="doc",
-                        title=title if i == 0 else f"{title} (part {i + 1})",
-                        uri=page.get("url"),
-                        metadata={"page_id": page["id"], "chunk": i},
-                    )
-                    if mem:
-                        result.added += 1
-                    else:
+                try:
+                    title = self._page_title(page)
+                    text = self._page_text(notion, page["id"])
+                    if not text.strip():
                         result.skipped += 1
+                        continue
+                    for i, chunk in enumerate(chunk_text(text)):
+                        mem = self.store.add(
+                            text=chunk,
+                            source=self.name,
+                            kind="doc",
+                            title=title if i == 0 else f"{title} (part {i + 1})",
+                            uri=page.get("url"),
+                            metadata={"page_id": page["id"], "chunk": i},
+                        )
+                        if mem:
+                            result.added += 1
+                        else:
+                            result.skipped += 1
+                except Exception:
+                    result.skipped += 1        # one bad page never aborts the sync
             result.detail = f"{len(pages)} pages"
         except Exception as exc:
             result.errors.append(str(exc))

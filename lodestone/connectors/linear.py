@@ -60,21 +60,25 @@ class LinearConnector(Connector):
             from ..brain import get_brain
             brain = get_brain()
             for it in nodes:
-                title = f"{it['identifier']}: {it['title']}"
-                text = (
-                    f"Linear issue {title}\n"
-                    f"Status: {(it.get('state') or {}).get('name', '?')}"
-                    f" · Priority: {it.get('priorityLabel') or '—'}"
-                    f" · Team: {(it.get('team') or {}).get('name', '?')}"
-                    f" · Assignee: {(it.get('assignee') or {}).get('name', 'unassigned')}"
-                    + (f"\n\n{it['description']}" if it.get("description") else "")
-                )
-                out = brain.ingest(text, source=self.name, kind="issue",
-                                   title=title, fast=True,
-                                   uri=f"https://linear.app/issue/{it['identifier']}")
-                result.added += out["memories"]
-                if not out["memories"]:
-                    result.skipped += 1
+                try:
+                    ident = it.get("identifier") or "?"
+                    title = f"{ident}: {it.get('title', '(untitled)')}"
+                    text = (
+                        f"Linear issue {title}\n"
+                        f"Status: {(it.get('state') or {}).get('name', '?')}"
+                        f" · Priority: {it.get('priorityLabel') or '—'}"
+                        f" · Team: {(it.get('team') or {}).get('name', '?')}"
+                        f" · Assignee: {(it.get('assignee') or {}).get('name', 'unassigned')}"
+                        + (f"\n\n{it['description']}" if it.get("description") else "")
+                    )
+                    out = brain.ingest(text, source=self.name, kind="issue",
+                                       title=title, fast=True,
+                                       uri=f"https://linear.app/issue/{ident}")
+                    result.added += out["memories"]
+                    if not out["memories"]:
+                        result.skipped += 1
+                except Exception:
+                    result.skipped += 1        # one bad issue never aborts the sync
             result.detail = f"{len(nodes)} issues"
         except urllib.error.HTTPError as exc:
             result.errors.append(

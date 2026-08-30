@@ -63,22 +63,25 @@ class GitHubConnector(Connector):
             from ..brain import get_brain
             brain = get_brain()
             for it in items[:max_items]:
-                is_pr = "pull_request" in it
-                repo = it.get("repository", {}).get("full_name") or \
-                    it.get("html_url", "").split("/issues")[0].split("/pull")[0]
-                title = f"{repo}#{it['number']}: {it['title']}"
-                text = (
-                    f"GitHub {'PR' if is_pr else 'issue'} {title}\n"
-                    f"State: {it.get('state', '?')}"
-                    f" · Author: {(it.get('user') or {}).get('login', '?')}"
-                    + (f"\n\n{it['body']}" if it.get("body") else "")
-                )
-                out = brain.ingest(text, source=self.name,
-                                   kind="pr" if is_pr else "issue",
-                                   title=title, fast=True, uri=it.get("html_url"))
-                result.added += out["memories"]
-                if not out["memories"]:
-                    result.skipped += 1
+                try:
+                    is_pr = "pull_request" in it
+                    repo = (it.get("repository", {}) or {}).get("full_name") or \
+                        it.get("html_url", "").split("/issues")[0].split("/pull")[0]
+                    title = f"{repo}#{it.get('number', '?')}: {it.get('title', '(untitled)')}"
+                    text = (
+                        f"GitHub {'PR' if is_pr else 'issue'} {title}\n"
+                        f"State: {it.get('state', '?')}"
+                        f" · Author: {(it.get('user') or {}).get('login', '?')}"
+                        + (f"\n\n{it['body']}" if it.get("body") else "")
+                    )
+                    out = brain.ingest(text, source=self.name,
+                                       kind="pr" if is_pr else "issue",
+                                       title=title, fast=True, uri=it.get("html_url"))
+                    result.added += out["memories"]
+                    if not out["memories"]:
+                        result.skipped += 1
+                except Exception:
+                    result.skipped += 1        # one bad item never aborts the sync
             result.detail = f"{len(items)} issues/PRs"
         except urllib.error.HTTPError as exc:
             result.errors.append(
