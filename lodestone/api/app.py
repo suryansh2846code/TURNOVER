@@ -200,6 +200,13 @@ def sync(name: str, body: SyncIn):
     return res.as_dict()
 
 
+# ── Google sign-in (bundled client → no per-user Cloud setup) ─────────────
+@app.get("/api/google/status")
+def google_status():
+    from ..connectors.google_auth import _token_path
+    return {"client_configured": get_settings().google_client_secrets is not None,
+            "connected": _token_path().exists()}
+
 # ── Google reconnect (re-consent with current scopes, from the UI) ────────
 @app.post("/api/google/reconnect")
 def google_reconnect():

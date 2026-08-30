@@ -268,7 +268,25 @@ async function loadBrain() {
   document.querySelectorAll("[data-sync]").forEach((b) => b.onclick = () => syncConn(b.dataset.sync));
   document.querySelectorAll("[data-setup]").forEach((b) => b.onclick = () => connectorHelp(b.dataset.setup));
   loadSyncStatus();
+  // one-click Google sign-in when a bundled client exists but we're not connected
+  try {
+    const g = await api("/api/google/status");
+    $("#googleSignin").hidden = !(g.client_configured && !g.connected);
+  } catch (_) {}
 }
+$("#googleSignin").onclick = async () => {
+  $("#googleSignin").textContent = "Opening Google…"; $("#googleSignin").disabled = true;
+  try {
+    const r = await api("/api/google/reconnect", { method: "POST" });
+    toast(r.detail || "Approve in the browser window");
+    // poll until connected, then refresh connectors
+    const poll = setInterval(async () => {
+      const g = await api("/api/google/status");
+      if (g.connected) { clearInterval(poll); toast("Google connected ✓"); loadBrain(); }
+    }, 3000);
+  } catch (e) { toast(String(e)); }
+  finally { setTimeout(() => { $("#googleSignin").textContent = "Sign in with Google"; $("#googleSignin").disabled = false; }, 4000); }
+};
 
 async function loadSyncStatus() {
   try {

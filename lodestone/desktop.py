@@ -22,6 +22,13 @@ def _wait_for_port(host: str, port: int, timeout: float = 15.0) -> bool:
     return False
 
 
+def _free_port(host: str) -> int:
+    """Ask the OS for a free loopback port so the app never clashes."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((host, 0))
+        return s.getsockname()[1]
+
+
 def run_app() -> None:
     import uvicorn
     import webview
@@ -30,7 +37,8 @@ def run_app() -> None:
     from .config import get_settings
 
     s = get_settings()
-    host, port = s.host, s.port
+    host = "127.0.0.1"
+    port = _free_port(host)      # dynamic free port — no fixed-8787 conflicts
 
     config = uvicorn.Config(fastapi_app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)

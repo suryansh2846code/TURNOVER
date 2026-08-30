@@ -12,3 +12,6 @@ google_token.json
 # never commit OAuth secrets
 client_secret*.json
 google_client_secret.json
+
+# bundled OAuth client (dev ships at build; never commit)
+lodestone/data/google_client.json

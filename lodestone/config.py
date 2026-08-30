@@ -70,11 +70,20 @@ class Settings(BaseSettings):
 
     @property
     def google_client_secrets(self) -> Path | None:
+        # 1) explicit override
         raw = os.environ.get("GOOGLE_CLIENT_SECRETS")
-        if raw:
+        if raw and Path(raw).expanduser().exists():
             return Path(raw).expanduser()
-        candidate = self.home / "google_client_secret.json"
-        return candidate if candidate.exists() else None
+        # 2) a client the user dropped in their Lodestone home
+        user = self.home / "google_client_secret.json"
+        if user.exists():
+            return user
+        # 3) a client BUNDLED with the app → end users just "Sign in with Google",
+        #    no Cloud Console setup. (Developer ships one at build time.)
+        bundled = Path(__file__).resolve().parent / "data" / "google_client.json"
+        if bundled.exists():
+            return bundled
+        return None
 
     @property
     def db_path(self) -> Path:
