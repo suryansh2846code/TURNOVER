@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..agents import list_agents, run_turn
 from ..agents.agent import AgentMemory
@@ -58,13 +58,13 @@ def sync_now():
 
 
 class ChatIn(BaseModel):
-    message: str
+    message: str = Field(max_length=24000)   # guardrail against runaway input
     provider: str | None = None
     model: str | None = None
 
 
 class IngestIn(BaseModel):
-    text: str
+    text: str = Field(max_length=200000)
     title: str | None = None
     source: str = "notes"
 
@@ -120,8 +120,11 @@ def delete_agent(agent_id: str):
 
 @app.post("/api/agents/{agent_id}/chat")
 def chat(agent_id: str, body: ChatIn):
+    message = (body.message or "").strip()
+    if not message:
+        raise HTTPException(422, "message is empty")
     try:
-        result = run_turn(agent_id, body.message,
+        result = run_turn(agent_id, message,
                           provider_name=body.provider, model_name=body.model)
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'")
@@ -222,6 +225,9 @@ def custom_apps():
 @app.post("/api/custom-apps")
 def save_custom_app(body: CustomAppIn):
     from ..connectors.custom_api import upsert_app
+    url = (body.base_url or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        raise HTTPException(422, "base URL must start with http:// or https://")
     cfg = body.model_dump()
     token = cfg.pop("token", None)
     app = upsert_app(cfg, token=token)

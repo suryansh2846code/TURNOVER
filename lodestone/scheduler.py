@@ -6,6 +6,7 @@ store skips content it already has (no re-embedding of unchanged items).
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from datetime import datetime, timezone
@@ -14,6 +15,8 @@ from typing import Any
 from .config import get_settings
 from .connectors import REGISTRY, get_connector
 from .connectors.files import FilesConnector
+
+log = logging.getLogger("lodestone.scheduler")
 
 # app connectors that can sync with defaults once configured (no user input)
 _AUTO = ["gmail", "gcal", "gdrive", "notion", "imessage"]
@@ -79,7 +82,7 @@ class Scheduler:
             from .routines import sweep
             sweep(new_email_count=summary.get("gmail", {}).get("added", 0))
         except Exception:
-            pass
+            log.exception("routine sweep after sync failed")
 
         self.last_run = datetime.now(timezone.utc).isoformat()
         self.last_result = summary
@@ -112,7 +115,7 @@ class Scheduler:
                 try:
                     self.sync_all(interactive=False)
                 except Exception:
-                    pass
+                    log.exception("background sync_all failed")
                 next_sync = time.time() + interval
             if self._stop.wait(60):
                 return
@@ -129,7 +132,7 @@ class Scheduler:
                 desktop_notify(title, r["message"])
                 store.mark_fired(r["id"])
         except Exception:
-            pass
+            log.exception("firing reminders failed")
         # 2) scheduled actions (auto-send email / create event) — fire + notify
         try:
             import json
@@ -146,13 +149,13 @@ class Scheduler:
                                    f"Scheduled action failed: {res.get('error', '')}")
                 sched.mark_done(a["id"], json.dumps(res)[:400])
         except Exception:
-            pass
+            log.exception("firing scheduled actions failed")
         # 3) schedule-triggered routines (checked every cycle, interval-gated)
         try:
             from .routines import sweep
             sweep(new_email_count=0)
         except Exception:
-            pass
+            log.exception("schedule-triggered routine sweep failed")
 
     def start(self) -> None:
         settings = get_settings()

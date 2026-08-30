@@ -246,6 +246,20 @@ button.tiny { padding: 6px 11px; font-size: 12px; }
   padding: 9px 16px; border-radius: 9px; opacity: 0; transition: .2s; pointer-events: none; }
 .toast.show { opacity: 1; }
 .spin { color: var(--muted); font-style: italic; }
+
+/* engaging "the agent is replying" indicator: cycling status + countdown + bar */
+.thinking { min-width: 240px; }
+.think-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.think-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+  flex: none; animation: think-pulse 1s ease-in-out infinite; }
+.think-msg { transition: opacity .2s; }
+.think-time { margin-left: auto; font-variant-numeric: tabular-nums; opacity: .75; }
+.think-bar { margin-top: 7px; height: 3px; border-radius: 2px;
+  background: color-mix(in srgb, var(--muted) 25%, transparent); overflow: hidden; }
+.think-fill { height: 100%; width: 0; background: var(--accent); border-radius: 2px;
+  transition: width .18s linear; }
+@keyframes think-pulse { 0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .35; transform: scale(.65); } }
 /* subtle custom scrollbars */
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 *::-webkit-scrollbar { width: 9px; height: 9px; }

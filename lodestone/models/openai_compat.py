@@ -78,13 +78,38 @@ class OpenAICompatProvider(LLMProvider):
         headers = {"content-type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
-        resp = httpx.post(
-            f"{self.base_url}/chat/completions",
-            headers=headers, json=payload, timeout=120,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        choice = data["choices"][0]["message"]
+        try:
+            resp = httpx.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers, json=payload, timeout=120,
+            )
+            resp.raise_for_status()
+        except httpx.TimeoutException:
+            return ChatResult(text=f"⚠️ {self.name} timed out. Try again, or "
+                              "switch models in the sidebar.")
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            if code in (401, 403):
+                msg = f"Invalid or expired API key for {self.name} — check {self.key_env}."
+            elif code == 429:
+                msg = f"{self.name} rate-limited you. Wait a moment and retry."
+            elif code >= 500:
+                msg = f"{self.name} server error ({code}). Try again shortly."
+            else:
+                detail = (exc.response.text or "")[:150]
+                msg = f"{self.name} request failed ({code}). {detail}"
+            return ChatResult(text=f"⚠️ {msg}")
+        except httpx.RequestError:
+            return ChatResult(
+                text=f"⚠️ Can't reach {self.name} at {self.base_url}. "
+                     + ("Is Ollama running? (`ollama serve`)" if self.name == "ollama"
+                        else "Check your connection and base URL."))
+        try:
+            data = resp.json()
+            choice = data["choices"][0]["message"]
+        except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+            return ChatResult(text=f"⚠️ Unexpected response from {self.name}. "
+                              "Try again or switch models.")
         calls = []
         for tc in choice.get("tool_calls") or []:
             try:

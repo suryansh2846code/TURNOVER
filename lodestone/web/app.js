@@ -209,12 +209,50 @@ function setBusy(on) {
   if (!on) { $("#input").focus(); autoGrow(); }
 }
 
+// Phrases + rough per-provider time estimates for the reply indicator.
+const THINK_PHRASES = [
+  "Recalling what I know about you…",
+  "Searching your brain…",
+  "Pulling in the right context…",
+  "Connecting the dots…",
+  "Composing a reply…",
+];
+const THINK_EST = { "claude-code": 18, ollama: 12, subscription: 15,
+  anthropic: 8, openai: 8, openrouter: 9, mock: 1 };
+
+function makeThinking(provider) {
+  const est = THINK_EST[provider] || 12;
+  const el = addMsg("assistant", "");
+  el.classList.add("thinking");
+  el.innerHTML =
+    `<div class="think-row"><span class="think-dot"></span>
+       <span class="think-msg">Thinking…</span><span class="think-time"></span></div>
+     <div class="think-bar"><div class="think-fill"></div></div>`;
+  const msgEl = el.querySelector(".think-msg");
+  const timeEl = el.querySelector(".think-time");
+  const fill = el.querySelector(".think-fill");
+  const t0 = performance.now();
+  let pi = -1;
+  const tick = () => {
+    const elapsed = (performance.now() - t0) / 1000;
+    // asymptotic progress: approaches ~97% but never completes until the reply lands
+    fill.style.width = Math.min(97, 100 * (1 - Math.exp(-elapsed / est))).toFixed(1) + "%";
+    const remain = est - elapsed;
+    timeEl.textContent = remain > 0.5 ? `~${Math.ceil(remain)}s` : "almost there…";
+    const want = Math.min(THINK_PHRASES.length - 1, Math.floor(elapsed / 2.5));
+    if (want !== pi) { pi = want; msgEl.textContent = THINK_PHRASES[pi]; }
+  };
+  tick();
+  const timer = setInterval(tick, 150);
+  return { el, done: () => { clearInterval(timer); el.remove(); } };
+}
+
 async function send(text) {
   if (busy) return;             // guard: ignore sends while a turn is running
   setBusy(true);
   controller = new AbortController();
   addMsg("user", text);
-  const spin = addMsg("assistant", ""); spin.classList.add("spin"); spin.textContent = "thinking…";
+  const think = makeThinking($("#provider").value);
   try {
     const res = await api(`/api/agents/${current}/chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -222,14 +260,14 @@ async function send(text) {
         model: $("#modelName").value.trim() || null }),
       signal: controller.signal,
     });
-    spin.remove();
+    think.done();
     addTrace(res.trace || []);
     addMsg("assistant", res.reply);
     loadBrain();
     loadTasks();       // an agent may have added/completed a task this turn
     loadReminders();   // …or set a reminder
   } catch (e) {
-    spin.remove();
+    think.done();
     if (controller && controller.signal.aborted) addMsg("assistant", "⏹ stopped");
     else addMsg("assistant", "⚠️ " + e);
   }

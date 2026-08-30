@@ -235,3 +235,39 @@ def test_google_auth_corrupt_token_selfheals(tmp_path, monkeypatch):
         get_credentials(interactive=False)
     assert not tp.exists()                                # corrupt token removed
     get_settings.cache_clear()
+
+
+# ── model providers: unreachable/misconfigured → clean message, no traceback ─
+def test_openai_compat_unreachable_returns_clean_message():
+    from lodestone.models.openai_compat import OllamaProvider, OpenAICompatProvider
+    from lodestone.models.base import Message
+    r = OllamaProvider(base_url="http://localhost:59999/v1").chat(
+        [Message(role="user", content="hi")])
+    assert r.text.startswith("⚠️") and "ollama" in r.text.lower()
+    r2 = OpenAICompatProvider(model="x", api_key="k",
+                              base_url="http://localhost:59999/v1").chat(
+        [Message(role="user", content="hi")])
+    assert r2.text.startswith("⚠️")
+
+
+# ── API input validation (empty chat, non-http custom app) ─────────────────
+def test_api_input_validation(tmp_path, monkeypatch):
+    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
+    from lodestone.config import get_settings
+    get_settings.cache_clear()
+    from fastapi.testclient import TestClient
+    from lodestone.api.app import app
+    client = TestClient(app)
+
+    # empty / whitespace chat message → 422, not a wasted model call
+    r = client.post("/api/agents/inbox/chat", json={"message": "   "})
+    assert r.status_code == 422
+    # custom app with a non-http base URL → 422
+    r = client.post("/api/custom-apps",
+                    json={"name": "X", "base_url": "file:///etc/passwd"})
+    assert r.status_code == 422
+    # a valid http custom app saves fine
+    r = client.post("/api/custom-apps",
+                    json={"name": "X", "base_url": "https://example.com", "endpoint": "/x"})
+    assert r.status_code == 200 and r.json()["saved"]
+    get_settings.cache_clear()
