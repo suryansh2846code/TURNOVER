@@ -92,9 +92,13 @@ async function selectAgent(id) {
 
 function renderHistory(history) {
   const box = $("#messages");
-  if (!history.length) { box.innerHTML = `<div class="msg empty">This agent shares your brain. Say hello — it already knows you.</div>`; return; }
-  box.innerHTML = history.filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => `<div class="msg ${m.role}">${m.role === "assistant" ? md(m.content) : esc(m.content)}</div>`).join("");
+  box.innerHTML = "";
+  const msgs = history.filter((m) => m.role === "user" || m.role === "assistant");
+  if (!msgs.length) {
+    box.innerHTML = `<div class="msg empty">This agent shares your brain. Say hello — it already knows you.</div>`;
+    return;
+  }
+  for (const m of msgs) addMsg(m.role, m.content);   // so history shows action cards too
   box.scrollTop = box.scrollHeight;
 }
 

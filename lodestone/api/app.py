@@ -22,6 +22,17 @@ WEB = Path(__file__).resolve().parent.parent / "web"
 app = FastAPI(title="Lodestone", version="0.2.0")
 
 
+@app.middleware("http")
+async def _no_cache_assets(request, call_next):
+    """Never cache the UI assets, so a code update is picked up on a normal
+    reload — no hard-refresh needed."""
+    resp = await call_next(request)
+    p = request.url.path
+    if p == "/" or p.startswith("/static"):
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
+
+
 @app.on_event("startup")
 def _start_scheduler():
     get_scheduler().start()
