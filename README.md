@@ -54,6 +54,15 @@ uv venv && uv pip install -e .          # core, runs offline with zero keys
 uv pip install -e ".[all]"              # + real embeddings & all connector SDKs
 ```
 
+## Install (technical testers, macOS)
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/suryansh2846code/TURNOVER/main/scripts/install.sh | bash
+cd ~/lodestone && .venv/bin/lodestone app
+```
+Local-first connectors (Files, Apple Mail, Apple Calendar, iMessage) need no
+sign-in — just Full Disk Access.
+
 ## Run as a desktop app
 
 ```bash
