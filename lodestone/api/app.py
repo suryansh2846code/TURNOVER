@@ -158,6 +158,17 @@ def sync(name: str, body: SyncIn):
     return res.as_dict()
 
 
+# ── actions (execute only after explicit user confirmation) ───────────────
+class ActionIn(BaseModel):
+    type: str
+    params: dict[str, Any] = {}
+
+@app.post("/api/actions/execute")
+def execute_action(body: ActionIn):
+    from ..actions import execute
+    return execute(body.type, body.params)
+
+
 # ── tasks ─────────────────────────────────────────────────────────────────
 class TaskIn(BaseModel):
     title: str

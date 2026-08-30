@@ -87,11 +87,65 @@ function renderHistory(history) {
   box.scrollTop = box.scrollHeight;
 }
 
-function addMsg(role, text) {
+function parseActions(text) {
+  const actions = [];
+  const clean = text.replace(/<action\s+([^>]*?)>([\s\S]*?)<\/action>/gi, (m, attrs, inner) => {
+    const a = { params: {} };
+    let mm; const re = /(\w+)="([^"]*)"/g;
+    while ((mm = re.exec(attrs))) { if (mm[1] === "type") a.type = mm[2]; else a.params[mm[1]] = mm[2]; }
+    if (a.type === "send_email") a.params.body = inner.trim();
+    else if (a.type === "create_event") a.params.description = inner.trim();
+    if (a.type) actions.push(a);
+    return "";   // strip the tag from the visible text
+  });
+  return { clean: clean.trim(), actions };
+}
+
+function actionCard(a) {
+  const p = a.params;
+  const isEmail = a.type === "send_email";
+  const title = isEmail ? "✉️ Send email" : "📅 Create calendar event";
+  const rows = isEmail
+    ? `<div class="ac-row"><b>To</b> ${esc(p.to || "")}</div>
+       <div class="ac-row"><b>Subject</b> ${esc(p.subject || "")}</div>
+       <div class="ac-body">${esc(p.body || "")}</div>`
+    : `<div class="ac-row"><b>Title</b> ${esc(p.title || "")}</div>
+       <div class="ac-row"><b>When</b> ${esc(p.start || "")}${p.end ? " → " + esc(p.end) : ""}</div>
+       ${p.description ? `<div class="ac-body">${esc(p.description)}</div>` : ""}`;
   const el = document.createElement("div");
-  el.className = "msg " + role;
-  if (role === "assistant") el.innerHTML = md(text);   // render markdown
-  else el.textContent = text;                          // user text stays literal
+  el.className = "action-card";
+  el.innerHTML = `<div class="ac-head">${title}<span class="ac-tag">needs your confirmation</span></div>
+    ${rows}
+    <div class="ac-actions"><button class="ac-confirm">Confirm & ${isEmail ? "send" : "create"}</button>
+    <button class="ac-cancel ghost">Cancel</button></div>
+    <div class="ac-result"></div>`;
+  el.querySelector(".ac-cancel").onclick = () => { el.querySelector(".ac-actions").innerHTML = "<span class='muted'>Cancelled</span>"; };
+  el.querySelector(".ac-confirm").onclick = async () => {
+    const btns = el.querySelector(".ac-actions"); btns.innerHTML = "<span class='muted'>Working…</span>";
+    try {
+      const r = await api("/api/actions/execute", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: a.type, params: p }) });
+      el.querySelector(".ac-result").innerHTML = r.ok
+        ? `<span class="ac-ok">✓ ${esc(r.detail || "Done")}</span>`
+        : `<span class="ac-err">⚠️ ${esc(r.error || "Failed")}</span>`;
+    } catch (e) { el.querySelector(".ac-result").innerHTML = `<span class="ac-err">⚠️ ${esc(String(e))}</span>`; }
+  };
+  return el;
+}
+
+function addMsg(role, text) {
+  if (role === "assistant") {
+    const { clean, actions } = parseActions(text);
+    const el = document.createElement("div");
+    el.className = "msg assistant";
+    el.innerHTML = md(clean);
+    $("#messages").appendChild(el);
+    for (const a of actions) $("#messages").appendChild(actionCard(a));
+    $("#messages").scrollTop = 1e9; return el;
+  }
+  const el = document.createElement("div");
+  el.className = "msg " + role; el.textContent = text;
   $("#messages").appendChild(el); $("#messages").scrollTop = 1e9; return el;
 }
 function addTrace(steps) {

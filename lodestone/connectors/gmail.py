@@ -120,6 +120,26 @@ class GmailConnector(Connector):
             return []
 
     # ── helpers ──────────────────────────────────────────────────────────
+    def send_email(self, to: str, subject: str, body: str,
+                   interactive: bool = False) -> dict:
+        """Send an email (WRITE). Only ever called after user confirmation."""
+        service = self._service(None, interactive)
+        if service is None:
+            return {"ok": False, "error": "Gmail not connected"}
+        try:
+            import base64
+            from email.mime.text import MIMEText
+            msg = MIMEText(body)
+            msg["to"] = to
+            msg["subject"] = subject
+            raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+            sent = service.users().messages().send(
+                userId="me", body={"raw": raw}).execute()
+            return {"ok": True, "id": sent.get("id"),
+                    "detail": f"Email sent to {to}"}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:200]}
+
     def _service(self, result, interactive):
         try:
             from googleapiclient.discovery import build  # lazy

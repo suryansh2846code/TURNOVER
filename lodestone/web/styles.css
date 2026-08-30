@@ -146,6 +146,24 @@ button.tiny { padding: 6px 11px; font-size: 12px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .dot.ok { background: var(--accent-2); } .dot.off { background: #5a6473; }
 
+/* action cards (confirm-before-execute) */
+.action-card { align-self: flex-start; max-width: 76%; background: var(--panel);
+  border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin-top: -4px; }
+.ac-head { display: flex; justify-content: space-between; align-items: center;
+  font-weight: 600; margin-bottom: 8px; }
+.ac-tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--accent); background: #1b2740; padding: 2px 7px; border-radius: 20px; }
+.ac-row { font-size: 13px; margin: 3px 0; }
+.ac-row b { color: var(--muted); font-weight: 500; margin-right: 6px; }
+.ac-body { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; margin: 8px 0; font-size: 12.5px; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+.ac-actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+.ac-confirm { background: var(--accent-2); color: #08140d; border: 0; border-radius: 8px;
+  padding: 8px 14px; font-weight: 600; cursor: pointer; }
+.ac-confirm:hover { filter: brightness(1.08); }
+.ac-result { margin-top: 8px; font-size: 13px; }
+.ac-ok { color: var(--accent-2); } .ac-err { color: var(--danger); }
+
 /* onboarding */
 .modal.onboard { width: 520px; padding: 26px; }
 .onboard-head { text-align: center; margin-bottom: 20px; }

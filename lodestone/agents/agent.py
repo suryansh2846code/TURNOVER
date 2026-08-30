@@ -61,6 +61,18 @@ class Agent:
             "complete_task. NEVER claim you did something (added a task, saved a "
             "note) unless you actually called the matching tool in this turn. If a "
             "request needs a tool, call it before replying. "
+            "\n\nTAKING ACTIONS: When the user asks you to SEND an email, reply to "
+            "one, or CREATE a calendar event, do NOT claim you did it. Draft it, "
+            "then propose the action using EXACTLY this tag on its own line:\n"
+            '<action type="send_email" to="person@example.com" subject="...">'
+            "Full email body here.</action>\n"
+            'or  <action type="create_event" title="..." '
+            'start="2026-09-01T15:00:00+05:30" end="2026-09-01T16:00:00+05:30">'
+            "optional description</action>\n"
+            "The user sees a Confirm button — the action only runs after they "
+            "confirm. Fill fields from the brain/context (e.g. the recipient from "
+            "the email thread; the user's own timezone). Write a short line before "
+            "the tag explaining what you drafted. Never put a fake 'Sent!'.\n"
             "Be concise and act like a capable teammate."
         )
 

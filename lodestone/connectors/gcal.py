@@ -15,6 +15,41 @@ class GoogleCalendarConnector(Connector):
     def is_configured(self) -> tuple[bool, str]:
         return google_ready()
 
+    def create_event(self, title: str, start: str, end: str | None = None,
+                     description: str = "", attendees: list[str] | None = None,
+                     interactive: bool = False) -> dict:
+        """Create a calendar event (WRITE). Only after user confirmation.
+        `start`/`end` are ISO datetimes; if end is missing, defaults to +1h."""
+        try:
+            from googleapiclient.discovery import build
+            from datetime import datetime, timedelta
+        except ImportError:
+            return {"ok": False, "error": "pip install .[gdrive] for Calendar"}
+        try:
+            creds = get_credentials(interactive=interactive)
+            service = build("calendar", "v3", credentials=creds,
+                            cache_discovery=False)
+            if not end:
+                try:
+                    dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+                    end = (dt + timedelta(hours=1)).isoformat()
+                except Exception:
+                    end = start
+            body = {
+                "summary": title,
+                "description": description,
+                "start": {"dateTime": start},
+                "end": {"dateTime": end},
+            }
+            if attendees:
+                body["attendees"] = [{"email": a} for a in attendees]
+            ev = service.events().insert(calendarId="primary", body=body).execute()
+            return {"ok": True, "id": ev.get("id"),
+                    "detail": f"Event '{title}' created",
+                    "link": ev.get("htmlLink")}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:200]}
+
     def sync(self, *, days_back: int = 180, days_ahead: int = 180,
              max_results: int = 250, interactive: bool = True, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)

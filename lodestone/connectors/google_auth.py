@@ -9,11 +9,15 @@ from pathlib import Path
 
 from ..config import get_settings
 
-# Read-only scopes — Lodestone never modifies your Google data.
+# Read scopes + narrow WRITE scopes for confirmed actions (send email, create
+# event). Reading never modifies data; writes only run after explicit user
+# confirmation. gmail.send can only send, not read/delete.
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar.events",
 ]
 
 
