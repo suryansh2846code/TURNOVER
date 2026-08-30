@@ -50,16 +50,19 @@ def parse_when(text: str, now: datetime | None = None) -> str | None:
                  else timedelta(hours=n))
         return (now + delta).isoformat()
 
-    # time of day — an EXPLICIT time (12am, 3pm, 17:30) beats a vague word
+    # time of day — an EXPLICIT time (12am, 3pm, 17:30) beats a vague word.
+    # Invalid times (25pm, 9:99) are rejected, not crash-inducing or silently wrong.
     hour = minute = None
     if m := re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", t):
-        hour = int(m.group(1)) % 12
-        minute = int(m.group(2) or 0)
-        if m.group(3) == "pm":
-            hour += 12
+        h12, mi = int(m.group(1)), int(m.group(2) or 0)
+        if 1 <= h12 <= 12 and 0 <= mi <= 59:
+            hour = (h12 % 12) + (12 if m.group(3) == "pm" else 0)
+            minute = mi
     elif m := re.search(r"\b(\d{1,2}):(\d{2})\b", t):
-        hour, minute = int(m.group(1)), int(m.group(2))
-    else:
+        h24, mi = int(m.group(1)), int(m.group(2))
+        if 0 <= h24 <= 23 and 0 <= mi <= 59:
+            hour, minute = h24, mi
+    if hour is None:
         for name, (h, mi) in _NAMED.items():
             if re.search(rf"\b{name}\b", t):
                 hour, minute = h, mi
@@ -75,8 +78,11 @@ def parse_when(text: str, now: datetime | None = None) -> str | None:
             return None       # nothing time-like → can't schedule
         hour, minute = 9, 0   # a date with no time → 9am
 
-    dt = now.replace(year=base.year, month=base.month, day=base.day,
-                     hour=hour, minute=minute, second=0, microsecond=0)
+    try:
+        dt = now.replace(year=base.year, month=base.month, day=base.day,
+                         hour=hour, minute=minute, second=0, microsecond=0)
+    except ValueError:
+        return None       # any out-of-range component → treat as unparseable
     # vague date ("today"/"tonight"/time-only) in the past → next day
     vague = dr is None or bool(re.search(r"\b(today|tonight|now)\b", t))
     if dt <= now and vague:
