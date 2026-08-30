@@ -259,16 +259,26 @@ async function loadBrain() {
   $("#connectors").innerHTML = connectors.map((c) => {
     const last = c.state?.last_sync ? new Date(c.state.last_sync).toLocaleDateString() : "";
     const sub = c.ready ? (last ? `synced ${last}` : "ready") : (c.reason || "not configured");
-    const btn = c.ready
-      ? `<button class="tiny ghost" data-sync="${c.name}">sync</button>`
-      : `<button class="tiny" data-setup="${c.name}">setup</button>`;
+    const sync = c.ready ? `<button class="tiny ghost" data-sync="${esc(c.name)}">sync</button>` : "";
+    const setup = c.custom
+      ? `<button class="tiny ghost" data-editapp="${esc(c.name)}">edit</button>`
+      : (c.ready ? "" : `<button class="tiny" data-setup="${esc(c.name)}">setup</button>`);
+    const del = c.custom ? `<button class="tiny ghost" data-delapp="${esc(c.name)}" title="remove">✕</button>` : "";
     return `<div class="conn">
       <span class="conn-meta"><span class="dot ${c.ready ? "ok" : "off"}"></span>
-        <span><span class="conn-name">${c.label}</span><span class="conn-sub">${esc(sub)}</span></span></span>
-      ${btn}</div>`;
+        <span><span class="conn-name">${esc(c.label)}</span><span class="conn-sub">${esc(sub)}</span></span></span>
+      <span style="display:flex;gap:4px">${sync}${setup}${del}</span></div>`;
   }).join("");
   document.querySelectorAll("[data-sync]").forEach((b) => b.onclick = () => syncConn(b.dataset.sync));
   document.querySelectorAll("[data-setup]").forEach((b) => b.onclick = () => connectorHelp(b.dataset.setup));
+  document.querySelectorAll("[data-editapp]").forEach((b) => b.onclick = () =>
+    customAppForm(CONNECTORS.find((x) => x.name === b.dataset.editapp)?.config));
+  document.querySelectorAll("[data-delapp]").forEach((b) => b.onclick = async () => {
+    const id = b.dataset.delapp.split(":")[1];
+    if (!confirm("Remove this custom app? (synced records stay in the brain.)")) return;
+    await api(`/api/custom-apps/${id}`, { method: "DELETE" });
+    toast("custom app removed"); loadBrain();
+  });
   loadSyncStatus();
   // one-click Google sign-in when a bundled client exists but we're not connected
   try {
@@ -444,6 +454,63 @@ function connectorHelp(name) {
   openBrainModal(`Set up ${name}`, (CONNECTOR_HELP[name] || "<p>No setup needed.</p>")
     + `<p class="t" style="margin-top:10px">Add the value to your <code>.env</code> and restart Lodestone.</p>`);
 }
+
+// ── custom API app: connect any REST app, no code ──────────────────────────
+function customAppForm(app) {
+  app = app || {};
+  const row = (label, id, val, ph) =>
+    `<label class="t" style="display:block;margin:8px 0 3px">${label}</label>
+     <input id="${id}" value="${esc(val || "")}" placeholder="${esc(ph || "")}" spellcheck="false"
+       style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)" />`;
+  const at = app.auth_type || "none";
+  const opt = (v, t) => `<option value="${v}"${at === v ? " selected" : ""}>${t}</option>`;
+  openBrainModal(app.id ? `Edit ${app.name}` : "Connect a custom app",
+    `<p class="t">Point Lodestone at any REST API that returns JSON. It fetches the
+       endpoint and adds each record to your brain. Stays on your Mac.</p>
+     ${row("App name", "ca_name", app.name, "My CRM")}
+     ${row("Base URL", "ca_base", app.base_url, "https://api.myapp.com/v1")}
+     ${row("Endpoint", "ca_ep", app.endpoint, "/contacts")}
+     <label class="t" style="display:block;margin:8px 0 3px">Auth</label>
+     <select id="ca_auth" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)">
+       ${opt("none", "None")}${opt("bearer", "Bearer token")}${opt("header", "Custom header")}${opt("query", "Query parameter")}</select>
+     ${row("Header / param name (for custom header or query)", "ca_authname", app.auth_name, "X-API-Key")}
+     ${row("Token (leave blank to keep current)", "ca_token", "", "•••••••• stored locally, chmod 600")}
+     <hr style="border:none;border-top:1px solid var(--line);margin:12px 0">
+     <p class="t">Map the JSON (dot-paths, e.g. <code>data.results</code>):</p>
+     ${row("Items path — where the list lives", "ca_items", app.items_path, "data.results")}
+     ${row("Title field", "ca_title", app.title_field, "name")}
+     ${row("Body field", "ca_body", app.body_field, "notes")}
+     <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+       <button id="ca_save" class="tiny">${app.id ? "Save changes" : "Save & sync"}</button></div>`);
+  $("#ca_name").focus();
+  $("#ca_save").onclick = async () => {
+    const payload = {
+      id: app.id || null,
+      name: $("#ca_name").value.trim() || "Custom app",
+      base_url: $("#ca_base").value.trim(),
+      endpoint: $("#ca_ep").value.trim(),
+      auth_type: $("#ca_auth").value,
+      auth_name: $("#ca_authname").value.trim(),
+      items_path: $("#ca_items").value.trim(),
+      title_field: $("#ca_title").value.trim(),
+      body_field: $("#ca_body").value.trim(),
+    };
+    const tok = $("#ca_token").value.trim();
+    if (tok) payload.token = tok;
+    if (!payload.base_url) { toast("base URL is required"); return; }
+    $("#ca_save").disabled = true; $("#ca_save").textContent = "Saving…";
+    try {
+      const r = await api("/api/custom-apps", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload) });
+      $("#brainModal").hidden = true;
+      toast("custom app saved — syncing…");
+      await syncConn(r.name);
+      loadBrain();
+    } catch (e) { toast(String(e)); $("#ca_save").disabled = false; $("#ca_save").textContent = "Save"; }
+  };
+}
+$("#addCustomApp").onclick = () => customAppForm();
 
 // ── tasks ────────────────────────────────────────────────────────────────
 function dueLabel(iso) {

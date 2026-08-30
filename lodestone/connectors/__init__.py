@@ -30,6 +30,13 @@ REGISTRY: dict[str, type[Connector]] = {
 
 
 def get_connector(name: str) -> Connector:
+    # Custom user-defined API apps are addressed as "custom:<id>".
+    if name.startswith("custom:"):
+        from .custom_api import CustomAPIConnector, get_app
+        app = get_app(name.split(":", 1)[1])
+        if not app:
+            raise KeyError(f"unknown custom app '{name}'")
+        return CustomAPIConnector(app)
     if name not in REGISTRY:
         raise KeyError(f"unknown connector '{name}'. known: {list(REGISTRY)}")
     return REGISTRY[name]()

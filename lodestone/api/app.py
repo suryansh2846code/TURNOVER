@@ -186,8 +186,49 @@ def connectors():
         ready, reason = inst.is_configured()
         out.append({"name": name, "label": cls.label, "ready": ready,
                     "reason": reason, "always_available": cls.always_available,
-                    "secret_field": cls.secret_field, "state": state.get(name)})
+                    "secret_field": cls.secret_field, "custom": False,
+                    "state": state.get(name)})
+    # user-defined custom API apps
+    from ..connectors.custom_api import CustomAPIConnector, list_apps
+    for app in list_apps():
+        inst = CustomAPIConnector(app)
+        ready, reason = inst.is_configured()
+        out.append({"name": inst.name, "label": inst.label, "ready": ready,
+                    "reason": reason, "always_available": False,
+                    "secret_field": None, "custom": True, "config": app,
+                    "state": state.get(inst.name)})
     return {"connectors": out}
+
+# ── custom apps (connect any REST app, no code) ───────────────────────────
+class CustomAppIn(BaseModel):
+    id: str | None = None
+    name: str = "Custom app"
+    base_url: str = ""
+    endpoint: str = ""
+    auth_type: str = "none"      # none | bearer | header | query
+    auth_name: str = ""
+    token: str | None = None
+    items_path: str = ""
+    title_field: str = ""
+    body_field: str = ""
+
+@app.get("/api/custom-apps")
+def custom_apps():
+    from ..connectors.custom_api import list_apps
+    return {"apps": list_apps()}
+
+@app.post("/api/custom-apps")
+def save_custom_app(body: CustomAppIn):
+    from ..connectors.custom_api import upsert_app
+    cfg = body.model_dump()
+    token = cfg.pop("token", None)
+    app = upsert_app(cfg, token=token)
+    return {"saved": True, "app": app, "name": f"custom:{app['id']}"}
+
+@app.delete("/api/custom-apps/{app_id}")
+def delete_custom_app(app_id: str):
+    from ..connectors.custom_api import delete_app
+    return {"deleted": delete_app(app_id)}
 
 class SecretIn(BaseModel):
     value: str = ""
