@@ -138,7 +138,13 @@ class GmailConnector(Connector):
             return {"ok": True, "id": sent.get("id"),
                     "detail": f"Email sent to {to}"}
         except Exception as exc:
-            return {"ok": False, "error": str(exc)[:200]}
+            m = str(exc)
+            if "insufficient" in m.lower() or "scope" in m.lower() or "403" in m:
+                return {"ok": False, "error": "Gmail needs re-authorization to "
+                        "SEND. Reconnect Google (Connectors → Gmail → Reconnect) "
+                        "and approve the send permission, then try again.",
+                        "reauth": True}
+            return {"ok": False, "error": m[:200]}
 
     def _service(self, result, interactive):
         try:

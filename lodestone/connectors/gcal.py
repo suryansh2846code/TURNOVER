@@ -48,7 +48,12 @@ class GoogleCalendarConnector(Connector):
                     "detail": f"Event '{title}' created",
                     "link": ev.get("htmlLink")}
         except Exception as exc:
-            return {"ok": False, "error": str(exc)[:200]}
+            m = str(exc)
+            if "insufficient" in m.lower() or "scope" in m.lower() or "403" in m:
+                return {"ok": False, "error": "Calendar needs re-authorization to "
+                        "create events. Reconnect Google and approve the calendar "
+                        "permission, then try again.", "reauth": True}
+            return {"ok": False, "error": m[:200]}
 
     def sync(self, *, days_back: int = 180, days_ahead: int = 180,
              max_results: int = 250, interactive: bool = True, **_: Any) -> SyncResult:

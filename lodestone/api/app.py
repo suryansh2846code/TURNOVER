@@ -200,6 +200,21 @@ def sync(name: str, body: SyncIn):
     return res.as_dict()
 
 
+# ── Google reconnect (re-consent with current scopes, from the UI) ────────
+@app.post("/api/google/reconnect")
+def google_reconnect():
+    import threading
+    from ..connectors.google_auth import _token_path, get_credentials
+    tok = _token_path()
+    if tok.exists():
+        tok.unlink()
+    # opens the Google consent browser on this machine; runs in the background
+    threading.Thread(
+        target=lambda: get_credentials(interactive=True), daemon=True).start()
+    return {"started": True,
+            "detail": "A browser window is opening — approve the permissions."}
+
+
 # ── actions (execute only after explicit user confirmation) ───────────────
 class ActionIn(BaseModel):
     type: str

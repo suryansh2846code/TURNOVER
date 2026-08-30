@@ -141,9 +141,15 @@ function actionCard(a) {
       const r = await api("/api/actions/execute", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: a.type, params: p }) });
-      el.querySelector(".ac-result").innerHTML = r.ok
-        ? `<span class="ac-ok">✓ ${esc(r.detail || "Done")}</span>`
-        : `<span class="ac-err">⚠️ ${esc(r.error || "Failed")}</span>`;
+      const rr = el.querySelector(".ac-result");
+      if (r.ok) { rr.innerHTML = `<span class="ac-ok">✓ ${esc(r.detail || "Done")}</span>`; return; }
+      rr.innerHTML = `<span class="ac-err">⚠️ ${esc(r.error || "Failed")}</span>`;
+      if (r.reauth) {
+        const b = document.createElement("button");
+        b.className = "tiny"; b.textContent = "Reconnect Google"; b.style.marginTop = "8px";
+        b.onclick = async () => { const x = await api("/api/google/reconnect", { method: "POST" }); toast(x.detail || "Opening browser…"); };
+        rr.appendChild(document.createElement("br")); rr.appendChild(b);
+      }
     } catch (e) { el.querySelector(".ac-result").innerHTML = `<span class="ac-err">⚠️ ${esc(String(e))}</span>`; }
   };
   return el;
