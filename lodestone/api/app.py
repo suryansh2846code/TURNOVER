@@ -65,9 +65,11 @@ class SyncIn(BaseModel):
 # ── agents & chat ─────────────────────────────────────────────────────────
 @app.get("/api/agents")
 def agents():
+    from ..agents.presets import PRESETS
     mem = AgentMemory()
     return {"agents": [
         {"id": a.id, "name": a.name, "role": a.role, "tools": a.tools,
+         "custom": a.id not in PRESETS,
          "messages": len(mem.history(a.id, limit=1000))}
         for a in list_agents()
     ]}
@@ -75,6 +77,35 @@ def agents():
 @app.get("/api/agents/{agent_id}/history")
 def history(agent_id: str):
     return {"history": AgentMemory().history(agent_id, limit=100)}
+
+
+class NewAgent(BaseModel):
+    name: str
+    role: str = ""
+    system_prompt: str = ""
+    tools: list[str] = []
+    recall_sources: list[str] = []
+
+@app.get("/api/agents/tools")
+def available_tools():
+    from ..agents.tools import TOOL_DEFS
+    return {"tools": [{"name": n, "description": t.description}
+                      for n, t in TOOL_DEFS.items()]}
+
+@app.post("/api/agents/custom")
+def create_agent(body: NewAgent):
+    from ..agents.custom import get_custom_store
+    a = get_custom_store().create(body.name, body.role, body.system_prompt,
+                                  body.tools, body.recall_sources)
+    return {"id": a.id, "name": a.name, "role": a.role}
+
+@app.delete("/api/agents/custom/{agent_id}")
+def delete_agent(agent_id: str):
+    from ..agents.custom import get_custom_store
+    if not get_custom_store().delete(agent_id):
+        raise HTTPException(404, "not a custom agent")
+    AgentMemory().clear(agent_id)
+    return {"deleted": agent_id}
 
 @app.post("/api/agents/{agent_id}/chat")
 def chat(agent_id: str, body: ChatIn):

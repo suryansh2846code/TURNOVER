@@ -43,9 +43,20 @@ async function loadAgents() {
   agents = d.agents;
   $("#agentList").innerHTML = agents.map((a) => `
     <div class="agent ${a.id === current ? "active" : ""}" data-id="${a.id}">
-      <span class="n">${a.name}</span><span class="r">${a.role}</span>
+      <span class="n">${esc(a.name)}${a.custom ? ` <span class="del-agent" data-del-agent="${a.id}">✕</span>` : ""}</span>
+      <span class="r">${esc(a.role)}</span>
     </div>`).join("");
-  document.querySelectorAll(".agent").forEach((el) => el.onclick = () => selectAgent(el.dataset.id));
+  document.querySelectorAll(".agent").forEach((el) => el.onclick = (e) => {
+    if (e.target.dataset.delAgent) return;   // handled below
+    selectAgent(el.dataset.id);
+  });
+  document.querySelectorAll("[data-del-agent]").forEach((el) => el.onclick = async (e) => {
+    e.stopPropagation();
+    if (!confirm("Delete this agent?")) return;
+    await api(`/api/agents/custom/${el.dataset.delAgent}`, { method: "DELETE" });
+    if (current === el.dataset.delAgent) current = null;
+    toast("Agent deleted"); loadAgents();
+  });
   if (!current && agents.length) selectAgent(agents[0].id);
 }
 
@@ -430,6 +441,28 @@ $("#ingestBtn").onclick = async () => {
   const t = $("#ingestText").value.trim(); if (!t) return;
   await api("/api/brain/ingest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: t }) });
   $("#ingestText").value = ""; toast("added to brain"); loadBrain();
+};
+
+// ── create custom agent ─────────────────────────────────────────────────
+async function openAgentModal() {
+  const { tools } = await api("/api/agents/tools");
+  $("#amTools").innerHTML = tools.map((t) =>
+    `<label class="am-tool"><input type="checkbox" value="${t.name}" ${["search_brain", "remember", "web_search"].includes(t.name) ? "checked" : ""}/> ${t.name}</label>`).join("");
+  $("#amName").value = ""; $("#amRole").value = ""; $("#amPrompt").value = "";
+  $("#agentModal").hidden = false;
+}
+$("#newAgentBtn").onclick = openAgentModal;
+$("#amClose").onclick = () => $("#agentModal").hidden = true;
+$("#amCreate").onclick = async () => {
+  const name = $("#amName").value.trim();
+  if (!name) { toast("Name required"); return; }
+  const chosen = [...document.querySelectorAll("#amTools input:checked")].map((c) => c.value);
+  const a = await api("/api/agents/custom", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, role: $("#amRole").value.trim(),
+      system_prompt: $("#amPrompt").value.trim(), tools: chosen }) });
+  $("#agentModal").hidden = true; toast("Agent created");
+  await loadAgents(); selectAgent(a.id);
 };
 
 // ── onboarding ───────────────────────────────────────────────────────────

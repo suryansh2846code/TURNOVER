@@ -62,10 +62,15 @@ PRESETS: dict[str, Agent] = {
 
 
 def list_agents() -> list[Agent]:
-    return list(PRESETS.values())
+    from .custom import get_custom_store
+    return list(PRESETS.values()) + get_custom_store().list()
 
 
 def get_agent(agent_id: str) -> Agent:
-    if agent_id not in PRESETS:
-        raise KeyError(f"unknown agent '{agent_id}'. known: {list(PRESETS)}")
-    return PRESETS[agent_id]
+    if agent_id in PRESETS:
+        return PRESETS[agent_id]
+    from .custom import get_custom_store
+    custom = get_custom_store().get(agent_id)
+    if custom:
+        return custom
+    raise KeyError(f"unknown agent '{agent_id}'")

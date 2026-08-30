@@ -12,7 +12,8 @@
     <!-- Left: agents -->
     <aside class="sidebar">
       <div class="brand"><span class="logo">◆</span><b>Lodestone</b></div>
-      <div class="side-label">Agents</div>
+      <div class="side-label conn-head">Agents
+        <button id="newAgentBtn" class="tiny ghost">＋ New</button></div>
       <nav id="agentList" class="agents"></nav>
       <div class="side-foot">
         <div class="side-label">Model</div>
@@ -66,6 +67,24 @@
       <div id="connectors" class="connectors"></div>
     </aside>
   </div>
+  <!-- new custom agent -->
+  <div id="agentModal" class="modal-bg" hidden>
+    <div class="modal">
+      <div class="modal-head"><b>Create an agent</b><button id="amClose" class="ghost tiny">✕</button></div>
+      <div class="am-body">
+        <label>Name</label>
+        <input id="amName" placeholder="e.g. Sales" />
+        <label>Focus (short)</label>
+        <input id="amRole" placeholder="e.g. outreach & CRM" />
+        <label>Instructions (system prompt)</label>
+        <textarea id="amPrompt" rows="3" placeholder="What this agent does and how it should behave…"></textarea>
+        <label>Tools</label>
+        <div id="amTools" class="am-tools"></div>
+      </div>
+      <div class="modal-foot"><span></span><button id="amCreate">Create agent</button></div>
+    </div>
+  </div>
+
   <!-- brain detail (entity facts / memory search) -->
   <div id="brainModal" class="modal-bg" hidden>
     <div class="modal">
