@@ -32,6 +32,8 @@ class ScheduledStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._c = sqlite3.connect(str(path), check_same_thread=False)
         self._c.row_factory = sqlite3.Row
+        self._c.execute("PRAGMA journal_mode=WAL;")
+        self._c.execute("PRAGMA busy_timeout=5000;")   # scheduler + API share this
         self._c.executescript(_SCHEMA)
 
     def add(self, type: str, params: dict, fire_at: str,

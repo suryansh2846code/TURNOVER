@@ -120,6 +120,10 @@ class CustomAPIConnector(Connector):
     def _request(self) -> Any:
         app = self.app
         url = app["base_url"] + (app.get("endpoint") or "")
+        # only fetch over http(s) — never file://, ftp://, etc. (urllib supports
+        # them, which would let a mistaken/hostile config read local files).
+        if not url.lower().startswith(("http://", "https://")):
+            raise ValueError("custom app URL must start with http:// or https://")
         headers = {"Accept": "application/json", "User-Agent": "Lodestone"}
         token = get_settings().get_secret(_secret_key(app["id"]))
         atype = app.get("auth_type", "none")

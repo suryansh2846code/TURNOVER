@@ -75,6 +75,9 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
+    # wait up to 5s for a lock instead of failing instantly with "database is
+    # locked" — the scheduler thread and request handlers share this connection.
+    conn.execute("PRAGMA busy_timeout=5000;")
     conn.executescript(SCHEMA)
     _migrate(conn)
     return conn
