@@ -12,11 +12,14 @@ disable-able, and their runs are logged + notified.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from .config import get_settings
+
+log = logging.getLogger("lodestone.routines")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS routines (
@@ -155,4 +158,4 @@ def sweep(new_email_count: int = 0) -> None:
                 res = run_routine(r, ctx)
                 store.mark_run(r["id"], json.dumps(res)[:400])
         except Exception:
-            pass
+            log.exception("routine %s failed", r.get("id"))

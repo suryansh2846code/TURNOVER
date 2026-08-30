@@ -40,12 +40,17 @@ def parse_actions(text: str) -> list[dict]:
     return out
 
 
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 def _send_email(params: dict) -> dict:
     to = (params.get("to") or "").strip()
     subject = (params.get("subject") or "").strip()
     body = params.get("body") or ""
-    if not to or "@" not in to:
-        return {"ok": False, "error": "a valid recipient (to) is required"}
+    if not _EMAIL_RE.match(to):
+        return {"ok": False,
+                "error": f"'{to}' is not a valid email address" if to
+                else "a recipient (to) is required"}
     return get_connector("gmail").send_email(to, subject, body)
 
 
