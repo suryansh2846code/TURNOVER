@@ -10,7 +10,15 @@ from .google_auth import get_credentials, google_ready
 
 
 def _decode(data: str) -> str:
-    return base64.urlsafe_b64decode(data.encode()).decode("utf-8", errors="ignore")
+    # Gmail returns base64url body data that MAY omit '=' padding, which
+    # urlsafe_b64decode rejects ("Incorrect padding"). Re-pad before decoding
+    # so a common, valid message doesn't crash the whole sync.
+    data = data or ""
+    data += "=" * (-len(data) % 4)
+    try:
+        return base64.urlsafe_b64decode(data).decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
 
 
 def html_to_text(html: str) -> str:
@@ -86,10 +94,13 @@ class GmailConnector(Connector):
         try:
             messages = self._list(service, query, max_results)
             for meta in messages:
-                if self._ingest_message(service, meta):
-                    result.added += 1
-                else:
-                    result.skipped += 1
+                try:
+                    ok = self._ingest_message(service, meta)
+                except Exception:
+                    result.skipped += 1        # one bad message never aborts the sync
+                    continue
+                result.added += 1 if ok else 0
+                result.skipped += 0 if ok else 1
             scope = "all mail" if full_history else f"last {s.gmail_recent_days}d"
             result.detail = f"{scope}, {len(messages)} messages"
         except Exception as exc:

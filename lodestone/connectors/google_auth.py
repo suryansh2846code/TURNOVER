@@ -26,8 +26,13 @@ def _token_path() -> Path:
 
 
 def get_credentials(interactive: bool = True):
-    """Return valid Google credentials, running the consent flow if needed."""
-    from google.auth.transport.requests import Request  # lazy
+    """Return valid Google credentials, running the consent flow if needed.
+
+    Self-healing: a corrupt token file, or a refresh token that has been
+    revoked/expired (e.g. the 7-day expiry of Google 'Testing'-mode apps), is
+    dropped and re-consented instead of failing every sync forever."""
+    from google.auth.exceptions import RefreshError  # lazy
+    from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
 
@@ -35,17 +40,28 @@ def get_credentials(interactive: bool = True):
     token_path = _token_path()
     creds = None
     if token_path.exists():
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+        try:
+            creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+        except Exception:
+            token_path.unlink(missing_ok=True)     # corrupt token → re-consent
+            creds = None
 
     if creds and creds.valid:
         return creds
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        token_path.write_text(creds.to_json())
-        return creds
+        try:
+            creds.refresh(Request())
+            token_path.write_text(creds.to_json())
+            return creds
+        except RefreshError:
+            # refresh token revoked/expired → drop it and fall through to consent
+            token_path.unlink(missing_ok=True)
+            creds = None
 
     if not interactive:
-        raise RuntimeError("Google auth required; run an interactive sync once.")
+        raise RuntimeError(
+            "Google sign-in expired or missing. Open Lodestone and reconnect "
+            "Google (Connectors → Sign in with Google) to re-authorize.")
 
     secrets = settings.google_client_secrets
     if not secrets or not Path(secrets).exists():

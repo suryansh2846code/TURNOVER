@@ -202,3 +202,36 @@ def test_migrations_idempotent_and_bump_triggered(tmp_path, monkeypatch):
     get_settings.cache_clear()
     get_brain.cache_clear()
     get_store.cache_clear()
+
+
+# ── Gmail: base64url body decode must tolerate missing padding ──────────────
+def test_gmail_decode_handles_unpadded_base64():
+    import base64
+    from lodestone.connectors.gmail import _decode
+    padded = base64.urlsafe_b64encode("café ☕".encode()).decode()
+    assert _decode(padded) == "café ☕"
+    assert _decode(padded.rstrip("=")) == "café ☕"      # Gmail often omits '='
+    assert _decode("") == "" and _decode(None) == ""     # empty / None safe
+
+
+def test_gmail_extract_body_from_unpadded_html():
+    import base64
+    from lodestone.connectors.gmail import _extract_body
+    raw = base64.urlsafe_b64encode(b"<p>Hi <b>there</b></p>").decode().rstrip("=")
+    payload = {"mimeType": "text/html", "body": {"data": raw}}
+    assert _extract_body(payload) == "Hi there"
+
+
+# ── Google auth: corrupt token self-heals (cleaned up, clear error) ────────
+def test_google_auth_corrupt_token_selfheals(tmp_path, monkeypatch):
+    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
+    from lodestone.config import get_settings
+    get_settings.cache_clear()
+    from lodestone.connectors.google_auth import _token_path, get_credentials
+    tp = _token_path()
+    tp.parent.mkdir(parents=True, exist_ok=True)
+    tp.write_text("{ not valid json ]")
+    with pytest.raises(RuntimeError):
+        get_credentials(interactive=False)
+    assert not tp.exists()                                # corrupt token removed
+    get_settings.cache_clear()
