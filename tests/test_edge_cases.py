@@ -144,3 +144,61 @@ def test_custom_api_fieldless_records_stay_distinct(tmp_path, monkeypatch):
     res = conn.sync()
     assert res.added == 3 and res.skipped == 0
     get_settings.cache_clear()
+
+
+# ── reminders/scheduler: fire once, never double-fire ──────────────────────
+def test_reminder_fires_once(tmp_path, monkeypatch):
+    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
+    from lodestone.config import get_settings
+    get_settings.cache_clear()
+    import lodestone.notify as notify
+    calls = []
+    monkeypatch.setattr(notify, "desktop_notify", lambda t, m: calls.append((t, m)) or True)
+
+    from datetime import datetime, timedelta
+    import lodestone.reminders as reminders_mod
+    from lodestone.reminders import get_reminders
+    from lodestone.scheduler import Scheduler
+    monkeypatch.setattr(reminders_mod, "_store", None)   # rebind to tmp home
+    store = get_reminders()
+    past = (datetime.now().astimezone() - timedelta(minutes=5)).isoformat()
+    future = (datetime.now().astimezone() + timedelta(hours=2)).isoformat()
+    store.add("past task", past)
+    store.add("future task", future)
+
+    sched = Scheduler()
+    sched._fire_reminders()
+    assert [m for _, m in calls] == ["past task"]      # only the due one
+    assert store.due() == []                            # marked fired
+    sched._fire_reminders()
+    assert [m for _, m in calls] == ["past task"]      # no double-notify
+    monkeypatch.setattr(reminders_mod, "_store", None)
+    get_settings.cache_clear()
+
+
+# ── migrations: idempotent, version-bump triggered, empty-safe ─────────────
+def test_migrations_idempotent_and_bump_triggered(tmp_path, monkeypatch):
+    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
+    from lodestone.config import get_settings
+    from lodestone.brain import get_brain
+    from lodestone.core.store import get_store
+    get_settings.cache_clear()
+    get_brain.cache_clear()
+    get_store.cache_clear()
+
+    brain = get_brain()
+    assert brain.run_migrations() == {}                 # empty brain: safe no-op
+    brain.ingest("Alpha ships in September.", source="test")
+    assert brain.run_migrations()                        # first run does work
+    assert brain.run_migrations() == {}                  # idempotent
+
+    brain.store.set_meta("embedder_sig", "STALE")
+    assert brain.run_migrations().get("reembedded", 0) > 0
+    assert brain.run_migrations() == {}                  # re-stamped → no-op
+
+    brain.store.set_meta("extractor_version", "0")
+    assert "graph_rebuilt" in brain.run_migrations()
+
+    get_settings.cache_clear()
+    get_brain.cache_clear()
+    get_store.cache_clear()
