@@ -319,6 +319,23 @@ class MemoryStore:
                 self._dirty = True
         return len(to_delete)
 
+    # ── meta (migration version stamps) ──────────────────────────────────
+    def get_meta(self, key: str) -> str | None:
+        row = self._conn.execute(
+            "SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO meta (key,value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+            self._conn.commit()
+
+    def embedder_signature(self) -> str:
+        e = self._embedder
+        return f"{e.name}:{getattr(e, 'model_name', '')}:{e.dim}"
+
     # ── connector state ───────────────────────────────────────────────────
     def set_connector_state(
         self, connector: str, *, cursor=None, status=None, detail=None, last_sync=None

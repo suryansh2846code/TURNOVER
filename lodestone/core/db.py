@@ -61,6 +61,12 @@ CREATE TABLE IF NOT EXISTS relations (
 );
 CREATE INDEX IF NOT EXISTS idx_rel_subject ON relations(subject_id);
 CREATE INDEX IF NOT EXISTS idx_rel_object ON relations(object_id);
+
+-- key/value store for migration version stamps (embedder, extractor, schema)
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 

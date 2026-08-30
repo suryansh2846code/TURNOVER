@@ -82,12 +82,17 @@ class Scheduler:
     def _loop(self) -> None:
         settings = get_settings()
         interval = max(1, settings.sync_interval_minutes) * 60
-        # startup self-heal: dedupe immediately so any user recovers automatically
+        # startup self-heal: auto-migrate derived data (re-embed / rebuild graph
+        # when the code version changed) and dedupe — all automatic, no CLI.
         try:
-            from .core.store import get_store
-            get_store().dedupe()
-        except Exception:
-            pass
+            from .brain import get_brain
+            m = get_brain().run_migrations()
+            if m:
+                print(f"[lodestone] auto-migrated: {m}")
+            get_brain().store.dedupe()
+        except Exception as exc:
+            import sys
+            print(f"[lodestone] startup migration skipped: {exc}", file=sys.stderr)
         # small initial delay, then an immediate first sync (no manual CLI needed)
         if self._stop.wait(20):
             return

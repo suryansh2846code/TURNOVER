@@ -309,6 +309,31 @@ class Brain:
                 "entities": self.graph.stats()["entities"],
                 "facts": self.graph.stats()["relations"]}
 
+    def run_migrations(self) -> dict[str, Any]:
+        """Auto-migrate derived data when the code version changed — so every
+        user's brain upgrades itself on startup, with no manual re-embed/rebuild.
+        Idempotent: a no-op when versions already match."""
+        from . import extract as extractor
+        store = self.store
+        done: dict[str, Any] = {}
+
+        if store.count() == 0:
+            return done
+
+        # 1) embeddings: re-embed everything if the embedder (model/dim) changed
+        cur_sig = store.embedder_signature()
+        if store.get_meta("embedder_sig") != cur_sig:
+            done["reembedded"] = store.reembed_all()
+            store.set_meta("embedder_sig", cur_sig)
+
+        # 2) knowledge graph: rebuild if the extractor version changed
+        if store.get_meta("extractor_version") != extractor.EXTRACTOR_VERSION:
+            g = self.rebuild_graph()
+            done["graph_rebuilt"] = g.get("entities")
+            store.set_meta("extractor_version", extractor.EXTRACTOR_VERSION)
+
+        return done
+
     def reembed(self) -> dict[str, Any]:
         """Recompute all vectors (memories + entities) with the current embedder.
         Run after switching LODESTONE_EMBEDDING_PROVIDER."""

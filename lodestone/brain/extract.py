@@ -15,6 +15,10 @@ import re
 
 from ..models import Message, get_provider
 
+# Bump when extraction logic changes → auto-migration rebuilds the graph for all
+# users on next startup (no manual rebuild-graph).
+EXTRACTOR_VERSION = "3"
+
 # capitalized word / multi-word phrase (allows internal caps like WhatsApp)
 _CAP = re.compile(r"\b([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){0,3})\b")
 _ARTICLE = re.compile(r"^(the|a|an|my|your|our|their|his|her|its)\s+", re.I)
