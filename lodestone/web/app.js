@@ -324,7 +324,7 @@ async function loadBrain() {
     $("#googleSignin").hidden = !(g.client_configured && !g.connected);
   } catch (_) {}
 }
-$("#googleSignin").onclick = async () => {
+async function startGoogleSignin() {
   $("#googleSignin").textContent = "Opening Google…"; $("#googleSignin").disabled = true;
   try {
     const r = await api("/api/google/reconnect", { method: "POST" });
@@ -336,7 +336,8 @@ $("#googleSignin").onclick = async () => {
     }, 3000);
   } catch (e) { toast(String(e)); }
   finally { setTimeout(() => { $("#googleSignin").textContent = "Sign in with Google"; $("#googleSignin").disabled = false; }, 4000); }
-};
+}
+$("#googleSignin").onclick = startGoogleSignin;
 
 async function loadSyncStatus() {
   try {
@@ -732,9 +733,18 @@ function closeOnboard() {
   $("#onboard").hidden = true;
   localStorage.setItem("lodestone_onboarded", "1");
 }
+function flashConnectors() {
+  const el = $("#connectors");
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1600);
+}
 $("#obSkip").onclick = closeOnboard;
 $("#obDone").onclick = closeOnboard;
-$("#obConnect").onclick = () => { closeOnboard(); openPicker(); };
+$("#obGoogle").onclick = () => { closeOnboard(); startGoogleSignin(); };
+$("#obLocal").onclick = () => { closeOnboard(); flashConnectors();
+  toast("Pick Files, Apple Mail, Calendar or iMessage below → click setup"); };
+$("#obApps").onclick = () => { closeOnboard(); flashConnectors();
+  toast("Notion · Linear · GitHub — or + Connect a custom app"); };
 $("#obFact").onclick = () => { closeOnboard(); $("#ingestText").focus();
   $("#ingestText").scrollIntoView({ behavior: "smooth" }); };
 $("#helpBtn").onclick = openOnboard;

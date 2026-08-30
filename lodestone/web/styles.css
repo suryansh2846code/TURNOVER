@@ -197,7 +197,26 @@ button.tiny { padding: 6px 11px; font-size: 12px; }
 .step p { margin: 3px 0 8px; font-size: 12.5px; }
 .step button { margin: 0; }
 .onboard-foot { display: flex; justify-content: space-between; align-items: center;
-  margin-top: 20px; }
+  gap: 10px; margin-top: 20px; }
+
+/* onboarding choice cards */
+.ob-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ob-card { display: flex; flex-direction: column; gap: 3px; text-align: left;
+  padding: 14px 15px; background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 11px; cursor: pointer; transition: border-color .15s, transform .1s,
+  background .15s; color: var(--text); font: inherit; }
+.ob-card:hover { border-color: var(--accent); transform: translateY(-1px);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-2)); }
+.ob-card:active { transform: translateY(0); }
+.ob-card .ob-ic { font-size: 20px; }
+.ob-card b { font-size: 14px; }
+.ob-card .muted { font-size: 12px; line-height: 1.35; }
+@media (max-width: 560px) { .ob-cards { grid-template-columns: 1fr; } }
+
+/* brief highlight when onboarding points you at the connectors list */
+.flash { animation: flash-hi 1.6s ease; border-radius: 8px; }
+@keyframes flash-hi { 0%, 100% { box-shadow: none; }
+  20%, 60% { box-shadow: 0 0 0 2px var(--accent); } }
 
 /* tasks panel */
 .addtask { display: flex; gap: 6px; }

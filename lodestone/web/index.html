@@ -139,29 +139,36 @@
       <div class="onboard-head">
         <span class="logo big">◆</span>
         <h2>Welcome to Lodestone</h2>
-        <p class="muted">Your agents get smart by knowing <b>you</b>. Fill your
-          brain once — then every agent already knows your world.</p>
+        <p class="muted">Your agents get smart by knowing <b>you</b>. Connect a
+          source once — everything stays on your Mac — and every agent already
+          knows your world. Pick any that fit; you can add more later.</p>
       </div>
-      <div class="steps">
-        <div class="step">
-          <span class="num">1</span>
-          <div><b>Connect a folder</b><p class="muted">Point it at your notes or a
-            project. It reads them into your brain automatically.</p>
-            <button id="obConnect" class="tiny">Choose a folder…</button></div>
-        </div>
-        <div class="step">
-          <span class="num">2</span>
-          <div><b>Or just tell it a fact</b><p class="muted">Add anything you want
-            your agents to know.</p>
-            <button id="obFact" class="tiny ghost">Add a fact</button></div>
-        </div>
-        <div class="step">
-          <span class="num">3</span>
-          <div><b>Then chat</b><p class="muted">Ask an agent anything — it answers
-            using your brain, and searches the web when needed.</p></div>
-        </div>
+      <div class="ob-cards">
+        <button class="ob-card" id="obGoogle">
+          <span class="ob-ic">🔗</span>
+          <b>Sign in with Google</b>
+          <span class="muted">Gmail, Drive &amp; Calendar — one click, read-only.</span>
+        </button>
+        <button class="ob-card" id="obLocal">
+          <span class="ob-ic">💻</span>
+          <b>Use what's on your Mac</b>
+          <span class="muted">Apple Mail, Calendar, iMessage, folders — no sign-in.</span>
+        </button>
+        <button class="ob-card" id="obApps">
+          <span class="ob-ic">🧩</span>
+          <b>Connect an app</b>
+          <span class="muted">Notion, Linear, GitHub, or any custom API.</span>
+        </button>
+        <button class="ob-card" id="obFact">
+          <span class="ob-ic">✏️</span>
+          <b>Just tell it a fact</b>
+          <span class="muted">Type something you want your agents to know.</span>
+        </button>
       </div>
       <div class="onboard-foot">
+        <span class="muted tiny">Then ask any agent — it answers from your brain,
+          and searches the web when needed.</span>
+        <span style="flex:1"></span>
         <button id="obSkip" class="ghost tiny">Skip for now</button>
         <button id="obDone">Start using Lodestone</button>
       </div>
