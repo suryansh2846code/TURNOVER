@@ -9,9 +9,12 @@ __pycache__/
 *.db-shm
 google_token.json
 
-# never commit OAuth secrets
+# never commit personal OAuth secrets (per-user Web/token clients & tokens)
 client_secret*.json
 google_client_secret.json
 
-# bundled OAuth client (dev ships at build; never commit)
-lodestone/data/google_client.json
+# NOTE: lodestone/data/google_client.json IS committed on purpose — it is an
+# "installed" (Desktop app) OAuth client. Google treats installed-app secrets as
+# non-confidential (security is PKCE + the localhost redirect), so shipping it
+# gives testers one-click sign-in. If GitHub secret-scanning ever revokes it,
+# regenerate a Desktop client in Cloud Console and replace this file.
