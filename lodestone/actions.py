@@ -33,6 +33,8 @@ def parse_actions(text: str) -> list[dict]:
             a["params"]["description"] = inner.strip()
         elif t == "set_reminder":
             a["params"]["message"] = inner.strip()
+        elif t == "create_routine":
+            a["params"]["instruction"] = inner.strip()
         if t:
             out.append(a)
     return out
@@ -62,6 +64,22 @@ def _set_reminder(params: dict) -> dict:
     return {"ok": True, "detail": f"Reminder set for {nice}"}
 
 
+def _create_routine(params: dict) -> dict:
+    from .routines import get_routines
+    instruction = (params.get("instruction") or params.get("body") or "").strip()
+    if not instruction:
+        return {"ok": False, "error": "an instruction is required"}
+    name = (params.get("name") or "Automation").strip()
+    trigger = params.get("trigger") or "new_email"
+    if trigger not in ("new_email", "schedule"):
+        trigger = "new_email"
+    agent = params.get("agent") or params.get("agent_id") or "personal"
+    interval = int(params.get("interval_min") or 60)
+    r = get_routines().create(name, agent, trigger, instruction, interval)
+    when = "on every new email" if trigger == "new_email" else f"every {interval} min"
+    return {"ok": True, "detail": f"Automation '{name}' created — runs {when}"}
+
+
 def _create_event(params: dict) -> dict:
     title = (params.get("title") or "").strip()
     start = (params.get("start") or "").strip()
@@ -87,6 +105,10 @@ REGISTRY: dict[str, dict[str, Any]] = {
     "set_reminder": {
         "handler": _set_reminder, "label": "Set reminder",
         "fields": ["message", "at"],
+    },
+    "create_routine": {
+        "handler": _create_routine, "label": "Create automation",
+        "fields": ["name", "trigger", "agent", "interval_min", "instruction"],
     },
 }
 

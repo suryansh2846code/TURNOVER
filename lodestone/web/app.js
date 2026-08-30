@@ -111,6 +111,7 @@ function parseActions(text) {
     if (a.type === "send_email") a.params.body = inner.trim();
     else if (a.type === "create_event") a.params.description = inner.trim();
     else if (a.type === "set_reminder") a.params.message = inner.trim();
+    else if (a.type === "create_routine") a.params.instruction = inner.trim();
     if (a.type) actions.push(a);
     return "";   // strip the tag from the visible text
   });
@@ -131,6 +132,12 @@ function actionCard(a) {
     title = "⏰ Set reminder"; verb = "set";
     rows = `<div class="ac-row"><b>Remind</b> ${esc(p.message || "")}</div>
        <div class="ac-row"><b>When</b> ${esc(p.at || p.when || "")}</div>`;
+  } else if (a.type === "create_routine") {
+    title = "⚡ Create automation"; verb = "create";
+    const trig = p.trigger === "schedule" ? `every ${p.interval_min || 60} min` : "on every new email";
+    rows = `<div class="ac-row"><b>Name</b> ${esc(p.name || "Automation")}</div>
+       <div class="ac-row"><b>Runs</b> ${trig} · ${esc(p.agent || p.agent_id || "personal")}</div>
+       <div class="ac-body">${esc(p.instruction || "")}</div>`;
   } else {
     title = "📅 Create calendar event"; verb = "create";
     rows = `<div class="ac-row"><b>Title</b> ${esc(p.title || "")}</div>
@@ -153,7 +160,7 @@ function actionCard(a) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: a.type, params: { ...p, agent_id: current } }) });
       const rr = el.querySelector(".ac-result");
-      if (r.ok) { rr.innerHTML = `<span class="ac-ok">✓ ${esc(r.detail || "Done")}</span>`; return; }
+      if (r.ok) { rr.innerHTML = `<span class="ac-ok">✓ ${esc(r.detail || "Done")}</span>`; loadReminders(); loadRoutines(); return; }
       rr.innerHTML = `<span class="ac-err">⚠️ ${esc(r.error || "Failed")}</span>`;
       if (r.reauth) {
         const b = document.createElement("button");

@@ -81,6 +81,17 @@ class Agent:
             'to="x@y.com" subject="…" at="tonight 12am">body</action>. On confirm '
             "it fires automatically at that time — you do NOT need a separate "
             "reminder. Only use set_reminder for a plain notification.\n"
+            "AUTOMATIONS: when the user wants something to happen REPEATEDLY or on "
+            "an event (\"whenever X emails me, forward it\", \"every morning digest "
+            "my mail\"), don't do it once — set up a standing automation with:\n"
+            '<action type="create_routine" name="Forward emails from Divyansh" '
+            'trigger="new_email" agent="inbox">When a new email arrives from '
+            "divyansh@example.com, forward it with a short summary to "
+            'me@gmail.com; ignore anything else.</action>\n'
+            'trigger is "new_email" (runs on each new email) or "schedule" (add '
+            'interval_min="60"). Put the full rule, including any filter (which '
+            "sender/topic) and the exact action, as the tag's inner text. On "
+            "confirm it runs on its own from then on.\n"
             "Be concise and act like a capable teammate."
         )
 
