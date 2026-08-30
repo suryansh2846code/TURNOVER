@@ -186,8 +186,26 @@ def connectors():
         ready, reason = inst.is_configured()
         out.append({"name": name, "label": cls.label, "ready": ready,
                     "reason": reason, "always_available": cls.always_available,
-                    "state": state.get(name)})
+                    "secret_field": cls.secret_field, "state": state.get(name)})
     return {"connectors": out}
+
+class SecretIn(BaseModel):
+    value: str = ""
+
+@app.post("/api/connectors/{name}/secret")
+def save_connector_secret(name: str, body: SecretIn):
+    """Save (or clear) a connector's single-token secret from the UI —
+    no .env editing. Written to ~/Library/Lodestone/secrets.json (chmod 600)."""
+    try:
+        cls = REGISTRY[name]
+    except KeyError:
+        raise HTTPException(404, f"unknown connector '{name}'")
+    field = cls.secret_field
+    if not field:
+        raise HTTPException(400, f"'{name}' does not use a token secret")
+    get_settings().set_secret(field["key"], body.value)
+    ready, reason = cls().is_configured()
+    return {"saved": True, "ready": ready, "reason": reason}
 
 @app.post("/api/connectors/{name}/sync")
 def sync(name: str, body: SyncIn):

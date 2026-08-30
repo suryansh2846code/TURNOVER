@@ -2,6 +2,7 @@ const $ = (s) => document.querySelector(s);
 const api = (p, o) => fetch(p, o).then((r) => r.ok ? r.json() : r.json().then((e) => Promise.reject(e.detail || r.statusText)));
 let current = null;
 let agents = [];
+let CONNECTORS = [];
 
 function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
 function esc(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
@@ -254,6 +255,7 @@ async function loadBrain() {
   document.querySelectorAll("[data-entity]").forEach((el) =>
     el.onclick = () => openEntity(el.dataset.entity));
   const { connectors } = await api("/api/connectors");
+  CONNECTORS = connectors;
   $("#connectors").innerHTML = connectors.map((c) => {
     const last = c.state?.last_sync ? new Date(c.state.last_sync).toLocaleDateString() : "";
     const sub = c.ready ? (last ? `synced ${last}` : "ready") : (c.reason || "not configured");
@@ -390,13 +392,53 @@ const CONNECTOR_HELP = {
     <li>Add your <b>Terminal</b> (or whatever runs Lodestone) and enable it.</li>
     <li>Restart Lodestone, then click sync.</li></ol>
     <p class="t">macOS only. Lodestone only reads, never sends.</p>`,
-  notion: `<p>Read the Notion pages you share with an integration.</p><ol>
-    <li>Create an internal integration at
-        <b>notion.so/my-integrations</b> and copy its secret.</li>
-    <li>Set <code>NOTION_TOKEN</code> to that secret.</li>
-    <li><b>Share</b> the pages/databases you want with the integration (⋯ → Connections).</li></ol>`,
+  notion: `Read-only access to the Notion pages you share with an integration.`,
 };
 function connectorHelp(name) {
+  const c = CONNECTORS.find((x) => x.name === name);
+  const f = c?.secret_field;
+  if (f) {
+    // Connectors that authenticate with a single pasted token: show steps +
+    // an in-app field (no .env editing, no restart needed).
+    const steps = (f.steps || []).map((s) => `<li>${s}</li>`).join("");
+    const link = f.help_url
+      ? `<p style="margin:6px 0 12px"><a href="${f.help_url}" target="_blank" rel="noopener">Open ${c.label} to get your key →</a></p>` : "";
+    openBrainModal(`Connect ${c.label}`,
+      `<p>${CONNECTOR_HELP[name] || ""}</p>
+       ${steps ? `<ol>${steps}</ol>` : ""}${link}
+       <label class="t" style="display:block;margin-bottom:4px">${esc(f.label)}</label>
+       <div style="display:flex;gap:8px">
+         <input id="secretInput" type="password" autocomplete="off" spellcheck="false"
+                placeholder="${esc(f.placeholder || "")}"
+                style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font-family:monospace" />
+         <button id="secretSave" class="tiny">Save</button>
+       </div>
+       <p class="t" style="margin-top:8px">Stored locally on your Mac only
+         (<code>~/Library/Lodestone/secrets.json</code>) — never uploaded.</p>`);
+    const input = $("#secretInput");
+    input.focus();
+    $("#secretSave").onclick = async () => {
+      const value = input.value.trim();
+      if (!value) { toast("paste your key first"); return; }
+      $("#secretSave").disabled = true; $("#secretSave").textContent = "Saving…";
+      try {
+        const r = await api(`/api/connectors/${name}/secret`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value }) });
+        if (r.ready) {
+          toast(`${c.label} connected ✓ — syncing…`);
+          $("#brainModal").hidden = true;
+          await syncConn(name);
+        } else {
+          toast(r.reason || "saved, but not ready yet");
+        }
+        loadBrain();
+      } catch (e) { toast(String(e)); }
+      finally { $("#secretSave").disabled = false; $("#secretSave").textContent = "Save"; }
+    };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") $("#secretSave").click(); });
+    return;
+  }
   openBrainModal(`Set up ${name}`, (CONNECTOR_HELP[name] || "<p>No setup needed.</p>")
     + `<p class="t" style="margin-top:10px">Add the value to your <code>.env</code> and restart Lodestone.</p>`);
 }

@@ -33,6 +33,11 @@ class Connector:
     label: str = "Base"
     #: True when the connector can run with no extra credentials/config.
     always_available: bool = False
+    #: Connectors that authenticate with a single pasted token declare it here,
+    #: so the UI renders an in-app field (no .env editing). Example:
+    #:   secret_field = {"key": "NOTION_TOKEN", "label": "Integration secret",
+    #:                   "placeholder": "ntn_…", "help_url": "https://…"}
+    secret_field: dict | None = None
 
     def __init__(self, store: MemoryStore | None = None) -> None:
         self.store = store or get_store()

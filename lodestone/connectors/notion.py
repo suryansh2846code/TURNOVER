@@ -31,11 +31,24 @@ def _block_text(block: dict) -> str:
 class NotionConnector(Connector):
     name = "notion"
     label = "Notion"
+    secret_field = {
+        "key": "NOTION_TOKEN",
+        "label": "Notion integration secret",
+        "placeholder": "ntn_… (or secret_…)",
+        "help_url": "https://www.notion.so/my-integrations",
+        "steps": [
+            "Open notion.so/my-integrations → <b>New integration</b> (Internal), "
+            "then copy the <b>Internal Integration Secret</b>.",
+            "Paste it below and click Save.",
+            "In Notion, open each page/database you want Lodestone to read → "
+            "<b>⋯ → Connections → Add</b> your integration.",
+        ],
+    }
 
     def is_configured(self) -> tuple[bool, str]:
         if get_settings().notion_token:
             return True, ""
-        return False, "set NOTION_TOKEN (internal integration secret)"
+        return False, "click setup to paste your Notion integration secret"
 
     def sync(self, *, page_size: int = 50, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)

@@ -66,7 +66,44 @@ class Settings(BaseSettings):
 
     @property
     def notion_token(self) -> str | None:
-        return os.environ.get("NOTION_TOKEN")
+        return self.get_secret("NOTION_TOKEN")
+
+    # ── user-entered secrets (saved from the UI, no .env editing) ──────────
+    #   Stored locally at ~/Library/Lodestone/secrets.json, chmod 600.
+    #   Environment variables still win, so power users can override.
+    def _secrets_path(self) -> Path:
+        return self.home / "secrets.json"
+
+    def _load_secrets(self) -> dict:
+        import json
+        try:
+            return json.loads(self._secrets_path().read_text())
+        except Exception:
+            return {}
+
+    def get_secret(self, key: str) -> str | None:
+        """Resolve a secret: environment variable first, then the local store."""
+        env = os.environ.get(key)
+        if env:
+            return env
+        val = self._load_secrets().get(key)
+        return val or None
+
+    def set_secret(self, key: str, value: str | None) -> None:
+        """Save (or clear, when value is falsy) a secret in the local store."""
+        import json
+        data = self._load_secrets()
+        if value:
+            data[key] = value.strip()
+        else:
+            data.pop(key, None)
+        self.ensure_home()
+        path = self._secrets_path()
+        path.write_text(json.dumps(data, indent=2))
+        try:
+            path.chmod(0o600)
+        except Exception:
+            pass
 
     @property
     def google_client_secrets(self) -> Path | None:
