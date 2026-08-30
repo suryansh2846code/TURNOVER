@@ -74,6 +74,13 @@ class Scheduler:
         if removed:
             summary["_deduped"] = removed
 
+        # fire routines: new-email ones if mail arrived, plus any due schedule ones
+        try:
+            from .routines import sweep
+            sweep(new_email_count=summary.get("gmail", {}).get("added", 0))
+        except Exception:
+            pass
+
         self.last_run = datetime.now(timezone.utc).isoformat()
         self.last_result = summary
         return summary
@@ -138,6 +145,12 @@ class Scheduler:
                     desktop_notify("◆ Lodestone ⚠️",
                                    f"Scheduled action failed: {res.get('error', '')}")
                 sched.mark_done(a["id"], json.dumps(res)[:400])
+        except Exception:
+            pass
+        # 3) schedule-triggered routines (checked every cycle, interval-gated)
+        try:
+            from .routines import sweep
+            sweep(new_email_count=0)
         except Exception:
             pass
 

@@ -6,9 +6,36 @@ runs the corresponding connector's WRITE method.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Callable
 
 from .connectors import get_connector
+
+_ACTION_RE = re.compile(r"<action\s+([^>]*?)>(.*?)</action>", re.I | re.S)
+_ATTR_RE = re.compile(r'(\w+)="([^"]*)"')
+
+
+def parse_actions(text: str) -> list[dict]:
+    """Extract <action …>…</action> proposals from a model reply (server-side
+    twin of the UI parser) so routines can auto-execute them."""
+    out = []
+    for attrs, inner in _ACTION_RE.findall(text or ""):
+        a: dict = {"params": {}}
+        for k, v in _ATTR_RE.findall(attrs):
+            if k == "type":
+                a["type"] = v
+            else:
+                a["params"][k] = v
+        t = a.get("type")
+        if t == "send_email":
+            a["params"]["body"] = inner.strip()
+        elif t == "create_event":
+            a["params"]["description"] = inner.strip()
+        elif t == "set_reminder":
+            a["params"]["message"] = inner.strip()
+        if t:
+            out.append(a)
+    return out
 
 
 def _send_email(params: dict) -> dict:

@@ -226,6 +226,36 @@ def execute_action(body: ActionIn):
     return execute(body.type, body.params)
 
 
+class NewRoutine(BaseModel):
+    name: str
+    agent_id: str = "personal"
+    trigger: str = "new_email"          # new_email | schedule
+    instruction: str
+    interval_min: int = 60
+
+@app.get("/api/routines")
+def list_routines():
+    from ..routines import get_routines
+    return {"routines": get_routines().list()}
+
+@app.post("/api/routines")
+def create_routine(body: NewRoutine):
+    from ..routines import get_routines
+    return get_routines().create(body.name, body.agent_id, body.trigger,
+                                 body.instruction, body.interval_min)
+
+@app.post("/api/routines/{rid}/toggle")
+def toggle_routine(rid: str, on: bool = True):
+    from ..routines import get_routines
+    get_routines().toggle(rid, on)
+    return {"ok": True}
+
+@app.delete("/api/routines/{rid}")
+def delete_routine(rid: str):
+    from ..routines import get_routines
+    return {"deleted": get_routines().delete(rid)}
+
+
 @app.get("/api/reminders")
 def list_reminders():
     import json as _json

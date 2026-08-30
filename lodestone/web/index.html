@@ -56,6 +56,10 @@
         <div id="reminderList" class="tasks"></div>
       </div>
 
+      <div class="side-label conn-head">⚡ Automations
+        <button id="newRoutineBtn" class="tiny ghost">＋ New</button></div>
+      <div id="routineList" class="tasks"></div>
+
       <div class="side-label">Brain</div>
       <div id="brainStats" class="brain-stats"></div>
       <div class="addbox">
@@ -72,6 +76,32 @@
       <div id="connectors" class="connectors"></div>
     </aside>
   </div>
+  <!-- new automation / routine -->
+  <div id="routineModal" class="modal-bg" hidden>
+    <div class="modal">
+      <div class="modal-head"><b>Create an automation</b><button id="rmClose" class="ghost tiny">✕</button></div>
+      <div class="am-body">
+        <label>Name</label>
+        <input id="rmName" placeholder="e.g. Forward new emails" />
+        <label>Agent</label>
+        <select id="rmAgent"></select>
+        <label>Trigger</label>
+        <select id="rmTrigger">
+          <option value="new_email">When a new email arrives</option>
+          <option value="schedule">On a schedule (every N minutes)</option>
+        </select>
+        <div id="rmIntervalWrap" hidden>
+          <label>Every (minutes)</label>
+          <input id="rmInterval" type="number" value="60" />
+        </div>
+        <label>Instruction (what the agent should do)</label>
+        <textarea id="rmInstruction" rows="3" placeholder="e.g. Summarize the new email and send the summary to me@gmail.com"></textarea>
+        <p class="t" style="font-size:11px;margin-top:6px">⚠️ Automations run without a per-time confirm — actions (like sending) fire automatically. You can disable or delete anytime.</p>
+      </div>
+      <div class="modal-foot"><span></span><button id="rmCreate">Create automation</button></div>
+    </div>
+  </div>
+
   <!-- new custom agent -->
   <div id="agentModal" class="modal-bg" hidden>
     <div class="modal">

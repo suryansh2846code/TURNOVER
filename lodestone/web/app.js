@@ -482,6 +482,44 @@ $("#ingestBtn").onclick = async () => {
   $("#ingestText").value = ""; toast("added to brain"); loadBrain();
 };
 
+// ── automations / routines ─────────────────────────────────────────────────
+async function loadRoutines() {
+  try {
+    const { routines } = await api("/api/routines");
+    $("#routineList").innerHTML = routines.length ? routines.map((r) => {
+      const trig = r.trigger === "new_email" ? "on new email" : `every ${r.interval_min}m`;
+      return `<div class="task"><div class="body">
+        <div class="ttl">${esc(r.name)} ${r.enabled ? "" : "<span class='t'>(off)</span>"}</div>
+        <div class="due">${trig} · ${esc(r.agent_id)}</div></div>
+        <span><span class="check" data-toggle-r="${r.id}" data-on="${r.enabled}" title="${r.enabled ? "disable" : "enable"}">${r.enabled ? "⏸" : "▶"}</span>
+        <span class="del" data-del-r="${r.id}">✕</span></span></div>`;
+    }).join("") : `<div class="tasks-empty">No automations yet.</div>`;
+    document.querySelectorAll("[data-toggle-r]").forEach((b) => b.onclick = async () => {
+      await api(`/api/routines/${b.dataset.toggleR}/toggle?on=${b.dataset.on !== "1"}`, { method: "POST" });
+      loadRoutines();
+    });
+    document.querySelectorAll("[data-del-r]").forEach((b) => b.onclick = async () => {
+      await api(`/api/routines/${b.dataset.delR}`, { method: "DELETE" }); toast("Automation removed"); loadRoutines();
+    });
+  } catch (_) {}
+}
+$("#newRoutineBtn").onclick = async () => {
+  const { agents } = await api("/api/agents");
+  $("#rmAgent").innerHTML = agents.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join("");
+  $("#rmName").value = ""; $("#rmInstruction").value = ""; $("#rmInterval").value = "60";
+  $("#routineModal").hidden = false;
+};
+$("#rmTrigger").onchange = () => { $("#rmIntervalWrap").hidden = $("#rmTrigger").value !== "schedule"; };
+$("#rmClose").onclick = () => $("#routineModal").hidden = true;
+$("#rmCreate").onclick = async () => {
+  const name = $("#rmName").value.trim(), instruction = $("#rmInstruction").value.trim();
+  if (!name || !instruction) { toast("Name & instruction required"); return; }
+  await api("/api/routines", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, agent_id: $("#rmAgent").value, trigger: $("#rmTrigger").value,
+      instruction, interval_min: parseInt($("#rmInterval").value) || 60 }) });
+  $("#routineModal").hidden = true; toast("Automation created"); loadRoutines();
+};
+
 // ── create custom agent ─────────────────────────────────────────────────
 async function openAgentModal() {
   const { tools } = await api("/api/agents/tools");
@@ -525,4 +563,6 @@ async function maybeOnboard() {
   } catch (_) {}
 }
 
-loadAgents(); loadProviders(); loadBrain(); loadTasks(); loadReminders(); maybeOnboard();
+loadAgents(); loadProviders(); loadBrain(); loadTasks(); loadReminders(); loadRoutines(); maybeOnboard();
+// keep time-based panels fresh so fired reminders / completed sends update
+setInterval(() => { loadReminders(); loadRoutines(); }, 45000);
