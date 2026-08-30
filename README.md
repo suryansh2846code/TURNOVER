@@ -15,6 +15,8 @@ knowledge-graph brain** on your own machine. Then spin up specialized **agents**
 - 🔒 **Local-first** — everything in `~/Library/Lodestone`, no cloud copy, no telemetry.
 - ⚡ **Runs day one** — offline `mock` model + `hash` embeddings mean zero keys required to try it.
 
+> 📖 **The story:** [`docs/JOURNEY.md`](docs/JOURNEY.md) — how it was built, start to now. **Decisions:** [`docs/DECISIONS.md`](docs/DECISIONS.md).
+>
 > 📖 **New here?** Read [`docs/PROJECT.md`](docs/PROJECT.md) — what this is, how
 > every part works, and why each decision was made — and
 > [`docs/CONCEPTS.md`](docs/CONCEPTS.md) — embeddings, vector search, semantic
