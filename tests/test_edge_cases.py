@@ -128,3 +128,19 @@ def test_custom_app_storage_roundtrip():
     finally:
         assert delete_app(aid) is True
         assert get_app(aid) is None
+
+
+def test_custom_api_fieldless_records_stay_distinct(tmp_path, monkeypatch):
+    """Records missing the title/body field must not collapse to one 'None'."""
+    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
+    from lodestone.config import get_settings
+    get_settings.cache_clear()
+    from lodestone.connectors.custom_api import CustomAPIConnector
+    app = {"id": "z", "name": "T", "base_url": "https://ex.com", "endpoint": "/x",
+           "auth_type": "none", "items_path": "d", "title_field": "name",
+           "body_field": "desc"}
+    conn = CustomAPIConnector(dict(app))
+    conn._request = lambda: {"d": [{"other": 1}, {"other": 2}, {"other": 3}]}
+    res = conn.sync()
+    assert res.added == 3 and res.skipped == 0
+    get_settings.cache_clear()

@@ -158,9 +158,14 @@ class CustomAPIConnector(Connector):
             for it in items[:max_items]:
                 if not isinstance(it, dict):
                     it = {"value": it}
-                title = str(_dig(it, tf) if tf else "") or self.label
-                body = str(_dig(it, bf) if bf else "") or \
-                    json.dumps(it, ensure_ascii=False)[:2000]
+                # Missing field → None; str(None) is "None" (truthy), so guard
+                # explicitly rather than relying on `or` fallback, else field-less
+                # records all collapse to an identical "None" and get deduped away.
+                tval = _dig(it, tf) if tf else None
+                bval = _dig(it, bf) if bf else None
+                title = str(tval) if tval is not None else self.label
+                body = (str(bval) if bval is not None
+                        else json.dumps(it, ensure_ascii=False)[:2000])
                 text = f"{self.label} — {title}\n\n{body}"
                 out = brain.ingest(text, source=self.name, kind="record",
                                    title=title, fast=True)
