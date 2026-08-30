@@ -111,15 +111,33 @@ class Scheduler:
                 return
 
     def _fire_reminders(self) -> None:
+        from .notify import desktop_notify
+        # 1) reminder notifications
         try:
             from .reminders import get_reminders
-            from .notify import desktop_notify
             store = get_reminders()
             for r in store.due():
                 title = "◆ Lodestone" + (f" · {r['agent_id'].title()}"
                                           if r.get("agent_id") else "")
                 desktop_notify(title, r["message"])
                 store.mark_fired(r["id"])
+        except Exception:
+            pass
+        # 2) scheduled actions (auto-send email / create event) — fire + notify
+        try:
+            import json
+            from .actions import run_now
+            from .scheduled import get_scheduled
+            sched = get_scheduled()
+            for a in sched.due():
+                params = json.loads(a["params"] or "{}")
+                res = run_now(a["type"], params)
+                if res.get("ok"):
+                    desktop_notify("◆ Lodestone ✓", res.get("detail", "Action done"))
+                else:
+                    desktop_notify("◆ Lodestone ⚠️",
+                                   f"Scheduled action failed: {res.get('error', '')}")
+                sched.mark_done(a["id"], json.dumps(res)[:400])
         except Exception:
             pass
 

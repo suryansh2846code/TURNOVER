@@ -64,7 +64,8 @@ REGISTRY: dict[str, dict[str, Any]] = {
 }
 
 
-def execute(action_type: str, params: dict) -> dict:
+def run_now(action_type: str, params: dict) -> dict:
+    """Run an action immediately (used by the scheduler for due scheduled ones)."""
     spec = REGISTRY.get(action_type)
     if not spec:
         return {"ok": False, "error": f"unknown action '{action_type}'"}
@@ -72,3 +73,31 @@ def execute(action_type: str, params: dict) -> dict:
         return spec["handler"](params or {})
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:200]}
+
+
+def execute(action_type: str, params: dict) -> dict:
+    """Confirm-time execution. If the action carries an `at` time (and supports
+    scheduling), SCHEDULE it to fire later instead of running now — the user has
+    confirmed both the content and the time."""
+    spec = REGISTRY.get(action_type)
+    if not spec:
+        return {"ok": False, "error": f"unknown action '{action_type}'"}
+    params = params or {}
+
+    at = (params.get("at") or "").strip()
+    if at and action_type in ("send_email", "create_event"):
+        from datetime import datetime
+        from .reminders import parse_when
+        from .scheduled import get_scheduled
+        fire_at = parse_when(at)
+        if not fire_at:
+            return {"ok": False, "error": f"couldn't understand the time '{at}'"}
+        sched_params = {k: v for k, v in params.items() if k != "at"}
+        get_scheduled().add(action_type, sched_params, fire_at,
+                            params.get("agent_id"))
+        nice = datetime.fromisoformat(fire_at).strftime("%a %b %d, %-I:%M %p")
+        verb = "Email" if action_type == "send_email" else "Event"
+        return {"ok": True, "scheduled": True,
+                "detail": f"{verb} scheduled — will fire automatically at {nice}"}
+
+    return run_now(action_type, params)

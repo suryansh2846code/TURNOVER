@@ -50,20 +50,20 @@ def parse_when(text: str, now: datetime | None = None) -> str | None:
                  else timedelta(hours=n))
         return (now + delta).isoformat()
 
-    # time of day
+    # time of day — an EXPLICIT time (12am, 3pm, 17:30) beats a vague word
     hour = minute = None
-    for name, (h, mi) in _NAMED.items():
-        if re.search(rf"\b{name}\b", t):
-            hour, minute = h, mi
-            break
-    if hour is None:
-        if m := re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", t):
-            hour = int(m.group(1)) % 12
-            minute = int(m.group(2) or 0)
-            if m.group(3) == "pm":
-                hour += 12
-        elif m := re.search(r"\b(\d{1,2}):(\d{2})\b", t):
-            hour, minute = int(m.group(1)), int(m.group(2))
+    if m := re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", t):
+        hour = int(m.group(1)) % 12
+        minute = int(m.group(2) or 0)
+        if m.group(3) == "pm":
+            hour += 12
+    elif m := re.search(r"\b(\d{1,2}):(\d{2})\b", t):
+        hour, minute = int(m.group(1)), int(m.group(2))
+    else:
+        for name, (h, mi) in _NAMED.items():
+            if re.search(rf"\b{name}\b", t):
+                hour, minute = h, mi
+                break
 
     # date part
     from .core.dateparse import parse_date_range
@@ -71,15 +71,15 @@ def parse_when(text: str, now: datetime | None = None) -> str | None:
     base = datetime.fromisoformat(dr[0]).date() if dr else now.date()
 
     if hour is None:
-        # date given, no time → 9am; nothing at all → can't schedule
         if not dr:
-            return None
-        hour, minute = 9, 0
+            return None       # nothing time-like → can't schedule
+        hour, minute = 9, 0   # a date with no time → 9am
 
     dt = now.replace(year=base.year, month=base.month, day=base.day,
                      hour=hour, minute=minute, second=0, microsecond=0)
-    # only-time in the past → assume tomorrow
-    if dt <= now and not dr:
+    # vague date ("today"/"tonight"/time-only) in the past → next day
+    vague = dr is None or bool(re.search(r"\b(today|tonight|now)\b", t))
+    if dt <= now and vague:
         dt += timedelta(days=1)
     return dt.isoformat()
 

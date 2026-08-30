@@ -120,10 +120,12 @@ function parseActions(text) {
 function actionCard(a) {
   const p = a.params;
   let title, rows, verb = "send";
+  const at = p.at || p.when;
   if (a.type === "send_email") {
-    title = "✉️ Send email"; verb = "send";
+    title = "✉️ Send email"; verb = at ? "schedule" : "send";
     rows = `<div class="ac-row"><b>To</b> ${esc(p.to || "")}</div>
        <div class="ac-row"><b>Subject</b> ${esc(p.subject || "")}</div>
+       ${at ? `<div class="ac-row"><b>Send at</b> ${esc(at)}</div>` : ""}
        <div class="ac-body">${esc(p.body || "")}</div>`;
   } else if (a.type === "set_reminder") {
     title = "⏰ Set reminder"; verb = "set";
@@ -411,7 +413,7 @@ async function loadReminders() {
     $("#reminderWrap").hidden = reminders.length === 0;
     $("#reminderList").innerHTML = reminders.map((r) => {
       const when = new Date(r.fire_at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-      return `<div class="task"><div class="body"><div class="ttl">${esc(r.message)}</div>
+      return `<div class="task"><div class="body"><div class="ttl">${esc(r.label || r.message)}</div>
         <div class="due today">${esc(when)}${r.agent_id ? " · " + esc(r.agent_id) : ""}</div></div>
         <span class="del" data-del-rem="${r.id}">✕</span></div>`;
     }).join("");

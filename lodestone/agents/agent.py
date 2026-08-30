@@ -76,6 +76,11 @@ class Agent:
             "confirm. Fill fields from the brain/context (e.g. the recipient from "
             "the email thread; the user's own timezone). Write a short line before "
             "the tag explaining what you drafted. Never put a fake 'Sent!'.\n"
+            "SCHEDULING: to send an email or create an event at a FUTURE time, add "
+            'an at="…" attribute, e.g. <action type="send_email" '
+            'to="x@y.com" subject="…" at="tonight 12am">body</action>. On confirm '
+            "it fires automatically at that time — you do NOT need a separate "
+            "reminder. Only use set_reminder for a plain notification.\n"
             "Be concise and act like a capable teammate."
         )
 

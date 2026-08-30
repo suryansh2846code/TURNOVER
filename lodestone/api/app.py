@@ -228,13 +228,27 @@ def execute_action(body: ActionIn):
 
 @app.get("/api/reminders")
 def list_reminders():
+    import json as _json
     from ..reminders import get_reminders
-    return {"reminders": get_reminders().upcoming()}
+    from ..scheduled import get_scheduled
+    items = [{"kind": "reminder", "id": r["id"], "label": r["message"],
+              "fire_at": r["fire_at"], "agent_id": r.get("agent_id")}
+             for r in get_reminders().upcoming()]
+    for a in get_scheduled().upcoming():
+        p = _json.loads(a["params"] or "{}")
+        label = (f"Send email to {p.get('to', '')}" if a["type"] == "send_email"
+                 else f"Create event: {p.get('title', '')}")
+        items.append({"kind": "action", "id": a["id"], "label": "⏳ " + label,
+                      "fire_at": a["fire_at"], "agent_id": a.get("agent_id")})
+    items.sort(key=lambda x: x["fire_at"])
+    return {"reminders": items}
 
 @app.delete("/api/reminders/{rid}")
 def delete_reminder(rid: str):
     from ..reminders import get_reminders
-    return {"deleted": get_reminders().delete(rid)}
+    from ..scheduled import get_scheduled
+    ok = get_reminders().delete(rid) or get_scheduled().delete(rid)
+    return {"deleted": ok}
 
 
 # ── tasks ─────────────────────────────────────────────────────────────────
