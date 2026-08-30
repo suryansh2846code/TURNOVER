@@ -9,6 +9,8 @@ from .notion import NotionConnector
 from .gdrive import GoogleDriveConnector
 from .gcal import GoogleCalendarConnector
 from .imessage import IMessageConnector
+from .apple_mail import AppleMailConnector
+from .apple_calendar import AppleCalendarConnector
 
 REGISTRY: dict[str, type[Connector]] = {
     FilesConnector.name: FilesConnector,
@@ -18,6 +20,8 @@ REGISTRY: dict[str, type[Connector]] = {
     NotionConnector.name: NotionConnector,
     GoogleDriveConnector.name: GoogleDriveConnector,
     IMessageConnector.name: IMessageConnector,
+    AppleMailConnector.name: AppleMailConnector,
+    AppleCalendarConnector.name: AppleCalendarConnector,
 }
 
 
