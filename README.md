@@ -54,7 +54,15 @@ uv venv && uv pip install -e .          # core, runs offline with zero keys
 uv pip install -e ".[all]"              # + real embeddings & all connector SDKs
 ```
 
-## Quickstart
+## Run as a desktop app
+
+```bash
+uv pip install -e ".[desktop]"           # native-window deps (pywebview)
+lodestone app                            # opens Lodestone in a native window
+bash scripts/build-macos-app.sh          # → ~/Applications/Lodestone.app (double-click)
+```
+
+## Quickstart (browser)
 
 ```bash
 lodestone serve                          # workspace at http://127.0.0.1:8787

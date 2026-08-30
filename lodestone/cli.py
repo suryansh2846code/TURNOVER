@@ -11,9 +11,16 @@ console = Console()
 
 @app.command()
 def serve():
-    """Start the workspace (chat UI + API)."""
+    """Start the workspace server (open in a browser)."""
     from .api.app import run
     run()
+
+
+@app.command("app")
+def desktop_app():
+    """Launch Lodestone as a native desktop window."""
+    from .desktop import run_app
+    run_app()
 
 
 @app.command()
