@@ -20,6 +20,21 @@ def _send_email(params: dict) -> dict:
     return get_connector("gmail").send_email(to, subject, body)
 
 
+def _set_reminder(params: dict) -> dict:
+    from .reminders import get_reminders, parse_when
+    message = (params.get("message") or params.get("body") or "").strip()
+    when = params.get("at") or params.get("when") or ""
+    if not message:
+        return {"ok": False, "error": "reminder message required"}
+    fire_at = parse_when(when)
+    if not fire_at:
+        return {"ok": False, "error": f"couldn't understand the time '{when}'"}
+    r = get_reminders().add(message, fire_at, params.get("agent_id"))
+    from datetime import datetime
+    nice = datetime.fromisoformat(r["fire_at"]).strftime("%a %b %d, %-I:%M %p")
+    return {"ok": True, "detail": f"Reminder set for {nice}"}
+
+
 def _create_event(params: dict) -> dict:
     title = (params.get("title") or "").strip()
     start = (params.get("start") or "").strip()
@@ -41,6 +56,10 @@ REGISTRY: dict[str, dict[str, Any]] = {
     "create_event": {
         "handler": _create_event, "label": "Create calendar event",
         "fields": ["title", "start", "end", "description", "attendees"],
+    },
+    "set_reminder": {
+        "handler": _set_reminder, "label": "Set reminder",
+        "fields": ["message", "at"],
     },
 }
 

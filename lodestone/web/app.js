@@ -110,6 +110,7 @@ function parseActions(text) {
     while ((mm = re.exec(attrs))) { if (mm[1] === "type") a.type = mm[2]; else a.params[mm[1]] = mm[2]; }
     if (a.type === "send_email") a.params.body = inner.trim();
     else if (a.type === "create_event") a.params.description = inner.trim();
+    else if (a.type === "set_reminder") a.params.message = inner.trim();
     if (a.type) actions.push(a);
     return "";   // strip the tag from the visible text
   });
@@ -118,20 +119,28 @@ function parseActions(text) {
 
 function actionCard(a) {
   const p = a.params;
-  const isEmail = a.type === "send_email";
-  const title = isEmail ? "✉️ Send email" : "📅 Create calendar event";
-  const rows = isEmail
-    ? `<div class="ac-row"><b>To</b> ${esc(p.to || "")}</div>
+  let title, rows, verb = "send";
+  if (a.type === "send_email") {
+    title = "✉️ Send email"; verb = "send";
+    rows = `<div class="ac-row"><b>To</b> ${esc(p.to || "")}</div>
        <div class="ac-row"><b>Subject</b> ${esc(p.subject || "")}</div>
-       <div class="ac-body">${esc(p.body || "")}</div>`
-    : `<div class="ac-row"><b>Title</b> ${esc(p.title || "")}</div>
+       <div class="ac-body">${esc(p.body || "")}</div>`;
+  } else if (a.type === "set_reminder") {
+    title = "⏰ Set reminder"; verb = "set";
+    rows = `<div class="ac-row"><b>Remind</b> ${esc(p.message || "")}</div>
+       <div class="ac-row"><b>When</b> ${esc(p.at || p.when || "")}</div>`;
+  } else {
+    title = "📅 Create calendar event"; verb = "create";
+    rows = `<div class="ac-row"><b>Title</b> ${esc(p.title || "")}</div>
        <div class="ac-row"><b>When</b> ${esc(p.start || "")}${p.end ? " → " + esc(p.end) : ""}</div>
        ${p.description ? `<div class="ac-body">${esc(p.description)}</div>` : ""}`;
+  }
+  const isEmail = a.type === "send_email";
   const el = document.createElement("div");
   el.className = "action-card";
   el.innerHTML = `<div class="ac-head">${title}<span class="ac-tag">needs your confirmation</span></div>
     ${rows}
-    <div class="ac-actions"><button class="ac-confirm">Confirm & ${isEmail ? "send" : "create"}</button>
+    <div class="ac-actions"><button class="ac-confirm">Confirm & ${verb}</button>
     <button class="ac-cancel ghost">Cancel</button></div>
     <div class="ac-result"></div>`;
   el.querySelector(".ac-cancel").onclick = () => { el.querySelector(".ac-actions").innerHTML = "<span class='muted'>Cancelled</span>"; };
@@ -140,7 +149,7 @@ function actionCard(a) {
     try {
       const r = await api("/api/actions/execute", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: a.type, params: p }) });
+        body: JSON.stringify({ type: a.type, params: { ...p, agent_id: current } }) });
       const rr = el.querySelector(".ac-result");
       if (r.ok) { rr.innerHTML = `<span class="ac-ok">✓ ${esc(r.detail || "Done")}</span>`; return; }
       rr.innerHTML = `<span class="ac-err">⚠️ ${esc(r.error || "Failed")}</span>`;
@@ -207,7 +216,8 @@ async function send(text) {
     addTrace(res.trace || []);
     addMsg("assistant", res.reply);
     loadBrain();
-    loadTasks();   // an agent may have added/completed a task this turn
+    loadTasks();       // an agent may have added/completed a task this turn
+    loadReminders();   // …or set a reminder
   } catch (e) {
     spin.remove();
     if (controller && controller.signal.aborted) addMsg("assistant", "⏹ stopped");
@@ -395,6 +405,23 @@ async function loadTasks() {
   });
 }
 
+async function loadReminders() {
+  try {
+    const { reminders } = await api("/api/reminders");
+    $("#reminderWrap").hidden = reminders.length === 0;
+    $("#reminderList").innerHTML = reminders.map((r) => {
+      const when = new Date(r.fire_at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      return `<div class="task"><div class="body"><div class="ttl">${esc(r.message)}</div>
+        <div class="due today">${esc(when)}${r.agent_id ? " · " + esc(r.agent_id) : ""}</div></div>
+        <span class="del" data-del-rem="${r.id}">✕</span></div>`;
+    }).join("");
+    document.querySelectorAll("[data-del-rem]").forEach((b) => b.onclick = async () => {
+      await api(`/api/reminders/${b.dataset.delRem}`, { method: "DELETE" });
+      toast("Reminder removed"); loadReminders();
+    });
+  } catch (_) {}
+}
+
 async function addTask() {
   const title = $("#taskInput").value.trim();
   if (!title) return;
@@ -496,4 +523,4 @@ async function maybeOnboard() {
   } catch (_) {}
 }
 
-loadAgents(); loadProviders(); loadBrain(); loadTasks(); maybeOnboard();
+loadAgents(); loadProviders(); loadBrain(); loadTasks(); loadReminders(); maybeOnboard();

@@ -69,6 +69,9 @@ class Agent:
             'or  <action type="create_event" title="..." '
             'start="2026-09-01T15:00:00+05:30" end="2026-09-01T16:00:00+05:30">'
             "optional description</action>\n"
+            'or  <action type="set_reminder" at="tomorrow 3pm">Call the supplier'
+            "</action>  — for reminders/notifications that pop up on the user's "
+            "laptop at a time. Use natural times (in 2 hours, tonight, at 5pm).\n"
             "The user sees a Confirm button — the action only runs after they "
             "confirm. Fill fields from the brain/context (e.g. the recipient from "
             "the email thread; the user's own timezone). Write a short line before "

@@ -226,6 +226,17 @@ def execute_action(body: ActionIn):
     return execute(body.type, body.params)
 
 
+@app.get("/api/reminders")
+def list_reminders():
+    from ..reminders import get_reminders
+    return {"reminders": get_reminders().upcoming()}
+
+@app.delete("/api/reminders/{rid}")
+def delete_reminder(rid: str):
+    from ..reminders import get_reminders
+    return {"deleted": get_reminders().delete(rid)}
+
+
 # ── tasks ─────────────────────────────────────────────────────────────────
 class TaskIn(BaseModel):
     title: str

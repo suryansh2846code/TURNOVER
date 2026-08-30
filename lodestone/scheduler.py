@@ -96,13 +96,32 @@ class Scheduler:
         # small initial delay, then an immediate first sync (no manual CLI needed)
         if self._stop.wait(20):
             return
+        next_sync = 0.0
         while not self._stop.is_set():
-            try:
-                self.sync_all(interactive=False)
-            except Exception:
-                pass
-            if self._stop.wait(interval):
+            # fire due reminders often (every minute); sync on the longer interval
+            self._fire_reminders()
+            import time
+            if time.time() >= next_sync:
+                try:
+                    self.sync_all(interactive=False)
+                except Exception:
+                    pass
+                next_sync = time.time() + interval
+            if self._stop.wait(60):
                 return
+
+    def _fire_reminders(self) -> None:
+        try:
+            from .reminders import get_reminders
+            from .notify import desktop_notify
+            store = get_reminders()
+            for r in store.due():
+                title = "◆ Lodestone" + (f" · {r['agent_id'].title()}"
+                                          if r.get("agent_id") else "")
+                desktop_notify(title, r["message"])
+                store.mark_fired(r["id"])
+        except Exception:
+            pass
 
     def start(self) -> None:
         settings = get_settings()
