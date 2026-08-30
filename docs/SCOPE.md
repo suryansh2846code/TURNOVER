@@ -56,15 +56,29 @@
 
 ## ② NEW FEATURES  *(after hardening)*
 
-### Agent capabilities
+### Capable agents  *(make agents genuinely do things, not just chat)*
 - [ ] **Custom action tools** — let the agent *write* to apps (POST/create), not just read.
-- [ ] **MCP support** — add a Model Context Protocol server → agent gains its tools
+- [ ] **MCP client** — add a Model Context Protocol server → agent gains its tools
       (ecosystem-standard; Turnstone/Claude/Cursor use it).
+- [ ] **Multi-step planning loop** — plan → act → observe → verify, not one-shot answers.
+- [ ] **Self-verification** — agent checks its own result before claiming "done".
+- [ ] **Reliable tool-calling** — structured outputs; fix small-model flakiness.
+- [ ] **Per-agent working memory** — each agent remembers what it has done (partly there).
 - [ ] **Accountability-loop routine** — reminder → wait for check-in → re-nudge ×2 →
       mark "absent" (from the to-do-list request).
 - [ ] **Streaming responses** + inline tool-call trace.
 - [ ] **Learn the user's writing style** — drafts sound like them (Turnstone does this).
 - [ ] **On-demand Gmail fetch** — lazy fetch beyond the synced window (like Drive).
+
+### Brain as a service  *(let ANY external agent use the brain — big differentiator)*
+- [ ] **MCP server** ⭐ — expose the brain as MCP tools (`search_brain`, `remember`,
+      `get_entity`, `list_sources`) so Claude Desktop / Cursor / ChatGPT / custom
+      agents can query the user's second brain. Positioning: *the private memory
+      layer for every AI you use.*
+- [ ] **Token-authed local REST** — documented `/api/brain/query` for scripts /
+      n8n / Zapier-style automations.
+- [ ] **Security model** — localhost-only bind · per-agent API keys · read vs
+      read+write scopes · audit log · one-click revoke. (Prereq for both above.)
 
 ### More actions
 - [ ] Reply / forward email · update/complete task · reschedule event · Slack message.
