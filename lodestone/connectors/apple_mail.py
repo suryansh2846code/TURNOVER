@@ -72,6 +72,7 @@ def parse_emlx(path: Path) -> dict | None:
 class AppleMailConnector(Connector):
     name = "apple_mail"
     label = "Apple Mail"
+    platforms = ("darwin",)
 
     def is_configured(self) -> tuple[bool, str]:
         dirs = _mail_dirs()

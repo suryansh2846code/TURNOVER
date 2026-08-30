@@ -49,6 +49,7 @@ def parse_ics(text: str) -> dict | None:
 class AppleCalendarConnector(Connector):
     name = "apple_calendar"
     label = "Apple Calendar"
+    platforms = ("darwin",)
 
     def is_configured(self) -> tuple[bool, str]:
         if not CAL_ROOT.exists():

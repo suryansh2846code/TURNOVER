@@ -20,6 +20,7 @@ APPLE_EPOCH = 978307200
 class IMessageConnector(Connector):
     name = "imessage"
     label = "iMessage"
+    platforms = ("darwin",)
 
     def is_configured(self) -> tuple[bool, str]:
         if not CHAT_DB.exists():

@@ -31,7 +31,13 @@ def _free_port(host: str) -> int:
 
 def run_app() -> None:
     import uvicorn
-    import webview
+    try:
+        import webview
+    except ImportError:
+        raise SystemExit(
+            "The desktop window needs pywebview. Install it with:\n"
+            "    uv pip install -e '.[desktop]'   (or: pip install pywebview)\n"
+            "Or run the browser version instead:  lodestone serve")
 
     from .api.app import app as fastapi_app
     from .config import get_settings

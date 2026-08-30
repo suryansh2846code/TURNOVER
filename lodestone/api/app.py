@@ -182,6 +182,8 @@ def connectors():
     state = brain.store.all_connector_state()
     out = []
     for name, cls in REGISTRY.items():
+        if not cls.supported_here():
+            continue                      # hide macOS-only connectors off macOS
         inst = cls()
         ready, reason = inst.is_configured()
         out.append({"name": name, "label": cls.label, "ready": ready,

@@ -1,6 +1,7 @@
 """Base connector interface."""
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -38,6 +39,14 @@ class Connector:
     #:   secret_field = {"key": "NOTION_TOKEN", "label": "Integration secret",
     #:                   "placeholder": "ntn_…", "help_url": "https://…"}
     secret_field: dict | None = None
+    #: OS platforms this connector can work on (sys.platform values, e.g.
+    #: "darwin", "linux", "win32"). None = every platform. Lets the UI hide
+    #: macOS-only connectors on Linux/Windows instead of showing them broken.
+    platforms: tuple[str, ...] | None = None
+
+    @classmethod
+    def supported_here(cls) -> bool:
+        return cls.platforms is None or sys.platform in cls.platforms
 
     def __init__(self, store: MemoryStore | None = None) -> None:
         self.store = store or get_store()
