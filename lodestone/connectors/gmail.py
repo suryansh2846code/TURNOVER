@@ -188,8 +188,9 @@ class GmailConnector(Connector):
     def _ingest_message(self, service, meta, return_title=False):
         msg = (service.users().messages()
                .get(userId="me", id=meta["id"], format="full").execute())
-        headers = {h["name"].lower(): h["value"]
-                   for h in msg.get("payload", {}).get("headers", [])}
+        headers = {h["name"].lower(): h.get("value", "")
+                   for h in msg.get("payload", {}).get("headers", [])
+                   if h.get("name")}
         subject = headers.get("subject", "(no subject)")
         sender = headers.get("from", "")
         body = _extract_body(msg.get("payload", {})).strip()
@@ -198,10 +199,13 @@ class GmailConnector(Connector):
             return None if return_title else False
         text = f"From: {sender}\nSubject: {subject}\n\n{snippet[:4000]}"
         event_date = None
-        if msg.get("internalDate"):
-            from datetime import datetime, timezone
-            event_date = datetime.fromtimestamp(
-                int(msg["internalDate"]) / 1000, timezone.utc).date().isoformat()
+        try:
+            if msg.get("internalDate"):
+                from datetime import datetime, timezone
+                event_date = datetime.fromtimestamp(
+                    int(msg["internalDate"]) / 1000, timezone.utc).date().isoformat()
+        except (ValueError, TypeError, OSError):
+            event_date = None       # bad internalDate → just omit the date
         mem = self.store.add(
             text=text, source=self.name, kind="email", title=subject,
             uri=f"https://mail.google.com/mail/#all/{meta['id']}",
