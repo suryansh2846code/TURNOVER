@@ -80,6 +80,19 @@ _REGISTRY: dict[str, type[LLMProvider]] = {
 }
 
 
+# Where each backend sends your context at query time. "local" = stays on your
+# Mac; "cloud" = the injected brain context is sent off-device to that service.
+_LOCALITY = {
+    "mock":         ("local", "Nothing leaves your Mac (offline)."),
+    "ollama":       ("local", "Runs on your Mac — your context stays on-device."),
+    "claude-code":  ("cloud", "Sent to Anthropic through the Claude CLI."),
+    "anthropic":    ("cloud", "Sent to Anthropic's API."),
+    "openai":       ("cloud", "Sent to OpenAI's API."),
+    "openrouter":   ("cloud", "Sent to OpenRouter (and the chosen model's host)."),
+    "subscription": ("cloud", "Sent via your gateway to the model provider."),
+}
+
+
 def list_providers() -> list[dict]:
     out = []
     for name, cls in _REGISTRY.items():
@@ -87,7 +100,9 @@ def list_providers() -> list[dict]:
             ready, reason = cls().is_ready()
         except Exception as exc:
             ready, reason = False, str(exc)
-        out.append({"name": name, "ready": ready, "reason": reason})
+        locality, destination = _LOCALITY.get(name, ("cloud", "Sent to the model provider."))
+        out.append({"name": name, "ready": ready, "reason": reason,
+                    "locality": locality, "destination": destination})
     return out
 
 

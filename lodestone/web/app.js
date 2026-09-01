@@ -66,10 +66,27 @@ const MODEL_HINTS = {
   anthropic: "e.g. claude-sonnet-5", openai: "e.g. gpt-4o-mini",
   openrouter: "e.g. anthropic/claude-3.5-sonnet", mock: "offline test model",
 };
-function applyModelHint() { $("#modelHint").textContent = MODEL_HINTS[$("#provider").value] || ""; }
+function applyModelHint() {
+  $("#modelHint").textContent = MODEL_HINTS[$("#provider").value] || "";
+  updatePrivacyBadge();
+}
+function updatePrivacyBadge() {
+  const el = $("#privacyBadge");
+  if (!el) return;
+  const p = (PROVIDERS || []).find((x) => x.name === $("#provider").value);
+  if (!p) { el.hidden = true; return; }
+  el.hidden = false;
+  const local = p.locality === "local";
+  el.className = "privacy-badge " + (local ? "loc-local" : "loc-cloud");
+  el.innerHTML = `<span class="pb-ic">${local ? "🔒" : "☁️"}</span>` +
+    `<span>${local ? "On-device" : "Leaves your Mac"}</span>`;
+  el.title = p.destination || "";
+}
 
+let PROVIDERS = [];
 async function loadProviders() {
   const d = await api("/api/providers");
+  PROVIDERS = d.providers;
   const savedP = localStorage.getItem("lodestone_provider");
   const active = savedP || d.active;
   $("#provider").innerHTML = d.providers.map((p) =>
