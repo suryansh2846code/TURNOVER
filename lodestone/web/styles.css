@@ -149,6 +149,9 @@ button.tiny { padding: 6px 11px; font-size: 12px; }
   border-radius: 4px; padding: 1px 5px; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .dot.ok { background: var(--accent-2); } .dot.off { background: #5a6473; }
+.dot.stale { background: #d29922; }                    /* connected but overdue */
+.dot.syncing { background: var(--accent); animation: dot-pulse 1s ease-in-out infinite; }
+@keyframes dot-pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
 
 /* custom agent modal + delete */
 .del-agent { color: var(--muted); font-size: 10px; opacity: 0; margin-left: 4px; }

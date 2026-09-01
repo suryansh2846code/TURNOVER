@@ -311,16 +311,23 @@ async function loadBrain() {
     el.onclick = () => openEntity(el.dataset.entity));
   const { connectors } = await api("/api/connectors");
   CONNECTORS = connectors;
+  const staleAfterMin = Math.max(120, (SYNC_INTERVAL_MIN || 30) * 4);
   $("#connectors").innerHTML = connectors.map((c) => {
-    const last = c.state?.last_sync ? new Date(c.state.last_sync).toLocaleDateString() : "";
-    const sub = c.ready ? (last ? `synced ${last}` : "ready") : (c.reason || "not configured");
+    const ls = c.state?.last_sync ? new Date(c.state.last_sync) : null;
+    const ageMin = ls ? (Date.now() - ls.getTime()) / 60000 : null;
+    const stale = c.ready && ageMin !== null && ageMin > staleAfterMin;
+    const last = ls ? ls.toLocaleDateString() : "";
+    const dot = !c.ready ? "off" : stale ? "stale" : "ok";
+    const sub = !c.ready ? (c.reason || "not configured")
+      : !last ? "ready · not synced yet"
+      : stale ? `stale · last ${last}` : `synced ${last}`;
     const sync = c.ready ? `<button class="tiny ghost" data-sync="${esc(c.name)}">sync</button>` : "";
     const setup = c.custom
       ? `<button class="tiny ghost" data-editapp="${esc(c.name)}">edit</button>`
       : (c.ready ? "" : `<button class="tiny" data-setup="${esc(c.name)}">setup</button>`);
     const del = c.custom ? `<button class="tiny ghost" data-delapp="${esc(c.name)}" title="remove">✕</button>` : "";
-    return `<div class="conn">
-      <span class="conn-meta"><span class="dot ${c.ready ? "ok" : "off"}"></span>
+    return `<div class="conn" data-conn="${esc(c.name)}">
+      <span class="conn-meta"><span class="dot ${dot}"></span>
         <span><span class="conn-name">${esc(c.label)}</span><span class="conn-sub">${esc(sub)}</span></span></span>
       <span style="display:flex;gap:4px">${sync}${setup}${del}</span></div>`;
   }).join("");
@@ -356,9 +363,11 @@ async function startGoogleSignin() {
 }
 $("#googleSignin").onclick = startGoogleSignin;
 
+let SYNC_INTERVAL_MIN = 30;
 async function loadSyncStatus() {
   try {
     const s = await api("/api/sync/status");
+    if (s.interval_minutes) SYNC_INTERVAL_MIN = s.interval_minutes;
     const last = s.last_run ? new Date(s.last_run).toLocaleTimeString() : "not yet";
     $("#syncStatus").textContent = s.syncing ? "syncing now…"
       : (s.enabled ? `auto every ${s.interval_minutes}m · last ${last}` : "auto-sync off");
@@ -379,13 +388,31 @@ $("#syncAll").onclick = async () => {
 
 async function syncConn(name) {
   if (name === "files") { openPicker(); return; }   // folder picker for local files
-  toast(`syncing ${name}…`);
+  const row = document.querySelector(`.conn[data-conn="${CSS.escape(name)}"]`);
+  const subEl = row?.querySelector(".conn-sub");
+  const dotEl = row?.querySelector(".dot");
+  const btn = row?.querySelector(`[data-sync="${CSS.escape(name)}"]`);
+  if (subEl) subEl.textContent = "syncing…";
+  if (dotEl) { dotEl.className = "dot syncing"; }
+  if (btn) btn.disabled = true;
   try {
     const r = await api(`/api/connectors/${name}/sync`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ params: {} }) });
-    toast(r.errors?.length ? `${name}: ${r.errors[0]}` : `${name}: +${r.added} added`);
-    loadBrain();
-  } catch (e) { toast(String(e)); }
+    if (r.errors?.length) {
+      toast(`${name}: ${r.errors[0]}`);
+      if (subEl) subEl.textContent = "error — see setup";
+      if (dotEl) dotEl.className = "dot off";
+    } else {
+      toast(`${name}: +${r.added} added${r.skipped ? ` · ${r.skipped} skipped` : ""}`);
+      loadBrain();          // re-render with fresh state (green dot, "synced today")
+    }
+  } catch (e) {
+    toast(String(e));
+    if (subEl) subEl.textContent = "sync failed";
+    if (dotEl) dotEl.className = "dot off";
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 // ── brain detail modal (entity facts / memory search) ──────────────────────
