@@ -163,6 +163,86 @@ iMessage reads the local macOS chat.db (Full Disk Access, no cloud).
   systemic auto-`dedupe()` on startup + after sync (D4).
 - **Resume/shared notes invisible** — .docx support + Shared-with-me + on-demand
   fetch (C5, A12).
+- **parse_when crashed on invalid times** — "9:99"/"3:70" raised an uncaught
+  ValueError that could kill the reminder/action flow; now range-validated → None.
+- **Gmail base64 crash aborted the whole sync** — Gmail returns unpadded base64url;
+  `_decode` raised "Incorrect padding", and since the message loop shared one try,
+  ONE such email lost all remaining mail. Now re-pads + isolates each message (H4).
+- **Google auth stuck on expired/corrupt token** — a revoked refresh token (7-day
+  Testing-mode expiry) or corrupt token file failed every future sync forever with
+  the stale token never cleared. Now self-heals: drop + re-consent (H5).
+- **Custom-API field-less records collapsed to one "None"** — str(None) is truthy so
+  the `or` fallback never fired; field-less rows deduped to a single record (H8).
+- **"database is locked" under scheduler+API concurrency** — no busy_timeout; added
+  5s busy_timeout (+ WAL) on every DB (H6).
+- **claude-code "not found" as a GUI app** — Finder gives a stripped PATH; now searches
+  Homebrew/npm-global/Claude-local and passes an augmented PATH to the subprocess (H1).
+
+---
+
+## Production hardening & trust (H-series — the "make it a finished product" pass)
+
+### H1 — GUI-safe binary + platform-aware connectors
+Finder-launched apps get a minimal PATH; `claude` is found across Homebrew (Apple
+Silicon + Intel), npm-global and `~/.claude/local`. Connectors declare `platforms`;
+Apple Mail/Calendar/iMessage are darwin-only and hidden off macOS instead of shown broken.
+
+### H2 — Crash-isolation everywhere (one bad item never aborts a sync)
+Every list-syncing connector (Gmail, Calendar, Notion, Linear, GitHub, custom API)
+isolates each record: a malformed item is counted as skipped and the sync continues.
+
+### H3 — Providers fail with clear messages, never raw tracebacks
+OpenAI-compatible `chat()` maps unreachable host / 401·403 / 429 / 5xx / timeout /
+malformed response to short, actionable text. An engaging reply indicator (pulsing
+dot + cycling status + countdown + progress bar) replaces the static "thinking…".
+
+### H4 — Gmail base64url decode tolerates missing padding *(see bugs)*
+### H5 — Self-healing Google auth (corrupt/expired token → re-consent) *(see bugs)*
+### H6 — SQLite busy_timeout=5000 + WAL on all DBs *(see bugs)*
+
+### H7 — Input validation & safety at the API edge
+Empty/whitespace chat rejected (422, no wasted model call); chat/ingest payloads
+size-capped; custom-app URLs must be http(s) (urllib would otherwise read file://);
+email recipients validated against a real address pattern before send.
+
+### H8 — Custom API connector (connect any REST app, no code)
+Declarative: base URL + endpoint + auth (bearer/header/query) + dot-path field
+mapping; fetched and ingested like a built-in. No arbitrary code (no RCE). Field-less
+records stay distinct (see bugs).
+
+### H9 — In-app secret fields + macOS Keychain (encrypted at rest)
+Token connectors (Notion/Linear/GitHub/custom) declare a `secret_field` → the UI
+renders an in-app input, no `.env`. Secrets are stored in the **macOS Keychain**
+(encrypted at rest by the OS); env var → Keychain → legacy file resolution, with
+plaintext-file secrets migrated out on next save.
+
+### H10 — "What leaves my device" transparency badge
+Each model backend is classified local (Ollama/mock — stays on-device) or cloud
+(claude-code/anthropic/openai/openrouter/subscription — context sent off-device),
+shown as a 🔒/☁️ badge with a tooltip naming the destination. Serves the North Star (D2).
+
+### H11 — Brain export / import (you own your data)
+Portable JSON backup of every memory (no vectors); import re-embeds under the current
+embedder and rebuilds the graph, so a backup survives an embedder change or a new Mac.
+Dedup makes re-import idempotent.
+
+### H12 — Bundled Google Desktop OAuth client is committed
+Installed-app client secrets are non-confidential (PKCE + localhost redirect), so the
+Desktop client ships in-repo → testers get one-click sign-in on a fresh clone. Regenerate
+if secret-scanning ever revokes it.
+
+### H13 — First-run onboarding flow
+A "connect your data" screen with four real choices (Sign in with Google · local Mac
+sources · connect an app · tell it a fact), shown on a fresh/empty brain and reopenable
+via "? Getting started".
+
+### H14 — Per-connector sync feedback + stale-at-a-glance
+Live "syncing…" state per row; overdue connectors show an amber "stale" dot.
+
+### H15 — Test suite expanded 6 → 58; scheduler/routines log failures
+Edge-case regression tests (parse_when, actions, custom API, Gmail decode, auth
+self-heal, migrations, reminders, export/import, API validation). Background loops
+`log.exception` instead of silent `pass`.
 
 ---
 

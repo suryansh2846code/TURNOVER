@@ -136,10 +136,24 @@ background sync + **self-healing dedup** keep it current automatically; and it r
 on **any model you bring** (local Ollama or the user's own Claude). Built to a
 polished bar, with fixes made **systemic for all users**.
 
+## The production-hardening pass (making it a finished product)
+After the feature set was complete, a deliberate hardening sweep turned it from
+"works" into "shippable" — see the **H-series in DECISIONS.md**. Highlights:
+actions/agents that *do* things (send · schedule · remind · automate) with
+confirmation; **custom agents**; three new connectors (Linear · GitHub) plus a
+**custom-API connector** to connect any REST app with no code; **in-app token
+fields** backed by the **macOS Keychain** (encrypted at rest); a **"what leaves
+my device" badge** per model; **brain export/import**; a **first-run onboarding**
+flow; and a big reliability pass — crash-isolation on every sync, a Gmail base64
+bug that was silently killing whole syncs, self-healing Google auth (7-day expiry),
+SQLite `busy_timeout`, clean provider error messages, API input validation, and
+the test suite grown **6 → 58**. A machine-portability audit removed the last
+"works on my machine" gap (a gitignored OAuth client). Every fix stayed **systemic**.
+
 ## What's next (tracked)
-Action-taking ("draft a reply" with confirmation) · auto-migration versioning ·
-UI-based OAuth · on-demand fetch for Gmail · Tier-2 scaling (sqlite-vec + FTS5) ·
-custom agents · Tauri desktop shell.
+MCP (brain-as-a-service — server already scaffolded) · encrypt-at-rest done, next
+transparency panel polish · on-demand fetch for Gmail · Tier-2 scaling (sqlite-vec +
+FTS5) · signed/notarized DMG · landing page. Full map in **SCOPE.md**.
 
 ## The throughline
 Two things drove the whole journey: **research the real product before building**,

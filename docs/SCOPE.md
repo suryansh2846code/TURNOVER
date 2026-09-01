@@ -39,15 +39,17 @@
 - [ ] Date/time parsing edge cases (timezones, "next Tuesday", recurring).
 
 ### Feedback & error surfaces
-- [ ] Friendly empty states + error messages everywhere (no raw tracebacks to user).
-- [ ] Per-connector sync progress + result counts in the UI.
-- [ ] Clear "what's connected / what's stale" at a glance.
+- [x] Friendly error messages (provider failures, no raw tracebacks) + engaging
+      reply indicator. *(done, H3)*
+- [x] Per-connector sync progress + result counts in the UI. *(done, H14)*
+- [x] Clear "what's connected / what's stale" at a glance (amber stale dot). *(done, H14)*
 
 ### Safety & trust
 - [x] Brain **export / backup** (and import) — portable JSON, dedup-idempotent,
       re-embeds on import so it survives an embedder change / new machine. *(done)*
-- [ ] Encrypt secrets at rest (currently chmod-600 plaintext JSON).
-- [ ] "What leaves my device" transparency panel (cloud model = context leaves; local = not).
+- [x] Encrypt secrets at rest — now in the **macOS Keychain**, with migration off
+      the plaintext file. *(done, H9)*
+- [x] "What leaves my device" transparency badge — per-model local/cloud. *(done, H10)*
 
 ### Tests
 - [ ] Expand beyond ~6 smoke tests: recall, date parsing, connectors, on-demand
