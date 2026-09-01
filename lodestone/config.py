@@ -81,16 +81,73 @@ class Settings(BaseSettings):
         except Exception:
             return {}
 
+    # macOS Keychain — encrypted at rest by the OS, so tokens aren't sitting in
+    # a plaintext JSON file (which could leak via backups / synced home dirs).
+    _KC_SERVICE = "Lodestone"
+
+    def _keychain_ok(self) -> bool:
+        import shutil
+        import sys
+        return sys.platform == "darwin" and shutil.which("security") is not None
+
+    def _kc_get(self, key: str) -> str | None:
+        import subprocess
+        try:
+            r = subprocess.run(
+                ["security", "find-generic-password", "-w",
+                 "-s", self._KC_SERVICE, "-a", key],
+                capture_output=True, text=True)
+            return r.stdout.rstrip("\n") or None if r.returncode == 0 else None
+        except Exception:
+            return None
+
+    def _kc_set(self, key: str, value: str) -> bool:
+        # NOTE: value is passed as an argv (briefly visible in `ps`); acceptable
+        # for a personal-Mac tool and far better than a plaintext file at rest.
+        import subprocess
+        try:
+            r = subprocess.run(
+                ["security", "add-generic-password", "-U", "-A",
+                 "-s", self._KC_SERVICE, "-a", key, "-w", value],
+                capture_output=True)
+            return r.returncode == 0
+        except Exception:
+            return False
+
+    def _kc_delete(self, key: str) -> None:
+        import subprocess
+        try:
+            subprocess.run(["security", "delete-generic-password",
+                            "-s", self._KC_SERVICE, "-a", key], capture_output=True)
+        except Exception:
+            pass
+
     def get_secret(self, key: str) -> str | None:
-        """Resolve a secret: environment variable first, then the local store."""
+        """Resolve a secret: env var → macOS Keychain (encrypted) → legacy file."""
         env = os.environ.get(key)
         if env:
             return env
-        val = self._load_secrets().get(key)
-        return val or None
+        if self._keychain_ok():
+            v = self._kc_get(key)
+            if v:
+                return v
+        return self._load_secrets().get(key) or None   # legacy plaintext fallback
 
     def set_secret(self, key: str, value: str | None) -> None:
-        """Save (or clear, when value is falsy) a secret in the local store."""
+        """Store a secret encrypted at rest in the Keychain when available, else
+        in the local file. Any plaintext copy in the file is migrated out."""
+        if self._keychain_ok():
+            if value:
+                if self._kc_set(key, value.strip()):
+                    self._file_del_secret(key)          # drop any plaintext copy
+                    return
+            else:
+                self._kc_delete(key)
+                self._file_del_secret(key)
+                return
+        self._file_set_secret(key, value)               # non-mac / keychain failed
+
+    def _file_set_secret(self, key: str, value: str | None) -> None:
         import json
         data = self._load_secrets()
         if value:
@@ -104,6 +161,13 @@ class Settings(BaseSettings):
             path.chmod(0o600)
         except Exception:
             pass
+
+    def _file_del_secret(self, key: str) -> None:
+        import json
+        data = self._load_secrets()
+        if key in data:
+            del data[key]
+            self._secrets_path().write_text(json.dumps(data, indent=2))
 
     @property
     def google_client_secrets(self) -> Path | None:
