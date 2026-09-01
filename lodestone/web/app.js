@@ -749,6 +749,35 @@ $("#obFact").onclick = () => { closeOnboard(); $("#ingestText").focus();
   $("#ingestText").scrollIntoView({ behavior: "smooth" }); };
 $("#helpBtn").onclick = openOnboard;
 
+// ── brain export / import (you own your data) ──────────────────────────────
+$("#brainExport").onclick = async () => {
+  try {
+    const r = await fetch("/api/brain/export");
+    if (!r.ok) throw new Error("export failed");
+    const blob = await r.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `lodestone-brain-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(a.href);
+    toast("Brain exported ✓");
+  } catch (e) { toast(String(e)); }
+};
+$("#brainImport").onclick = () => $("#brainImportFile").click();
+$("#brainImportFile").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const r = await api("/api/brain/import", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data) });
+    toast(`Imported ${r.added} memories${r.skipped ? ` · ${r.skipped} already had` : ""}`);
+    loadBrain();
+  } catch (err) { toast("Import failed — is it a Lodestone backup?"); }
+  finally { e.target.value = ""; }
+};
+
 async function maybeOnboard() {
   // show on a fresh brain, or the first time this browser opens the app
   try {

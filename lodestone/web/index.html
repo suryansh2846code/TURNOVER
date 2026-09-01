@@ -60,7 +60,12 @@
         <button id="newRoutineBtn" class="tiny ghost">＋ New</button></div>
       <div id="routineList" class="tasks"></div>
 
-      <div class="side-label">Brain</div>
+      <div class="side-label">Brain
+        <span class="brain-io">
+          <button id="brainExport" class="tiny ghost" title="Download a backup of your brain">⤓ Export</button>
+          <button id="brainImport" class="tiny ghost" title="Restore from a backup">⤒ Import</button>
+          <input id="brainImportFile" type="file" accept="application/json,.json" hidden />
+        </span></div>
       <div id="brainStats" class="brain-stats"></div>
       <div class="addbox">
         <textarea id="ingestText" rows="2" placeholder="Teach the brain something…"></textarea>

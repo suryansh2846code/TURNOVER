@@ -162,6 +162,24 @@ class MemoryStore:
             ).fetchall()
         return [_row_to_memory(r) for r in rows]
 
+    def export_all(self) -> list[dict[str, Any]]:
+        """Every memory as a portable dict (no vectors — re-embedded on import,
+        so a backup survives an embedder change or a move to another machine)."""
+        out: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            rows = self.list(limit=500, offset=offset)
+            if not rows:
+                break
+            for m in rows:
+                out.append({
+                    "text": m.text, "source": m.source, "kind": m.kind,
+                    "title": m.title, "uri": m.uri, "tags": m.tags,
+                    "event_date": m.event_date, "metadata": m.metadata,
+                })
+            offset += len(rows)
+        return out
+
     def count(self) -> int:
         return self._conn.execute("SELECT COUNT(*) AS c FROM memories").fetchone()["c"]
 

@@ -44,7 +44,8 @@
 - [ ] Clear "what's connected / what's stale" at a glance.
 
 ### Safety & trust
-- [ ] Brain **export / backup** (and import) — user owns their data, can move it.
+- [x] Brain **export / backup** (and import) — portable JSON, dedup-idempotent,
+      re-embeds on import so it survives an embedder change / new machine. *(done)*
 - [ ] Encrypt secrets at rest (currently chmod-600 plaintext JSON).
 - [ ] "What leaves my device" transparency panel (cloud model = context leaves; local = not).
 

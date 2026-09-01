@@ -271,3 +271,32 @@ def test_api_input_validation(tmp_path, monkeypatch):
                     json={"name": "X", "base_url": "https://example.com", "endpoint": "/x"})
     assert r.status_code == 200 and r.json()["saved"]
     get_settings.cache_clear()
+
+
+# ── brain export / import round-trip (you own your data) ───────────────────
+def test_brain_export_import_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path / "a"))
+    from lodestone.config import get_settings
+    from lodestone.brain import get_brain
+    from lodestone.core.store import get_store
+    get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()
+
+    b = get_brain()
+    b.ingest("Alpha ships in September.", source="test")
+    b.ingest("Beta uses Postgres.", source="test", event_date="2026-08-01")
+    exp = b.export()
+    assert exp["count"] == 2 and exp["lodestone_backup"] == 1
+
+    # import into a fresh, separate brain
+    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path / "b"))
+    get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()
+    b2 = get_brain()
+    assert b2.store.count() == 0
+    res = b2.import_data(exp)
+    assert res["added"] == 2 and b2.store.count() == 2
+    # idempotent: re-import adds nothing
+    assert b2.import_data(exp)["added"] == 0
+    # restored memory is recallable + event_date preserved
+    hits = b2.store.search("when does Alpha ship", limit=1)
+    assert hits and "Alpha" in hits[0].memory.text
+    get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()

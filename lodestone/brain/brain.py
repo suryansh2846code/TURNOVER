@@ -371,6 +371,40 @@ class Brain:
 
         return done
 
+    def export(self) -> dict[str, Any]:
+        """A portable snapshot of the whole brain — the user owns their data and
+        can back it up or move it to another machine."""
+        from datetime import datetime, timezone
+        mems = self.store.export_all()
+        return {
+            "lodestone_backup": 1,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "count": len(mems),
+            "memories": mems,
+        }
+
+    def import_data(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Restore memories from an export. Dedup makes it idempotent (re-importing
+        the same backup adds nothing), and the graph is rebuilt afterward."""
+        mems = (data or {}).get("memories", [])
+        if not isinstance(mems, list):
+            return {"added": 0, "skipped": 0, "error": "no 'memories' list found"}
+        added = 0
+        for m in mems:
+            if not isinstance(m, dict) or not (m.get("text") or "").strip():
+                continue
+            saved = self.store.add(
+                text=m["text"], source=m.get("source") or "import",
+                kind=m.get("kind") or "note", title=m.get("title"),
+                uri=m.get("uri"), tags=m.get("tags") or [],
+                event_date=m.get("event_date"), metadata=m.get("metadata") or {},
+            )
+            if saved:
+                added += 1
+        g = self.rebuild_graph() if added else {"entities": 0}
+        return {"added": added, "skipped": len(mems) - added,
+                "entities": g.get("entities", 0)}
+
     def reembed(self) -> dict[str, Any]:
         """Recompute all vectors (memories + entities) with the current embedder.
         Run after switching LODESTONE_EMBEDDING_PROVIDER."""

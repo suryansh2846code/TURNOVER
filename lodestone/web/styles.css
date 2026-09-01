@@ -214,6 +214,9 @@ button.tiny { padding: 6px 11px; font-size: 12px; }
 @media (max-width: 560px) { .ob-cards { grid-template-columns: 1fr; } }
 
 /* brief highlight when onboarding points you at the connectors list */
+.brain-io { float: right; display: inline-flex; gap: 4px; }
+.brain-io button { margin: 0; font-size: 11px; }
+
 .flash { animation: flash-hi 1.6s ease; border-radius: 8px; }
 @keyframes flash-hi { 0%, 100% { box-shadow: none; }
   20%, 60% { box-shadow: 0 0 0 2px var(--accent); } }

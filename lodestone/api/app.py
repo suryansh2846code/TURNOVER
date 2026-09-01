@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -171,6 +171,27 @@ def ingest(body: IngestIn):
 @app.post("/api/brain/recall")
 def recall(body: ChatIn):
     return get_brain().recall(body.message)
+
+@app.get("/api/brain/export")
+def brain_export():
+    """Download the whole brain as a portable JSON backup (you own your data)."""
+    import json as _json
+    from datetime import datetime
+    data = get_brain().export()
+    stamp = datetime.now().strftime("%Y%m%d")
+    return Response(
+        content=_json.dumps(data, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="lodestone-brain-{stamp}.json"'})
+
+class ImportIn(BaseModel):
+    memories: list[dict[str, Any]] = []
+    lodestone_backup: int | None = None
+
+@app.post("/api/brain/import")
+def brain_import(body: ImportIn):
+    """Restore memories from an exported backup. Idempotent (dedup)."""
+    return get_brain().import_data(body.model_dump())
 
 
 # ── models & connectors ───────────────────────────────────────────────────
