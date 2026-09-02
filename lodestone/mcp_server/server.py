@@ -13,6 +13,7 @@ Register with Claude Code:
 from __future__ import annotations
 
 import json
+import re
 
 from mcp.server.mcpserver import MCPServer
 
@@ -41,8 +42,42 @@ def remember(text: str, title: str | None = None) -> str:
 
 
 @mcp.tool()
+def about(name: str) -> str:
+    """Look up a specific person, project, company or tool in the user's
+    knowledge graph and return what's known about it (facts + summary). Use for
+    'who is X', 'what is the Y project', 'what do we know about Z'."""
+    brain = get_brain()
+    matches = brain.graph.match_entities(name, limit=5)
+    # Require a REAL match: the entity name must share a word with the query, or
+    # score very high. (BGE gives unrelated short phrases a high baseline cosine,
+    # so a raw score threshold alone would return near-random entities.)
+    qwords = set(re.findall(r"[a-z0-9]+", name.lower()))
+    def overlaps(ename: str) -> bool:
+        return bool(qwords & set(re.findall(r"[a-z0-9]+", ename.lower())))
+    e = next((m for m in matches if overlaps(m["name"]) or m["score"] >= 0.8), None)
+    if not e:
+        return f"Nothing in the user's brain about '{name}'."
+    facts = brain.graph.facts_for(e["id"], limit=10)
+    lines = [f"{e['name']} ({e['type']}) — mentioned {e['mentions']}×"]
+    if e.get("summary"):
+        lines.append(e["summary"])
+    if facts:
+        lines.append("Facts:")
+        lines += [f"- {f}" for f in facts]
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def web_search(query: str, max_results: int = 5) -> str:
+    """Search the public web (titles, snippets, links). Use for current or
+    external information that is NOT about the user personally."""
+    from ..agents.tools import _web_search
+    return _web_search(query, max_results=max_results)
+
+
+@mcp.tool()
 def brain_stats() -> str:
-    """Summarize the user's brain: memory count and knowledge-graph size."""
+    """Summarize the user's brain: memory count, sources, and knowledge-graph size."""
     return json.dumps(get_brain().stats(), indent=2)
 
 

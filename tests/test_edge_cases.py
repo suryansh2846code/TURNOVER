@@ -300,3 +300,25 @@ def test_brain_export_import_roundtrip(tmp_path, monkeypatch):
     hits = b2.store.search("when does Alpha ship", limit=1)
     assert hits and "Alpha" in hits[0].memory.text
     get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()
+
+
+# ── MCP server: brain tools work + about() rejects non-matches ─────────────
+def test_mcp_tools(tmp_path, monkeypatch):
+    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
+    from lodestone.config import get_settings
+    from lodestone.brain import get_brain
+    from lodestone.core.store import get_store
+    get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()
+    import lodestone.mcp_server.server as S
+
+    assert "+1 memory" in S.remember("Zephyr is a project using Rust and SQLite.")
+    ctx = S.search_brain("what is Zephyr built with?", limit=3)
+    assert "Zephyr" in ctx
+    # about() returns a real entity, rejects a non-match (name-overlap guard)
+    assert "Zephyr" in S.about("Zephyr")
+    assert "Nothing" in S.about("Totally Unrelated Xyz")
+    # tasks round-trip through MCP
+    S.add_task("email the founders", "tomorrow")
+    assert "email the founders" in S.list_tasks()
+    assert "Completed" in S.complete_task("founders")
+    get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()

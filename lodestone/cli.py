@@ -42,8 +42,9 @@ def mcp_install():
         f'  claude mcp add lodestone --env LODESTONE_HOME="{home}" '
         f'-- "{py}" -m lodestone.mcp_server.server\n'
     )
-    console.print("Then in Claude Code, tools search_brain / remember / list_tasks "
-                  "/ add_task / complete_task / brain_stats are available.")
+    console.print("Then in Claude Code these tools are available: search_brain, "
+                  "about, remember, web_search, brain_stats, list_tasks, add_task, "
+                  "complete_task — your terminal Claude now shares your brain.")
 
 
 @app.command()
