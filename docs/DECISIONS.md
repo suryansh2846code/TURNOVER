@@ -239,10 +239,30 @@ via "? Getting started".
 ### H14 — Per-connector sync feedback + stale-at-a-glance
 Live "syncing…" state per row; overdue connectors show an amber "stale" dot.
 
-### H15 — Test suite expanded 6 → 58; scheduler/routines log failures
+### H15 — Test suite expanded 6 → 59; scheduler/routines log failures
 Edge-case regression tests (parse_when, actions, custom API, Gmail decode, auth
-self-heal, migrations, reminders, export/import, API validation). Background loops
-`log.exception` instead of silent `pass`.
+self-heal, migrations, reminders, export/import, API validation, MCP). Background
+loops `log.exception` instead of silent `pass`.
+
+### H16 — MCP brain-as-a-service (the private memory layer for any AI)
+Lodestone exposes its brain to any MCP client (Claude Desktop/Code, Cursor) over
+stdio via `lodestone/mcp_server/server.py` — 8 tools: `search_brain`, `about`
+(knowledge-graph lookup), `remember`, `web_search`, `brain_stats`, `list_tasks`,
+`add_task`, `complete_task`. Correct for **mcp 2.x** (FastMCP→MCPServer). Local-only
+(stdio, spawned by the client — no network/auth needed). `lodestone mcp-install`
+prints the one-line registration. This makes the brain usable by *every* AI, not
+just Lodestone's own agents — the biggest differentiator (D2).
+- `about()` guard: BGE gives unrelated short phrases a high baseline cosine, so it
+  requires the entity name to share a word with the query (or score ≥0.8), else a
+  query returns near-random entities.
+
+### Observation (to investigate) — LLM-extractor graph noise
+When the extractor uses **claude-code**, it inherits the user's Claude memory /
+project context, so extracting an unrelated sentence can add personal entities that
+aren't in the text (e.g. "Dev", "macOS Keychain"). Only affects the LLM-extractor
+path (manual ingest / `remember`); connector bulk syncs use the clean heuristic
+(`fast=True`). Candidate fix: constrain the extractor prompt to the given text only,
+or prefer the heuristic for single short ingests.
 
 ---
 
