@@ -141,12 +141,11 @@
       ox.fillText(RAMP[ci],c*CELL,r*CELL);
     }
     ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);
-    if(MONO){ctx.globalAlpha=1;ctx.drawImage(off,0,0);}
-    else{var dx=(2.2+glitch*7+(ripple.on?ripple.t*4:0))*DPR;
-      ctx.globalCompositeOperation="lighter";
-      ctx.globalAlpha=0.5;ctx.drawImage(off,-dx,0);ctx.globalAlpha=0.5;ctx.drawImage(off,dx,0);
-      ctx.globalAlpha=1.0;ctx.drawImage(off,0,0);
-      ctx.globalCompositeOperation="source-over";ctx.globalAlpha=1;}
+    ctx.globalAlpha=1;ctx.drawImage(off,0,0);
+    if(!MONO){var dx=(glitch*9+(ripple.on?ripple.t*5:0))*DPR;
+      if(dx>0.6){ctx.globalCompositeOperation="lighter";ctx.globalAlpha=0.30;
+        ctx.drawImage(off,-dx,0);ctx.drawImage(off,dx,0);
+        ctx.globalCompositeOperation="source-over";ctx.globalAlpha=1;}}
   }
   var last=0,angEl=document.getElementById("ang");
   function loop(t){
