@@ -402,4 +402,72 @@ Turnstone power, likely out of local-first scope.
 - [x] Brain viewer + 3D visualization + areas.
 - [x] Workspace layout (Inbox/Brain/Connected apps/Skills), agent personas, Skills.
 - [x] Actions model (confirm-before-act), automations, voice, model auto-select.
-- [ ] Deep-dives if wanted later: Inbox, Skills catalog, Settings, pricing/limits.
+- [x] Settings (batch 5, below).
+- [ ] Deep-dives if wanted later: Inbox, Skills catalog, pricing page.
+
+---
+
+## Batch 5 (3 Sep) — Settings panel
+
+**Nav:** Agent defaults · General · Connected Apps · Appearance · Models · Shortcuts
+· Experimental · Archived Agents · Bug Reports · Join our Slack.
+
+### F17 — Models settings (important; answers our own model-UX + usage-limit needs)
+- **Quality abstraction: Fast / Medium / Smart** ("Default AI for new Agents"),
+  or **Exact model control** (specific model + effort + speed). Provider + Quality
+  dropdowns. Friendlier than raw model names.
+- **Subscription detection + sign-in per vendor:** OpenAI ("ChatGPT Go · Using this
+  account · Sign in with ChatGPT / Refresh"), Anthropic ("Claude Pro found · Continue"),
+  xAI ("Sign in with Grok"), Cursor ("Sign in with Cursor") — plus **Add API key** each.
+- **They also support local/free:** *"Other ways to run models — Free models,
+  OpenRouter, and local Ollama models."* (So Ollama isn't unique to us; but our
+  DEFAULT is local.)
+- **Usage-limit tracking** ⭐ — "30-day limit · **81% remaining · resets in 29d 18h**"
+  with a progress bar. (Exactly the reset info the user asked me about — good pattern
+  to show in our model panel.)
+
+### F18 — Experimental settings (note; some against our North Star)
+- **"Jarvis"** — "Coordinate work across multiple Agents from one persistent text and
+  voice session." (Turnstone literally has a Jarvis mode — but experimental. Our
+  North Star is depth-first / NOT Jarvis; note the contrast, don't copy.)
+- **Coding Mode** — "Let every Agent write, build, and debug software without asking
+  first. Your permission level and Safe Mode still apply." (→ there's a **permission
+  level + Safe Mode** system behind actions.)
+- **Phone remote** — "Use Turnstone from your phone. Runs stay on this computer; your
+  phone sends encrypted instructions." Compute stays local; phone = remote control.
+
+### F19 — Appearance (baseline for our own settings)
+Theme (System/Light/Dark) · **Accent color** ("one signature color for what's live —
+selected agent, toggles, links, running indicator; None = black & white") · **Font
+size** (scales text/spacing/icons) · **"Always show tool calls"** toggle.
+
+### F20 — Agent defaults (persona tuning)
+"New Agent personality": starting **avatar** (shape+color) · **Base style and tone** ·
+**Characteristics** sliders — **Warmth · Enthusiasm · Headers & lists · Emoji use** ·
+free-text **Additional instructions** ("Be direct, challenge my assumptions, keep
+answers concise", 0/3000, copied into each new agent's editable profile).
+
+### F21 — General settings (+ delight)
+Open links in (Turnstone Browser) · **Music: "Play piano while Turnstone is open"**
+(onboarding soundtrack) · **Notification chime** "Sound when an agent finishes" ·
+Voice Mode (realtime, bills per minute) · **Caffeinate your computer** · About +
+**Software updates ("Check Now")** · **Uninstall** ("deletes this installation's local
+data; files outside Turnstone stay where they are").
+
+---
+
+## Settings takeaways for Lodestone
+**Build (fits us):**
+- A real **Settings panel** (we have none): Appearance (theme/accent/font), Models,
+  Connected apps, Agent defaults, Shortcuts.
+- **Fast / Medium / Smart** model quality abstraction over our provider+model.
+- **Usage-limit display** (remaining + reset countdown) in the model panel.
+- **Agent personality tuning** (warmth/enthusiasm/formatting/emoji + instructions) —
+  pairs with persona agents.
+- **Accent color + theme + font size**; **"always show tool calls"** toggle (we have
+  a trace already).
+- **Permission levels + Safe Mode** framing for confirm-before-act.
+- **In-app update check** (already on our roadmap).
+
+**Skip / note (not us):** Jarvis mode (against North Star), Coding Mode default,
+phone calls, phone remote, embedded browser. Delight (piano/chime) optional.
