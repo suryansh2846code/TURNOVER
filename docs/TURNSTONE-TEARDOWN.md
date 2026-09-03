@@ -110,11 +110,122 @@ the ground we should own.
 
 ---
 
-## Open questions — capture on next screens
-- [ ] What's behind the sign-in? (the main workspace layout, agents, chat)
-- [ ] How do they show the "brain" / what they know about you? Visible or hidden?
-- [ ] Which model do they use — BYO, or their own hosted? Any model picker?
-- [ ] Can agents take actions (send email, create events)? Confirmation UX?
-- [ ] Full connector catalog shown in-app.
-- [ ] Pricing / limits / any free tier gating.
-- [ ] Is there any local/offline mode at all, or 100% cloud?
+---
+
+## Onboarding flow — full walkthrough (batch 2, 3 Sep)
+
+Order: **account sign-in → founder FaceTime video → connect email/calendar →
+connect AI model → into the app.** "Skip" is always available (bottom-left).
+
+### Step A — account sign-in success
+Browser shows "✓ Signed in — Welcome to Turnstone — Your account is ready in the
+app — You can close this tab." App card updates. (Confirms cloud account gate.)
+
+### Step B — 🎬 Founder FaceTime onboarding  ← signature move
+- An **incoming FaceTime call** appears (phone mockup): caller **"Aryan & Jai"**
+  (the founders), Decline / Accept.
+- Accept → the founders appear on a **personal video** speaking to you:
+  *"We made Turnstone because we feel that AI should really know you."*
+- Has **captions toggle, 1×/2× speed, pause**, and a **Continue** button.
+- As you proceed, the video **shrinks to a picture-in-picture** phone in the
+  corner and **keeps playing/narrating** ("So go ahead, plug in your AI
+  subscriptions") through the connect steps. Warm, personal, unforgettable.
+
+### Step C — Connect email & calendar (Composio)
+Headline **"Connect your email and calendar."** Two big cards: **Google** (Gmail +
+Google Calendar) and **Microsoft** (Outlook mail + calendar). Shows connected
+status inline ("suryansh…@gmail.com ✓ Connected", "Google Calendar ✓ Connected").
+Outlook connect goes through Composio ("Turnstone wants to connect to your
+Outlook… Secured by Composio").
+
+### Step D — Connect the model ("Use the AI you already pay for")
+Headline **"Use the AI you already pay for."** Sub: "A free ChatGPT account works
+too. Or use a paid ChatGPT or Claude plan, bring an API key, or start with a free
+model." Cards:
+- **OpenAI** — *"ChatGPT Go found · suryansh…@gmail.com"* — **Recommended**
+- **Claude** — *"Claude Pro found · adis…@gmail.com"* — **Recommended**
+- **Grok** · **Cursor** · "No subscription? More options."
+- Each card → dropdown: **"Sign in with ChatGPT"** or **"Use an OpenAI API key."**
+- Sign-in path uses OpenAI's **"Sign in with ChatGPT" (Codex) OAuth** → callback
+  `localhost:1455/success?id_token=…` → "✅ ChatGPT is connected."
+
+---
+
+## Major findings (batch 2) — architecture & strategy
+
+### F1 — 🧠 The brain is IN-MEMORY, never written to disk
+Direct quote in-app: *"What Turnstone learned last time was never written to disk,
+so that read starts over."* Turnstone rebuilds the brain in RAM every session by
+re-reading your (cloud-connected) accounts.
+- **Their angle:** privacy (nothing persisted).
+- **Cost:** no long-term accumulated memory; slow re-read every launch.
+- **Lodestone contrast (our win):** we **persist locally** → instant startup AND a
+  brain that **grows over time** — essential for a depth-first "knows your work"
+  product — while still private (on-device). We can claim **private *and*
+  persistent**; they can't.
+
+### F2 — 💳 Subscription detection + native use (the hard path, done)
+Turnstone **auto-detects existing paid AI subs** (ChatGPT Go, Claude Pro) and lets
+you use them with **no API key** via the vendor's own sign-in (Codex "Sign in with
+ChatGPT", `localhost:1455`). Supports OpenAI, Claude, Grok, Cursor, API keys, free
+model.
+- **Lodestone status:** we already use the **Claude** subscription via `claude-code`
+  (the CLI). We do **not** yet have **"Sign in with ChatGPT" (Codex flow)** to use a
+  ChatGPT subscription keylessly. **← biggest model-path gap.**
+
+### F3 — Connectors are Composio (Google + Microsoft/Outlook)
+Everything brokered by Composio (cloud). **Microsoft/Outlook** is a connector we
+lack. Consistent "waiting to connect → updates when ready" pattern for all.
+
+### F4 — Consistent connect pattern
+App shows a dark card ("Waiting to connect / for sign-in — … Turnstone will update
+when the connection is ready — Open browser sign in"); browser does the OAuth;
+app polls; ends with "✅ Connected as <email>". We already mirror this locally
+(H10 connect card) — keep matching the polish.
+
+---
+
+## Design language (observed)
+- Deep charcoal/near-black backgrounds; **big centered headlines** ("Connect your
+  email and calendar", "Use the AI you already pay for"); generous whitespace.
+- **Card-based choices** (Google/Microsoft, OpenAI/Claude/Grok/Cursor) with logos,
+  a bold title, a muted one-line sub, and a "Recommended" tag.
+- **Blue primary button** ("Continue"), ghost secondary, **"Skip" always bottom-left**.
+- Playful **agent avatars** (blue square, red ghost, green triangle) as a recurring
+  brand motif. Logo `//`.
+- Motion + delight: FaceTime call metaphor, PiP video, smooth status transitions.
+
+---
+
+## Updated gap analysis (what to steal / what we win)
+
+| Area | Turnstone | Lodestone | Action |
+|---|---|---|---|
+| Brain persistence | ❌ In-memory, re-read each session | ✅ **Local + persistent** | **Own it in messaging** |
+| Account required | ✅ myturnstone.ai | ❌ none | Own it |
+| Data location | ☁️ Composio + cloud | 🔒 local | Own it |
+| ChatGPT subscription (keyless) | ✅ Codex sign-in | ⚠️ not yet | **Build: "Sign in with ChatGPT"** |
+| Claude subscription (keyless) | ✅ | ✅ via claude-code | Even |
+| Microsoft / Outlook | ✅ | ❌ | **Build: Outlook connector** |
+| Onboarding warmth | ✅ founder FaceTime | ⚠️ card onboarding | Borrow the *agent-greets-you* feel |
+| Model breadth | OpenAI/Claude/Grok/Cursor | 7 backends (incl. local) | Even/ours-broader |
+| Connect UX polish | ✅ | ✅ (matched) | Keep |
+
+### Prioritized actions surfaced
+1. **"Sign in with ChatGPT" (Codex-style) provider** — use a ChatGPT subscription
+   with no API key (localhost callback). High impact (cost) — matches their headline
+   feature. Also consider Grok/Cursor sign-in.
+2. **Microsoft / Outlook connector** (mail + calendar).
+3. **Messaging:** lead with **"private AND remembers you"** — their in-memory brain
+   can't accumulate; ours does, locally.
+4. Optional: subscription **auto-detection** ("Claude Pro found") as a delightful touch.
+
+---
+
+## Still to capture (next screens)
+- [ ] The **main workspace** after onboarding (layout, agents, chat).
+- [ ] How they **show the brain** / what they know about you (visible? a graph?).
+- [ ] Can agents **take actions** (send email, create events)? Confirmation UX?
+- [ ] Full **connector catalog** in-app (beyond email/calendar).
+- [ ] **Pricing / limits / free-tier** gating.
+- [ ] Free/local model option details ("start with a free model").
