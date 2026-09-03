@@ -19,6 +19,7 @@
   .brand .mark{width:13px;height:13px;transform:rotate(45deg);border:1.5px solid var(--north);box-shadow:0 0 12px rgba(245,200,119,.2)}
   h1{margin:0;font-weight:300;font-size:clamp(30px,4.6vw,52px);line-height:1.05;letter-spacing:-.02em;text-wrap:balance}
   h1 .lo{color:var(--muted)}h1 .hi{color:#fff;text-shadow:0 0 24px rgba(223,231,242,.25)}
+  .hl{display:block;pointer-events:none;margin:2px 0 2px}
   .sub{margin:0;max-width:44ch;font-size:13.5px;line-height:1.7;color:var(--muted)}
   .sub b{color:var(--star);font-weight:500}
   .actions{display:flex;align-items:center;gap:16px;margin-top:2px}
@@ -53,7 +54,7 @@
   <div class="content">
     <div class="lead">
       <div class="brand rise"><span class="mark"></span>Lodestone</div>
-      <h1 class="rise"><span class="lo">Your work,</span><br><span class="hi">remembered.</span></h1>
+      <canvas id="hl" class="hl rise" aria-label="Your work, remembered."></canvas>
       <p class="sub rise">A private AI workspace that learns your world and <b>keeps it</b> — locally. No account. No cloud. This brain lives on your Mac and nowhere else.</p>
       <div class="actions rise"><button class="cta">Build my brain →</button><button class="ghost">Skip for now</button></div>
     </div>
@@ -178,13 +179,35 @@
   cv.addEventListener("dblclick",function(){userCtl=false;});
   // ambient pulses
   setInterval(function(){if(!ripple.on&&Math.random()<0.5){var k=(Math.random()*N)|0;ripple.on=true;ripple.t=0;ripple.ox=px[k];ripple.oy=py[k];ripple.oz=pz[k];}},4200);
+  function drawHeadline(){
+    var host=document.getElementById('hl'); if(!host)return;
+    var maxW=Math.min(560, host.parentElement.clientWidth);
+    var fs=Math.max(30,Math.min(54,maxW*0.115)), lh=fs*1.04, pad=4;
+    var lines=[{t:'Your work,',dim:true},{t:'remembered.',dim:false}];
+    var cssW=maxW, cssH=Math.ceil(lh*lines.length+pad*2);
+    host.style.width=cssW+'px'; host.style.height=cssH+'px';
+    host.width=cssW*DPR; host.height=cssH*DPR;
+    var g=host.getContext('2d'); g.setTransform(DPR,0,0,DPR,0,0); g.clearRect(0,0,cssW,cssH);
+    var mono=getComputedStyle(document.body).getPropertyValue('--mono');
+    var oc=document.createElement('canvas'); oc.width=cssW*DPR; oc.height=cssH*DPR;
+    var og=oc.getContext('2d'); og.setTransform(DPR,0,0,DPR,0,0);
+    og.font='700 '+fs+'px '+mono; og.textBaseline='top'; og.fillStyle='#fff';
+    for(var i=0;i<lines.length;i++) og.fillText(lines[i].t,0,pad+i*lh);
+    var iw=cssW*DPR, img=og.getImageData(0,0,iw,cssH*DPR).data;
+    var step=3;
+    for(var y=0;y<cssH;y+=step)for(var x=0;x<cssW;x+=step){
+      var sx=(x*DPR)|0, sy=(y*DPR)|0, a=img[(sy*iw+sx)*4+3];
+      if(a>85){ var dim=((y-pad)/lh)<1;
+        g.fillStyle=dim?'rgba(150,162,182,0.52)':'rgba(255,255,255,0.96)';
+        g.fillRect(x,y,1.7,1.7);} }
+  }
   addEventListener("mousemove",function(e){var r=cv.getBoundingClientRect();var hx=e.clientX-r.left,hy=e.clientY-r.top;mtX=hx/W*2-1;mtY=hy/H*2-1;hoverX=hx;hoverY=hy;});
   cv.addEventListener("mouseleave",function(){hoverX=-9999;hoverY=-9999;});
   var mb=document.getElementById("modeBtn");
   function setModeLabel(){mb.textContent=(mode==="mono"?"◐ Mono":"◑ Color");}
   mb.addEventListener("click",function(){mode=mode==="mono"?"color":"mono";localStorage.setItem("lodestone_hero_mode",mode);setModeLabel();});
   setModeLabel();
-  addEventListener("resize",resize);resize();
+  addEventListener("resize",function(){resize();drawHeadline();});resize();drawHeadline();
   if(reduce){render();}else{requestAnimationFrame(loop);}
 })();
 </script>
