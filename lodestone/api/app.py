@@ -291,9 +291,19 @@ def sync(name: str, body: SyncIn):
 # ── Google sign-in (bundled client → no per-user Cloud setup) ─────────────
 @app.get("/api/google/status")
 def google_status():
-    from ..connectors.google_auth import _token_path
+    from ..connectors.google_auth import (_token_path, connected_email,
+                                           granted_services)
+    connected = _token_path().exists()
     return {"client_configured": get_settings().google_client_secrets is not None,
-            "connected": _token_path().exists()}
+            "connected": connected,
+            "account": connected_email(fetch=connected) if connected else None,
+            "services": granted_services()}
+
+@app.post("/api/google/disconnect")
+def google_disconnect():
+    from ..connectors.google_auth import disconnect
+    disconnect()
+    return {"disconnected": True}
 
 # ── Google reconnect (re-consent with current scopes, from the UI) ────────
 @app.post("/api/google/reconnect")

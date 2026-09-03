@@ -76,6 +76,57 @@ def get_credentials(interactive: bool = True):
     return creds
 
 
+_SCOPE_SERVICES = [("gmail", "Gmail"), ("drive", "Drive"), ("calendar", "Calendar")]
+
+
+def granted_services() -> list[str]:
+    """Friendly names of the services the stored token is authorized for."""
+    if not _token_path().exists():
+        return []
+    try:
+        scopes = json.loads(_token_path().read_text()).get("scopes", [])
+    except Exception:
+        return []
+    return [label for key, label in _SCOPE_SERVICES
+            if any(key in s for s in scopes)]
+
+
+def _account_path() -> Path:
+    return get_settings().home / "google_account.json"
+
+
+def connected_email(fetch: bool = True) -> str | None:
+    """The signed-in Google address. Cached locally; fetched once via Gmail
+    getProfile when connected (no extra scope needed)."""
+    ap = _account_path()
+    if ap.exists():
+        try:
+            return json.loads(ap.read_text()).get("email")
+        except Exception:
+            pass
+    if not fetch or not _token_path().exists():
+        return None
+    try:
+        from googleapiclient.discovery import build
+        creds = get_credentials(interactive=False)
+        svc = build("gmail", "v1", credentials=creds, cache_discovery=False)
+        email = svc.users().getProfile(userId="me").execute().get("emailAddress")
+        if email:
+            ap.write_text(json.dumps({"email": email}))
+        return email
+    except Exception:
+        return None
+
+
+def disconnect() -> None:
+    """Sign out of Google: remove the local token + cached account."""
+    for p in (_token_path(), _account_path()):
+        try:
+            p.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 def google_ready() -> tuple[bool, str]:
     settings = get_settings()
     if _token_path().exists():

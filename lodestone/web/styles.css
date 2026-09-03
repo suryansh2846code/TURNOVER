@@ -112,6 +112,30 @@ button.tiny { padding: 6px 11px; font-size: 12px; }
   border-radius: 8px; padding: 9px; font-weight: 600; font-size: 13px; cursor: pointer;
   margin: 2px 0 6px; }
 .gsignin:hover { filter: brightness(0.96); }
+.gsignin { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.g-logo { width: 16px; height: 16px; border-radius: 50%; background: #fff; color: #4285f4;
+  font-weight: 800; font-size: 12px; display: inline-flex; align-items: center;
+  justify-content: center; border: 1px solid #dadce0; }
+
+/* stateful Google connect card */
+.google-card { border: 1px solid var(--border); border-radius: 11px; padding: 12px;
+  background: var(--panel-2); margin-bottom: 10px; }
+.google-card.connected { border-color: color-mix(in srgb, #3fb950 45%, var(--border)); }
+.google-card.connecting { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.gc-row { display: flex; align-items: center; gap: 9px; }
+.gc-ic { font-size: 16px; }
+.gc-txt { display: flex; flex-direction: column; line-height: 1.3; flex: 1; min-width: 0; }
+.gc-txt b { font-size: 13px; }
+.gc-sub { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gc-note { font-size: 10.5px; color: var(--muted); margin-top: 8px; }
+.gchips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.gchip { font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  color: #3fb950; background: color-mix(in srgb, #3fb950 14%, transparent);
+  border: 1px solid color-mix(in srgb, #3fb950 35%, transparent); }
+.gc-spin { width: 15px; height: 15px; flex: none; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent); animation: gc-rot 0.8s linear infinite; }
+@keyframes gc-rot { to { transform: rotate(360deg); } }
 .conn-head { display: flex; justify-content: space-between; align-items: center; }
 .conn-head button { margin: 0; }
 .sync-status { font-size: 10.5px; color: var(--muted); margin: -2px 0 4px; }

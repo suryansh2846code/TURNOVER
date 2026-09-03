@@ -342,26 +342,60 @@ async function loadBrain() {
     toast("custom app removed"); loadBrain();
   });
   loadSyncStatus();
-  // one-click Google sign-in when a bundled client exists but we're not connected
-  try {
-    const g = await api("/api/google/status");
-    $("#googleSignin").hidden = !(g.client_configured && !g.connected);
-  } catch (_) {}
+  try { renderGoogleCard(await api("/api/google/status")); } catch (_) {}
 }
-async function startGoogleSignin() {
-  $("#googleSignin").textContent = "Opening Google…"; $("#googleSignin").disabled = true;
-  try {
-    const r = await api("/api/google/reconnect", { method: "POST" });
-    toast(r.detail || "Approve in the browser window");
-    // poll until connected, then refresh connectors
-    const poll = setInterval(async () => {
-      const g = await api("/api/google/status");
-      if (g.connected) { clearInterval(poll); toast("Google connected ✓"); loadBrain(); }
-    }, 3000);
-  } catch (e) { toast(String(e)); }
-  finally { setTimeout(() => { $("#googleSignin").textContent = "Sign in with Google"; $("#googleSignin").disabled = false; }, 4000); }
+
+// ── polished Google connect flow (local backend, Turnstone-grade UX) ────────
+function renderGoogleCard(s) {
+  const el = $("#googleCard");
+  if (!el) return;
+  if (!s.client_configured) { el.hidden = true; return; }
+  el.hidden = false;
+  if (s.connected) {
+    const chips = (s.services || []).map((x) => `<span class="gchip">${esc(x)}</span>`).join("");
+    el.className = "google-card connected";
+    el.innerHTML =
+      `<div class="gc-row"><span class="gc-ic">✅</span>
+         <div class="gc-txt"><b>Google connected</b>
+           <span class="gc-sub">${esc(s.account || "signed in")}</span></div>
+         <button class="tiny ghost" id="gcDisconnect">Disconnect</button></div>
+       <div class="gchips">${chips}</div>
+       <div class="gc-note">🔒 Token stays on your Mac — not sent to any third party.</div>`;
+    $("#gcDisconnect").onclick = disconnectGoogle;
+  } else {
+    el.className = "google-card";
+    el.innerHTML =
+      `<div class="gc-txt"><b>Connect Google</b>
+         <span class="gc-sub">Gmail · Calendar · Drive — read-only</span></div>
+       <button class="gsignin" id="gcConnect"><span class="g-logo">G</span>Sign in with Google</button>
+       <div class="gc-note">🔒 One click. Token stays on your Mac.</div>`;
+    $("#gcConnect").onclick = connectGoogle;
+  }
 }
-$("#googleSignin").onclick = startGoogleSignin;
+async function connectGoogle() {
+  const el = $("#googleCard");
+  el.className = "google-card connecting";
+  el.innerHTML =
+    `<div class="gc-row"><span class="gc-spin"></span>
+       <div class="gc-txt"><b>Waiting for approval…</b>
+         <span class="gc-sub">Approve access in the browser window that opened.</span></div></div>
+     <button class="tiny ghost" id="gcReopen">Reopen browser sign-in</button>`;
+  const open = () => api("/api/google/reconnect", { method: "POST" }).catch(() => {});
+  $("#gcReopen").onclick = open;
+  await open();
+  let tries = 0;
+  const poll = setInterval(async () => {
+    let g; try { g = await api("/api/google/status"); } catch { return; }
+    if (g.connected) { clearInterval(poll); toast("Google connected ✓"); renderGoogleCard(g); loadBrain(); }
+    else if (++tries > 60) { clearInterval(poll); renderGoogleCard(g); toast("Didn't finish — try again"); }
+  }, 3000);
+}
+async function disconnectGoogle() {
+  if (!confirm("Disconnect Google? You can reconnect anytime.")) return;
+  await api("/api/google/disconnect", { method: "POST" });
+  toast("Google disconnected");
+  renderGoogleCard(await api("/api/google/status")); loadBrain();
+}
 
 let SYNC_INTERVAL_MIN = 30;
 async function loadSyncStatus() {
@@ -784,7 +818,7 @@ function flashConnectors() {
 }
 $("#obSkip").onclick = closeOnboard;
 $("#obDone").onclick = closeOnboard;
-$("#obGoogle").onclick = () => { closeOnboard(); startGoogleSignin(); };
+$("#obGoogle").onclick = () => { closeOnboard(); flashConnectors(); connectGoogle(); };
 $("#obLocal").onclick = () => { closeOnboard(); flashConnectors();
   toast("Pick Files, Apple Mail, Calendar or iMessage below → click setup"); };
 $("#obApps").onclick = () => { closeOnboard(); flashConnectors();
