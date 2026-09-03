@@ -222,10 +222,98 @@ app polls; ends with "✅ Connected as <email>". We already mirror this locally
 
 ---
 
+---
+
+## Batch 3 (3 Sep) — brain viewer, Brainy, full connector catalog, MCP client
+
+### 🌟 F5 — "Sneak peek of your brain" (the wow / trust moment)
+After connecting, Turnstone shows **everything it learned**, categorized with a
+left-nav (colored dots): **About you · People · Timeline · Work.** "Scroll to see
+everything Turnstone learned."
+- **About you** → *"Who you are now"* (concrete facts) + *"How you communicate"*
+  (**writing-style analysis**: "You communicate warmly and directly", "You make
+  follow-ups low-pressure", "You prefer concise requests that state the next action").
+- **People** → *"Important people"* (relationships + open follow-ups: "Dev is your
+  younger brother"; "Divyansh has an outstanding follow-up").
+- **Timeline** → *"Your trajectory"* (what you've been doing) + *"Right now"*
+  (actionable next steps with deadlines).
+- **Work** → *"Empty for now. Turnstone fills this as you work."*
+- **Why it matters:** transparent, genuinely insightful, and it's the "it really
+  knows me" moment. **Lodestone gap:** our Brain panel is stats + a graph; we lack
+  this **narrative, categorized digest** (incl. communication style). **Build it —
+  and ours accumulates (persistent), theirs can't (in-memory).**
+
+### F6 — "Brainy": a named agent that owns the Brain
+*"I'm Brainy, and I build and look after the part of Turnstone that remembers you —
+your Brain, which you own."* The memory layer is personified as an agent (with
+"Working 2s"/"12s" thinking-time indicators, a copy button). Framing: **your Brain,
+which you own.**
+
+### F7 — Agents make outbound PHONE CALLS ("Call someone for me")
+*"Your Agent makes an outbound call, follows your instructions, and reports back."*
+Included with Turnstone. Example: *"Call the restaurant and ask if they have a table
+for four at 7pm Friday."* A cloud/telephony capability — **out of scope for
+local-first** (needs a phone backend); note as a Turnstone-only power.
+
+### F8 — Full connector catalog (all via Composio; @-mention in chat)
+"Connect apps — Brainy learns from the accounts you connect here." Multi-account
+per connector with a **"Primary"** ("Agents use the primary account when you don't
+specify one"); **@-mention** an app/account in the chat bar. Categories + apps seen:
+- **Connected:** Gmail, Google Calendar, Outlook (shows Primary / Expired→Reconnect).
+- **Email & calendar:** Calendly, Cal.com.
+- **Messaging & meetings:** iMessage ("Use Messages on this Mac" — local), Zoom,
+  Slack, Granola, Superwhisper, Fathom, Wispr Flow. (+ "API access — Add key" for
+  full-history imports.)
+- **Docs & files:** Google Drive, Docs, Sheets, Slides, Dropbox, Notion.
+- **Code & projects:** Linear, GitHub, Atlassian, Conductor, Lovable, PostHog,
+  Replit, Supabase.
+- **Web & career:** LinkedIn, X/Twitter, Nyne, Exa.
+- **More:** Canvas (education).
+- **Custom:** **"Connect a remote MCP server with OAuth or an API key."**
+
+### 🔑 F9 — Turnstone is an MCP CLIENT (custom connector)
+"Add custom connector — Connect a remote MCP server, then add it to a message with
+@." Fields: Name, **Remote MCP server URL**, Authentication (OAuth or no sign-in),
+Advanced OAuth (Client ID/secret optional), redirect `http://127.0.0.1/oauth/callback`.
+Safety: *"Only add connectors you trust. Turnstone asks before every custom tool
+call."*
+- **Validates our direction:** we built the MCP **server** (external agents use our
+  brain); Turnstone shows the MCP **client** (consume any remote MCP server). Both
+  matter. **Lodestone gap: build the MCP client** (add-remote-MCP-server) — mirror
+  of this modal, with confirm-before-tool-call. Our custom-API connector is the
+  no-MCP cousin; MCP client is the standards path.
+
+---
+
+## Updated gap analysis (batch 3)
+
+| Capability | Turnstone | Lodestone | Action |
+|---|---|---|---|
+| **Brain viewer** (About you/People/Timeline/Work + style) | ✅ signature | ⚠️ stats+graph only | **BUILD — big wow, ours persists** |
+| Learn communication/writing style | ✅ surfaced | ⚠️ TODO | **BUILD** |
+| MCP **client** (add remote MCP servers) | ✅ | ⚠️ have server, not client | **BUILD** |
+| @-mention apps/accounts in chat | ✅ | ❌ | Consider |
+| Multi-account + Primary per connector | ✅ | ⚠️ single Google | Consider |
+| Outbound phone calls | ✅ (cloud) | ❌ | Skip (not local-first) |
+| Connector breadth | ✅ ~30 (Composio) | ⚠️ ~11 + custom | Different bet (local) |
+| Brain persistence | ❌ in-memory | ✅ local+persistent | **Own it** |
+| Named brain-keeper agent | ✅ "Brainy" | ❌ | Nice-to-have persona |
+
+### Prioritized actions (updated, ranked)
+1. **Brain viewer / "what I know about you"** — categorized narrative digest
+   (About you · People · Timeline · Work) incl. communication style. Highest-impact
+   UX; and it's where our **persistent** brain beats their in-memory one.
+2. **Learn communication/writing style** (feeds #1 and better drafts).
+3. **MCP client** — add remote MCP servers as connectors (confirm-before-tool-call).
+4. **"Sign in with ChatGPT"** provider (from batch 2) — keyless ChatGPT subscription.
+5. **Microsoft/Outlook** connector (batch 2).
+6. Optional polish: @-mention connectors, multi-account/Primary, a "Brainy"-style
+   persona for the brain.
+
+---
+
 ## Still to capture (next screens)
-- [ ] The **main workspace** after onboarding (layout, agents, chat).
-- [ ] How they **show the brain** / what they know about you (visible? a graph?).
-- [ ] Can agents **take actions** (send email, create events)? Confirmation UX?
-- [ ] Full **connector catalog** in-app (beyond email/calendar).
+- [ ] The **main workspace / chat** after onboarding (agent switching, layout).
+- [ ] An agent **taking an action** end-to-end (send email / schedule) + confirm UX.
 - [ ] **Pricing / limits / free-tier** gating.
-- [ ] Free/local model option details ("start with a free model").
+- [ ] Settings, the persistent "Connected apps" management screen.
