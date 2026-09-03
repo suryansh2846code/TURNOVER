@@ -312,8 +312,94 @@ call."*
 
 ---
 
-## Still to capture (next screens)
-- [ ] The **main workspace / chat** after onboarding (agent switching, layout).
-- [ ] An agent **taking an action** end-to-end (send email / schedule) + confirm UX.
-- [ ] **Pricing / limits / free-tier** gating.
-- [ ] Settings, the persistent "Connected apps" management screen.
+---
+
+## Batch 4 (3 Sep) — the WORKSPACE revealed (onboarding complete)
+
+### F10 — Workspace layout
+- **Left sidebar:** **＋ Create new** (⌘N) · nav: **Inbox · Brain · Connected apps ·
+  Skills** · user name + settings/bug at the bottom.
+- **Center:** the active conversation (Brainy, or an agent like "Chief of Staff");
+  header shows the agent + tabs (General / Browse / Ask Brainy) + Editor / Show in
+  folder. Footer shows the model used ("Continued with OpenAI · GPT-5.6-Terra").
+- **Right:** a **contextual Brain panel** with a **3D visualization** — a colored
+  blob split into labeled **"areas"** ("About You", …), "4 areas in this view",
+  "2 people · updated just now", **"Copy Brain Location"**.
+
+### 🌟 F11 — Brain as a 3D, navigable, categorized object
+The Brain is a first-class **destination** (not a side widget): a 3D shape with
+semantic **areas** you can browse, plus the batch-3 categorized digest (About you /
+People / Timeline / Work). Beautiful + distinctive. **Aspirational for our redesign.**
+
+### F12 — Conversational, plan-then-build brain setup (great consent UX)
+Brainy asks **"What should your Brain become most useful for?"** (use everything, or
+prioritize certain apps/time/people), produces a **plan**, and shows **"Nothing will
+be read or built until you choose Go"** → a **[Go]** button ("Ready when you are").
+Nothing happens without explicit approval. Transparent + controllable.
+
+### F13 — Agents are customizable personas
+Create agents with a **name + shape + color avatar** (the cute faces). Default
+**"Chief of Staff"** = "daily brief, inbox, meetings, priorities, open loops."
+Framing: **"a family of Agents you go to for a specific task."** (≈ our 4 presets,
+but personalized + delightful.)
+
+### F14 — "Skills"
+A dedicated nav section — reusable agent capabilities. Nicer user-facing framing
+than "tools." (We expose tools internally; "Skills" is the productized version.)
+
+### F15 — Turnstone Browser (embedded, reuses your sign-ins)
+"Bring your browser with you — import the Chrome or Arc profile so Turnstone Browser
+can reuse its sign-ins (passwords & history NOT imported)." An embedded browser lets
+agents act on the web using your logged-in sessions. Heavy/cloud-ish — note as a
+Turnstone power, likely out of local-first scope.
+
+### F16 — Smaller but notable
+- **Local folders**, read-only: "never changes, moves, or deletes anything inside them."
+- **Voice input** (mic + waveform) in the chat bar.
+- **Model auto-selection**: "Turnstone automatically uses the best model available
+  with your plan."
+- **Actions-with-approval**: "every call is shown for your approval before it starts."
+- **Automations**: daily briefing, reminders, weekly priorities, inbox sweeps.
+- **Inbox** as a top-level section (agent output / notifications hub).
+
+---
+
+## 🧭 SYNTHESIS — the whole Turnstone product model
+1. **Cloud account + cloud brain (in-memory) + Composio connectors** → convenience &
+   breadth, at the cost of privacy/persistence.
+2. **A family of persona Agents** (Chief of Staff, …) over one **Brain** (a
+   categorized, 3D-visualized, *owned* memory), curated by **Brainy**.
+3. **BYO model** with subscription detection (ChatGPT/Claude/Grok/Cursor) + auto-select.
+4. **Act on the world**: email/calendar, phone calls, an embedded browser, MCP client
+   for anything — all **confirm-before-act**.
+5. **Onboarding is the product demo**: founder FaceTime, "sneak peek of your brain",
+   plan-then-Go. Warm, transparent, high-touch.
+
+### Where Lodestone should land (design direction for the redesign)
+- **Keep our wedge:** local + persistent + no account. Say it loudly.
+- **Borrow the shape, not the cloud:**
+  - Make the **Brain a first-class destination** — a categorized digest (About you /
+    People / Timeline / Work) + a visualization + "areas". *Our version accumulates.*
+  - **Left-nav workspace**: Chat/Agents · **Brain** · **Connected apps** · **Skills** · Inbox.
+  - **Persona agents** with name/shape/color; keep our 4 presets + custom.
+  - **Plan-then-build** brain setup with explicit Go (consent).
+  - Reframe tools as **"Skills"**; keep **confirm-before-act**.
+- **Selective feature builds** (already in our list): brain viewer, writing-style,
+  MCP client, "Sign in with ChatGPT", Outlook, voice input.
+- **Skip (not local-first):** phone calls, embedded browser, cloud account.
+
+### Final prioritized build list (post-teardown)
+1. **Brain viewer** — categorized digest + light visualization (our biggest UX win).
+2. **Left-nav workspace redesign** (Chat · Brain · Connected apps · Skills · Inbox).
+3. **Persona agents** (name/shape/color avatars).
+4. **Plan-then-build** brain setup (Brainy-style, but local).
+5. **MCP client** · **"Sign in with ChatGPT"** · **Outlook** · **writing-style** · **voice input**.
+
+---
+
+## Captured (onboarding + workspace complete)
+- [x] Onboarding (splash → sign-in → founder video → connect apps → model → brain build).
+- [x] Brain viewer + 3D visualization + areas.
+- [x] Workspace layout (Inbox/Brain/Connected apps/Skills), agent personas, Skills.
+- [x] Actions model (confirm-before-act), automations, voice, model auto-select.
+- [ ] Deep-dives if wanted later: Inbox, Skills catalog, Settings, pricing/limits.
