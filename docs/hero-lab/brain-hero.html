@@ -27,7 +27,7 @@
     background:#d6dae2;border:1px solid #d6dae2;border-radius:2px;padding:12px 26px;cursor:pointer;
     transition:background .18s,transform .18s,box-shadow .3s;box-shadow:0 0 0 rgba(255,255,255,0)}
   .cta:hover{background:#e7eaf0;transform:translateY(-1px);box-shadow:0 0 22px rgba(255,255,255,.16)}
-  .connect{position:absolute;left:0;right:0;bottom:12%;z-index:3;text-align:center;opacity:0;transform:translateY(16px);pointer-events:none;transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+  .connect{position:absolute;left:0;right:0;bottom:7%;z-index:3;text-align:center;opacity:0;transform:translateY(16px);pointer-events:none;transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
   .connect.show{opacity:1;transform:none;pointer-events:auto}
   .ceyebrow{font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);margin-bottom:14px}
   .chips{display:inline-flex;gap:10px;flex-wrap:wrap;justify-content:center}
@@ -188,7 +188,7 @@
   var bb=document.getElementById("buildBtn"),bwrap=bb.parentElement,built=false,connected=0;
   var connectEl=document.getElementById("connect"),contEl=document.getElementById("cont");
   bb.addEventListener("click",function(){
-    if(built)return;built=true;buildT=1;pulse();
+    if(built)return;built=true;pulse();
     bwrap.style.animation="none";requestAnimationFrame(function(){bwrap.style.opacity="0";bwrap.style.transform="translateY(-10px)";bwrap.style.pointerEvents="none";});
     setTimeout(function(){connectEl.classList.add("show");},650);
   });
@@ -197,7 +197,7 @@
       if(chip.classList.contains("done"))return;
       if(chip.dataset.src==="fact"){var f=prompt("Tell your brain a fact to remember:");if(!f)return;}
       var orig=chip.textContent;chip.textContent="Connecting…";chip.classList.add("doing");
-      setTimeout(function(){chip.classList.remove("doing");chip.classList.add("done");chip.textContent="✓ "+orig.replace("+ ","");connected++;pulse();if(connected===1)contEl.classList.add("show");},1000);
+      setTimeout(function(){chip.classList.remove("doing");chip.classList.add("done");chip.textContent="✓ "+orig.replace("+ ","");connected++;buildT=Math.min(1,connected/4);pulse();if(connected===1)contEl.classList.add("show");},1000);
     });
   });
   contEl.addEventListener("click",function(){contEl.textContent="Entering…";});
