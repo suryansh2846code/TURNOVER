@@ -1,7 +1,7 @@
 <title>Lodestone — Neural Brain</title>
 <style>
   :root{--ground:#05070d;--star:#dfe7f2;--muted:#7a8397;--faint:#464e60;
-    --line:rgba(223,231,242,.12);--north:#f5c877;
+    --line:rgba(223,231,242,.12);--line2:rgba(223,231,242,.2);--ok:#5fcf8e;--north:#f5c877;
     --mono:ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;color-scheme:dark;}
   *{box-sizing:border-box}body{margin:0}
   .stage{position:relative;min-height:100svh;background:var(--ground);color:var(--star);
@@ -22,11 +22,21 @@
   .brand{position:absolute;top:40px;left:48px;z-index:3;display:flex;align-items:center;gap:12px;
     font-size:11.5px;letter-spacing:.42em;text-transform:uppercase}
   .brand .mark{width:13px;height:13px;transform:rotate(45deg);border:1.5px solid var(--north);box-shadow:0 0 12px rgba(245,200,119,.2)}
-  .build{position:absolute;left:0;right:0;bottom:19%;z-index:3;text-align:center}
+  .build{position:absolute;left:0;right:0;bottom:18%;z-index:3;text-align:center;transition:opacity .5s ease,transform .5s ease}
   .cta{font-family:var(--mono);font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:#08090d;
     background:#d6dae2;border:1px solid #d6dae2;border-radius:2px;padding:12px 26px;cursor:pointer;
     transition:background .18s,transform .18s,box-shadow .3s;box-shadow:0 0 0 rgba(255,255,255,0)}
   .cta:hover{background:#e7eaf0;transform:translateY(-1px);box-shadow:0 0 22px rgba(255,255,255,.16)}
+  .connect{position:absolute;left:0;right:0;bottom:12%;z-index:3;text-align:center;opacity:0;transform:translateY(16px);pointer-events:none;transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+  .connect.show{opacity:1;transform:none;pointer-events:auto}
+  .ceyebrow{font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);margin-bottom:14px}
+  .chips{display:inline-flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .chip{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--star);background:rgba(223,231,242,.04);border:1px solid var(--line2);border-radius:2px;padding:10px 16px;cursor:pointer;transition:all .18s}
+  .chip:hover{border-color:var(--north);color:var(--north)}
+  .chip.doing{color:var(--faint)}
+  .chip.done{color:var(--ok);border-color:rgba(95,207,142,.4)}
+  .cont{margin-top:16px;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .4s,transform .4s}
+  .cont.show{opacity:1;transform:none;pointer-events:auto}
   .hint{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:3;font-size:10px;
     letter-spacing:.2em;text-transform:uppercase;color:var(--faint);pointer-events:none}
   .hud{position:absolute;inset:0;z-index:3;pointer-events:none}
@@ -46,6 +56,16 @@
   <div class="scan"></div><div class="vig"></div>
   <div class="brand"><span class="mark"></span>Lodestone</div>
   <div class="build rise"><button class="cta" id="buildBtn">Build my brain →</button></div>
+  <div class="connect" id="connect">
+    <div class="ceyebrow">Connect a source to feed your brain</div>
+    <div class="chips">
+      <button class="chip" data-src="google">Google</button>
+      <button class="chip" data-src="mac">Your Mac</button>
+      <button class="chip" data-src="apps">Apps</button>
+      <button class="chip" data-src="fact">+ Tell it a fact</button>
+    </div>
+    <div><button class="cta cont" id="cont">Continue →</button></div>
+  </div>
   <div class="hint">drag to rotate  ·  hover to reveal  ·  click to fire a signal</div>
   <div class="hud"><span class="bk tl"></span><span class="bk tr"></span><span class="bk bl"></span><span class="bk br"></span>
     <div class="tag"><span class="live">◆</span> NEURAL FIELD · <span id="ang">000</span>°</div></div>
@@ -164,12 +184,23 @@
   addEventListener("mousemove",function(e){var r=cv.getBoundingClientRect();var hx=e.clientX-r.left,hy=e.clientY-r.top;mtX=hx/W*2-1;mtY=hy/H*2-1;hoverX=hx;hoverY=hy;});
   cv.addEventListener("mouseleave",function(){hoverX=-9999;hoverY=-9999;});
   // Build my brain: mono -> color
-  var bb=document.getElementById("buildBtn");
+  function pulse(){var k=(Math.random()*N)|0;ripple.on=true;ripple.t=0;ripple.ox=px[k];ripple.oy=py[k];ripple.oz=pz[k];glitch=0.65;}
+  var bb=document.getElementById("buildBtn"),bwrap=bb.parentElement,built=false,connected=0;
+  var connectEl=document.getElementById("connect"),contEl=document.getElementById("cont");
   bb.addEventListener("click",function(){
-    if(buildT<0.5){buildT=1;ripple.on=true;ripple.t=0;var k=(Math.random()*N)|0;ripple.ox=px[k];ripple.oy=py[k];ripple.oz=pz[k];glitch=0.7;
-      setTimeout(function(){bb.textContent="Enter your workspace →";},2000);}
-    else{bb.textContent="Entering…";}
+    if(built)return;built=true;buildT=1;pulse();
+    bwrap.style.animation="none";requestAnimationFrame(function(){bwrap.style.opacity="0";bwrap.style.transform="translateY(-10px)";bwrap.style.pointerEvents="none";});
+    setTimeout(function(){connectEl.classList.add("show");},650);
   });
+  document.querySelectorAll(".chip").forEach(function(chip){
+    chip.addEventListener("click",function(){
+      if(chip.classList.contains("done"))return;
+      if(chip.dataset.src==="fact"){var f=prompt("Tell your brain a fact to remember:");if(!f)return;}
+      var orig=chip.textContent;chip.textContent="Connecting…";chip.classList.add("doing");
+      setTimeout(function(){chip.classList.remove("doing");chip.classList.add("done");chip.textContent="✓ "+orig.replace("+ ","");connected++;pulse();if(connected===1)contEl.classList.add("show");},1000);
+    });
+  });
+  contEl.addEventListener("click",function(){contEl.textContent="Entering…";});
   setInterval(function(){if(!ripple.on&&Math.random()<0.5){var k=(Math.random()*N)|0;ripple.on=true;ripple.t=0;ripple.ox=px[k];ripple.oy=py[k];ripple.oz=pz[k];}},4200);
   addEventListener("resize",resize);resize();
   if(reduce){render();}else{requestAnimationFrame(loop);}
