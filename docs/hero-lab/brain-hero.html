@@ -18,11 +18,11 @@
   .brand{position:absolute;top:40px;left:48px;z-index:3;display:flex;align-items:center;gap:12px;
     font-size:11.5px;letter-spacing:.42em;text-transform:uppercase}
   .brand .mark{width:13px;height:13px;transform:rotate(45deg);border:1.5px solid var(--north);box-shadow:0 0 12px rgba(245,200,119,.2)}
-  .build{position:absolute;left:50%;bottom:10%;transform:translateX(-50%);z-index:3;text-align:center}
+  .build{position:absolute;left:0;right:0;bottom:19%;z-index:3;text-align:center}
   .cta{font-family:var(--mono);font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:#08090d;
-    background:#f4f6fa;border:1px solid #f4f6fa;border-radius:2px;padding:12px 26px;cursor:pointer;
+    background:#d6dae2;border:1px solid #d6dae2;border-radius:2px;padding:12px 26px;cursor:pointer;
     transition:background .18s,transform .18s,box-shadow .3s;box-shadow:0 0 0 rgba(255,255,255,0)}
-  .cta:hover{background:#fff;transform:translateY(-1px);box-shadow:0 0 22px rgba(255,255,255,.16)}
+  .cta:hover{background:#e7eaf0;transform:translateY(-1px);box-shadow:0 0 22px rgba(255,255,255,.16)}
   .hint{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:3;font-size:10px;
     letter-spacing:.2em;text-transform:uppercase;color:var(--faint);pointer-events:none}
   .hud{position:absolute;inset:0;z-index:3;pointer-events:none}
@@ -33,7 +33,7 @@
   .tag .live{color:var(--north)}
   .rise{opacity:0;transform:translateY(10px);animation:rise 1s cubic-bezier(.2,.7,.2,1) .5s forwards}
   @keyframes rise{to{opacity:1;transform:none}}
-  @media(max-width:720px){.brand{left:22px}.build{bottom:9%}}
+  @media(max-width:720px){.brand{left:22px}.build{bottom:15%}}
 </style>
 <div class="stage">
   <div class="glow" id="glow"></div>
