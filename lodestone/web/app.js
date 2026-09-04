@@ -857,10 +857,14 @@ $("#brainImportFile").onchange = async (e) => {
 };
 
 async function maybeOnboard() {
-  // show on a fresh brain, or the first time this browser opens the app
+  // First run (fresh brain, or this browser has never onboarded) → the full
+  // cinematic Connect → Build → Your Brain flow. The quick modal stays wired to
+  // the "? Getting started" button as a lightweight refresher.
   try {
     const s = await api("/api/brain/stats");
-    if (s.total === 0 || !localStorage.getItem("lodestone_onboarded")) openOnboard();
+    if (s.total === 0 || !localStorage.getItem("lodestone_onboarded")) {
+      window.location.href = "/onboarding";
+    }
   } catch (_) {}
 }
 

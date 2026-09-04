@@ -28,7 +28,7 @@ async def _no_cache_assets(request, call_next):
     reload — no hard-refresh needed."""
     resp = await call_next(request)
     p = request.url.path
-    if p == "/" or p.startswith("/static"):
+    if p == "/" or p == "/onboarding" or p.startswith("/static"):
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return resp
 
@@ -459,6 +459,11 @@ def fs_browse(path: str | None = None):
 @app.get("/")
 def index():
     return FileResponse(WEB / "index.html")
+
+
+@app.get("/onboarding")
+def onboarding():
+    return FileResponse(WEB / "onboarding.html")
 
 app.mount("/static", StaticFiles(directory=str(WEB)), name="static")
 
