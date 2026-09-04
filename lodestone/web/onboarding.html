@@ -153,7 +153,7 @@
       <div class="step" id="stepBuild"><span class="n">2</span>Build</div><span class="sdash">·····</span>
       <div class="step"><span class="n">3</span>Your Brain</div>
     </div>
-    <div class="topR"><button class="pill"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6 10a3 3 0 0 0 4 0l2-2a3 3 0 0 0-4-4l-1 1"/><path d="M10 6a3 3 0 0 0-4 0L4 8a3 3 0 0 0 4 4l1-1"/></svg>Connect</button><button class="menu">≡</button></div>
+    <div class="topR"><button class="pill" id="skipTop">Skip for now →</button></div>
     <div class="skip trust">On-device · Private · Yours</div>
   </div>
   <!-- HERO -->
@@ -161,10 +161,10 @@
     <div class="eyebrow">Local · Private · Yours</div>
     <h1><span class="l1">Your world,</span><span class="l2">oriented.</span></h1>
     <p class="sub">Lodestone maps what you connect. These are your four strongest areas right now — they change as your world does. Everything stays on your Mac.</p>
-    <div class="actions"><button class="cta" id="buildBtn">Build my brain →</button><button class="how"><span class="ply">▶</span> See how it works</button></div>
+    <div class="actions"><button class="cta" id="buildBtn">Build my brain →</button></div>
   </div></div>
   <div class="stats">
-    <div class="stat"><b>22,041</b><span>Nodes</span></div><div class="stat"><b>4</b><span>Sources</span></div><div class="stat"><b>On-device</b><span>Private</span></div>
+    <div class="stat"><b id="heroNodes">0</b><span>Memories</span></div><div class="stat"><b id="heroSources">0</b><span>Sources</span></div><div class="stat"><b>On-device</b><span>Private</span></div>
   </div>
   <div class="bot"><div>Built for a more focused you</div><div>———— v0.3</div></div>
   <!-- CONNECT (same screen) -->
@@ -182,7 +182,7 @@
       <div class="rhead"><h2>Choose sources</h2><span class="cnt"><b id="selcnt">0</b> selected</span></div>
       <p class="rsub">Choose the tools you want to connect. You can always add more later.</p>
       <div class="srcs" id="srcs"></div>
-      <div class="privacy"><span class="pi"><svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M10 2l6 2v5c0 4-3 6.5-6 8-3-1.5-6-4-6-8V4l6-2z"/><path d="M7.5 10l1.7 1.7L13 8"/></svg></span><div><b>Your data never leaves your device.</b><p>We run everything locally, so your information stays private and secure.</p></div><a href="#">Learn more →</a></div>
+      <div class="privacy"><span class="pi"><svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M10 2l6 2v5c0 4-3 6.5-6 8-3-1.5-6-4-6-8V4l6-2z"/><path d="M7.5 10l1.7 1.7L13 8"/></svg></span><div><b>Your data never leaves your device.</b><p>We run everything locally, so your information stays private and secure.</p></div></div>
       
     </div>
   </div>
@@ -192,9 +192,9 @@
   <div class="lab" style="left:37%;bottom:6%">A more focused you</div>
   <div class="build">
     <div class="bLeft"><div class="eyebrow">Step 02</div><h1>Building<br>your <b>brain.</b></h1><p class="sub">We're processing your data, finding connections, and mapping what matters to you.</p></div>
-    <div class="bStats"><div class="bStat"><b id="stSrc">3</b><span>Sources</span></div><div class="bStat"><b id="stItems">0</b><span>Items</span></div><div class="bStat"><b id="stGB">0.0 GB</b><span>Processed</span></div></div>
+    <div class="bStats"><div class="bStat"><b id="stSrc">0</b><span>Sources</span></div><div class="bStat"><b id="stItems">0</b><span>Memories</span></div><div class="bStat"><b id="stEnt">0</b><span>Entities</span></div></div>
     <div class="bProg"><div class="bPct" id="bPct">0%</div><div class="bBar"><div class="bFill" id="bFill"></div></div><div class="bWhat">Indexing your world</div><div class="bDet" id="bDet">Reading your sources…</div></div>
-    <div class="bPriv"><span class="pi"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="4" y="8" width="10" height="7" rx="1.5"/><path d="M6 8V6a3 3 0 0 1 6 0v2"/></svg></span><div><b>All processing happens locally.</b><p>Your data never leaves your device.</p></div><a href="#">Learn more →</a></div>
+    <div class="bPriv"><span class="pi"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="4" y="8" width="10" height="7" rx="1.5"/><path d="M6 8V6a3 3 0 0 1 6 0v2"/></svg></span><div><b>All processing happens locally.</b><p>Your data never leaves your device.</p></div></div>
     <button class="cancel" id="cancel">Cancel</button>
   </div>
   <button class="cbtn cfixed" id="continue">Continue →</button>
@@ -293,32 +293,115 @@
   addEventListener("mousemove",function(e){var r=cv.getBoundingClientRect();var hx=e.clientX-r.left,hy=e.clientY-r.top;mtX=hx/W*2-1;mtY=hy/H*2-1;hoverX=hx;hoverY=hy;});
   cv.addEventListener("mouseleave",function(){hoverX=-9999;hoverY=-9999;});
   addEventListener("resize",resize);resize();requestAnimationFrame(loop);
-  // Build -> connect (same screen)
+  // ── backend wiring ───────────────────────────────────────────────────────
+  async function api(path,opts){var r=await fetch(path,opts);if(!r.ok)throw new Error(path+" "+r.status);
+    var ct=r.headers.get("content-type")||"";return ct.indexOf("application/json")>=0?r.json():r.text();}
+  function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+  function ripplePop(){var k=(Math.random()*N)|0;ripple.on=true;ripple.t=0;ripple.ox=px[k];ripple.oy=py[k];ripple.oz=pz[k];glitch=0.6;}
+
+  // hero → connect view
   document.getElementById("buildBtn").addEventListener("click",function(){connectView=true;stage.classList.add("on");});
-  // sources
-  var SRC=[["Gmail","Emails, attachments, conversations","#ea4335","M"],["Google Drive","Docs, Sheets, Slides, files","#1fa463","▲"],["Notion","Notes, docs, wikis","#101418","N"],["Calendar","Events, meetings, schedules","#4285f4","31"],["Slack","Team conversations","#611f69","#"],["GitHub","Code, repos, issues","#20252b","GH"],["Figma","Design files, projects","#a259ff","F"],["Linear","Tasks, projects","#5e6ad2","L"],["Jira","Issues, roadmaps","#2684ff","J"],["Confluence","Docs, knowledge base","#1868db","C"],["X (Twitter)","Posts, bookmarks","#0a0a0a","𝕏"],["LinkedIn","Profile, posts, network","#0a66c2","in"],["Discord","Communities, conversations","#5865f2","D"],["WhatsApp","Chats (local import)","#25d366","☏"],["Custom Source","Connect any app via API or files","#0e131e","🔗"]];
-  var grid=document.getElementById("srcs"),cnt=document.getElementById("selcnt"),cont=document.getElementById("continue"),sel=0;
-  SRC.forEach(function(s){var el=document.createElement("div");el.className="src";var fs=s[3].length>1?11:14;
-    el.innerHTML='<div class="ico" style="background:'+s[2]+';font-size:'+fs+'px">'+s[3]+'</div><div class="nm">'+s[0]+'</div><div class="ds">'+s[1]+'</div><div class="add">+</div>';
-    el.addEventListener("click",function(){el.classList.toggle("sel");var on=el.classList.contains("sel");el.querySelector(".add").textContent=on?"✓":"+";sel+=on?1:-1;cnt.textContent=sel;cont.classList.toggle("ready",sel>0);
-      colorT=Math.min(1,sel/3);
-      if(on){var k=(Math.random()*N)|0;ripple.on=true;ripple.t=0;ripple.ox=px[k];ripple.oy=py[k];ripple.oz=pz[k];glitch=0.6;}});grid.appendChild(el);});
+
+  // ── sources: real connectors from the backend ────────────────────────────
+  var ICONS={gmail:["#ea4335","M"],gdrive:["#1fa463","▲"],gcal:["#4285f4","31"],
+    notion:["#101418","N"],slack:["#611f69","#"],github:["#20252b","GH"],
+    linear:["#5e6ad2","L"],notes:["#d6b24a","✎"],files:["#3b6ea5","▤"],
+    apple_mail:["#2b8fff","✉"],apple_calendar:["#ff5a5f","31"],imessage:["#25d366","☏"]};
+  function iconFor(c){var m=ICONS[c.name]||ICONS[(c.name||"").split(":")[0]];
+    return m||["#0e131e",(c.label||"?").slice(0,1).toUpperCase()];}
+  var GOOGLE=["gmail","gdrive","gcal"];
+  var grid=document.getElementById("srcs"),cnt=document.getElementById("selcnt"),cont=document.getElementById("continue");
+  var CONNECTORS=[],selected={};
+  function selCount(){var n=0;for(var k in selected)if(selected[k])n++;return n;}
+  function refreshCount(){var n=selCount();cnt.textContent=n;cont.classList.toggle("ready",n>0);colorT=Math.min(1,n/3);}
+  function renderSources(list){grid.innerHTML="";selected={};
+    list.forEach(function(c){var ic=iconFor(c),fs=ic[1].length>1?11:14;
+      var el=document.createElement("div");el.className="src";
+      if(c.ready)selected[c.name]=true;el.classList.toggle("sel",!!c.ready);
+      el.innerHTML='<div class="ico" style="background:'+ic[0]+';font-size:'+fs+'px">'+esc(ic[1])+'</div>'
+        +'<div class="nm">'+esc(c.label)+'</div>'
+        +'<div class="ds">'+esc(c.ready?"Connected · ready to sync":(c.reason||"Tap to include"))+'</div>'
+        +'<div class="add">'+(c.ready?"✓":"+")+'</div>';
+      el.addEventListener("click",function(){var on=!selected[c.name];selected[c.name]=on;
+        el.classList.toggle("sel",on);el.querySelector(".add").textContent=on?"✓":"+";refreshCount();if(on)ripplePop();});
+      grid.appendChild(el);});
+    refreshCount();}
+  var FALLBACK=[{name:"gmail",label:"Gmail",ready:false},{name:"gdrive",label:"Google Drive",ready:false},
+    {name:"gcal",label:"Google Calendar",ready:false},{name:"notion",label:"Notion",ready:false},
+    {name:"github",label:"GitHub",ready:false},{name:"linear",label:"Linear",ready:false},
+    {name:"files",label:"Local Files",ready:false},{name:"notes",label:"Manual Notes",ready:true}];
+  api("/api/connectors").then(function(d){CONNECTORS=(d.connectors||[]).slice();
+    CONNECTORS.sort(function(a,b){return (b.ready?1:0)-(a.ready?1:0)||a.label.localeCompare(b.label);});
+    renderSources(CONNECTORS.length?CONNECTORS:FALLBACK);}).catch(function(){renderSources(FALLBACK);});
+
+  // hero counters reflect the real brain
+  api("/api/brain/stats").then(function(s){var hn=document.getElementById("heroNodes");if(hn)hn.textContent=(s.total||0).toLocaleString();}).catch(function(){});
+
+  // ── build: trigger a real sync and follow real progress ──────────────────
   var LOG=["Reading your sources…","Scanning emails & docs…","Extracting people & projects…","Mapping connections…","Weaving your knowledge graph…"];
-  cont.addEventListener("click",function(){if(sel<1)return;stage.classList.add("building");
-    document.querySelector(".step[id=\"stepBuild\"]").classList.add("act");document.querySelectorAll(".step")[0].classList.remove("act");
-    document.getElementById("stSrc").textContent=sel;
-    var prog=0,itemsMax=8000+sel*2400,gbMax=(1.4+sel*0.35);
-    var fill=document.getElementById("bFill"),pct=document.getElementById("bPct"),det=document.getElementById("bDet"),itemsEl=document.getElementById("stItems"),gbEl=document.getElementById("stGB"),shown=-1;
-    var iv=setInterval(function(){prog=Math.min(1,prog+0.006);fill.style.width=(prog*100)+"%";pct.textContent=Math.round(prog*100)+"%";
-      itemsEl.textContent=Math.round(prog*itemsMax).toLocaleString();gbEl.textContent=(prog*gbMax).toFixed(1)+" GB";
-      var li=Math.min(LOG.length-1,Math.floor(prog*LOG.length));if(li!==shown){shown=li;det.textContent=LOG[li];var k=(Math.random()*N)|0;ripple.on=true;ripple.t=0;ripple.ox=px[k];ripple.oy=py[k];ripple.oz=pz[k];glitch=0.4;}
-      if(prog>=1){clearInterval(iv);det.textContent="Your brain is ready.";setTimeout(function(){stage.classList.remove("building");stage.classList.add("brainready");document.querySelectorAll(".step")[2].classList.add("act");document.querySelector(".step[id=\"stepBuild\"]").classList.remove("act");},900);}},40);});
-  document.getElementById("cancel").addEventListener("click",function(){stage.classList.remove("building");});
+  var buildIv=null;
+  function backToConnect(){if(buildIv){clearInterval(buildIv);buildIv=null;}stage.classList.remove("building");
+    document.querySelector('.step[id="stepBuild"]').classList.remove("act");document.querySelectorAll(".step")[0].classList.add("act");}
+  document.getElementById("heroSources")&&api("/api/connectors").then(function(d){
+    var hs=document.getElementById("heroSources");if(hs)hs.textContent=(d.connectors||[]).filter(function(c){return c.ready;}).length;}).catch(function(){});
+
+  async function startBuild(){
+    if(selCount()<1)return;
+    var chosen=Object.keys(selected).filter(function(k){return selected[k];});
+    stage.classList.add("building");
+    document.querySelector('.step[id="stepBuild"]').classList.add("act");document.querySelectorAll(".step")[0].classList.remove("act");
+    document.getElementById("stSrc").textContent=selCount();
+    // if a Google source is chosen but Google isn't connected yet → open consent
+    var needGoogle=chosen.some(function(n){return GOOGLE.indexOf(n)>=0;}),gOk=false;
+    try{gOk=(await api("/api/google/status")).connected;}catch(e){}
+    if(needGoogle&&!gOk){try{await api("/api/google/reconnect",{method:"POST"});}catch(e){}}
+    try{await api("/api/sync/now",{method:"POST"});}catch(e){}
+    var fill=document.getElementById("bFill"),pct=document.getElementById("bPct"),det=document.getElementById("bDet"),
+        itemsEl=document.getElementById("stItems"),entEl=document.getElementById("stEnt"),prog=0,shown=-1;
+    buildIv=setInterval(async function(){
+      var syncing=false,total=0,ents=0;
+      try{syncing=(await api("/api/sync/status")).syncing;}catch(e){}
+      try{var st=await api("/api/brain/stats");total=st.total||0;ents=(st.graph&&st.graph.entities)||0;}catch(e){}
+      var target=syncing?0.92:1;prog=Math.min(target,prog+(syncing?0.02:0.08));
+      fill.style.width=(prog*100)+"%";pct.textContent=Math.round(prog*100)+"%";
+      itemsEl.textContent=total.toLocaleString();entEl.textContent=ents.toLocaleString();
+      var li=Math.min(LOG.length-1,Math.floor(prog*LOG.length));
+      if(li!==shown){shown=li;det.textContent=LOG[li];ripplePop();}
+      if(!syncing&&prog>=1){clearInterval(buildIv);buildIv=null;det.textContent="Your brain is ready.";
+        setTimeout(function(){stage.classList.remove("building");stage.classList.add("brainready");
+          document.querySelectorAll(".step")[2].classList.add("act");document.querySelector('.step[id="stepBuild"]').classList.remove("act");
+          populateDigest();},700);}
+    },700);
+  }
+  cont.addEventListener("click",startBuild);
+  document.getElementById("cancel").addEventListener("click",backToConnect);
+
+  // ── digest: fill the cards from the real brain ───────────────────────────
+  var CAT={gmail:"comm",apple_mail:"comm",imessage:"comm",slack:"comm",
+    gcal:"personal",apple_calendar:"personal",
+    gdrive:"work",github:"work",linear:"work",notion:"work",
+    files:"learning",notes:"learning"};
+  async function populateDigest(){
+    var st,ents;
+    try{st=await api("/api/brain/stats");}catch(e){st={total:0,by_source:{},graph:{entities:0}};}
+    try{ents=(await api("/api/brain/entities?limit=24")).entities||[];}catch(e){ents=[];}
+    var bs=st.by_source||{},counts={work:0,learning:0,comm:0,personal:0};
+    Object.keys(bs).forEach(function(src){var c=CAT[src]||CAT[src.split(":")[0]]||"work";counts[c]+=bs[src];});
+    var cards=document.querySelectorAll(".digest .dcard"),order=["work","learning","comm","personal"];
+    var names=ents.map(function(e){return e.name;}),per=Math.ceil((names.length||1)/4);
+    cards.forEach(function(card,i){
+      var it=card.querySelector(".dc-it");if(it)it.textContent=(counts[order[i]]||0).toLocaleString()+" items";
+      var slice=names.slice(i*per,i*per+per).slice(0,5);
+      var k=card.querySelector(".dc-k span");if(k&&slice.length)k.textContent="Key themes: "+slice.join(", ");});
+    if((st.total||0)===0){var p=document.querySelector(".dhead p");
+      if(p)p.textContent="Your brain is just getting started. Connect a source and this fills in with what matters to you.";}
+  }
+
+  // ── navigation / completion ──────────────────────────────────────────────
   function enterApp(){try{localStorage.setItem("lodestone_onboarded","1");}catch(e){}window.location.href="/";}
-  document.getElementById("toBrain").addEventListener("click",function(){this.textContent="Entering…";setTimeout(enterApp,450);});
-  document.querySelector(".menu").addEventListener("click",enterApp);
-  document.querySelector(".skip.trust").style.cursor="pointer";
-  document.querySelector(".skip.trust").addEventListener("click",enterApp);
+  document.getElementById("toBrain").addEventListener("click",function(){this.textContent="Entering…";setTimeout(enterApp,400);});
+  var dedit=document.querySelector(".dedit");if(dedit)dedit.addEventListener("click",enterApp);
+  var skipTop=document.getElementById("skipTop");if(skipTop)skipTop.addEventListener("click",enterApp);
 })();
 </script>
 
