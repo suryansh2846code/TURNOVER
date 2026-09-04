@@ -28,8 +28,13 @@
   .bpct{font-size:11px;letter-spacing:.16em;color:var(--muted)}
   .blog{margin-top:14px;font-size:10.5px;letter-spacing:.08em;color:var(--faint);text-transform:uppercase;min-height:16px}
   /* digest phase */
-  .digest{position:absolute;inset:0;z-index:4;opacity:0;transform:translateY(14px);pointer-events:none;transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.2,1);
-    display:flex;flex-direction:column;justify-content:center;max-width:1120px;margin:0 auto;padding:64px 48px}
+  .digest{position:absolute;inset:0;z-index:4;overflow-y:auto;opacity:0;transform:translateY(14px);pointer-events:none;transition:opacity .8s ease,transform .8s cubic-bezier(.2,.7,.2,1)}
+  .dinner{max-width:790px;padding:120px 48px 96px}
+  .digest::-webkit-scrollbar{width:8px}.digest::-webkit-scrollbar-thumb{background:rgba(223,231,242,.12);border-radius:8px}
+  .adapt{margin-top:16px;max-width:790px;font-size:11px;line-height:1.6;color:var(--faint);border-left:1px solid var(--line);padding-left:12px}
+  .adapt b{color:var(--muted);font-weight:400}
+  .cat li .sub{color:var(--faint);font-size:11px}
+  .catsub{font-size:10.5px;color:var(--faint);margin:-6px 0 12px;letter-spacing:.04em}
   .digest.show{opacity:1;transform:none;pointer-events:auto}
   .dhead{margin-bottom:26px;max-width:640px}
   .deye{font-size:10.5px;letter-spacing:.28em;text-transform:uppercase;color:var(--faint)}
@@ -70,23 +75,30 @@
   </div>
 
   <div class="digest" id="digest">
+    <div class="dinner">
     <div class="dhead">
-      <div class="deye">Your brain is live · on-device</div>
+      <div class="deye">Your brain is live · on-device · 22.0K nodes</div>
       <h1>Your world, <b>oriented.</b></h1>
-      <p>Mapped locally from what you connected. It sharpens every time you work — and never leaves your Mac.</p>
+      <p>Mapped locally from what you connected. These are your four strongest areas right now — they change as your world does. Scroll to see everything.</p>
     </div>
     <div class="cats">
       <div class="cat"><div class="cat-h"><span class="dot" style="background:var(--blue)"></span>You</div>
-        <ul><li>Founder-engineer building local-first AI tools.</li><li>Ships fast; privacy is non-negotiable.</li><li>Building for Indian SMBs.</li></ul></div>
+        <div class="catsub">Who you are, in your own patterns</div>
+        <ul><li>Founder-engineer — local-first AI tools.</li><li>Building <b>Lodestone</b> and <b>SokoArena</b>.</li><li>Values privacy, depth over breadth, shipping fast.</li><li>Based in India; building for Indian SMBs.</li><li>Works late; most active 10pm–2am.</li><li>Reaches for Claude &amp; local Ollama models.</li></ul></div>
       <div class="cat"><div class="cat-h"><span class="dot" style="background:var(--green)"></span>Your orbit</div>
-        <ul><li>Aria — cofounder, weekly syncs.</li><li>Dev — recurring 1:1s.</li><li>Priya — advisor, go-to-market.</li></ul></div>
+        <div class="catsub">The people around your work</div>
+        <ul><li><b>Aria</b> — cofounder · weekly syncs · owns design.</li><li><b>Dev</b> — younger brother · recurring 1:1s.</li><li><b>Priya</b> — advisor · go-to-market.</li><li><b>Rahul</b> — HackWithUP teammate.</li><li>Most contact this week: Aria, Priya.</li><li class="t">Divyansh — you owe a reply.</li></ul></div>
       <div class="cat"><div class="cat-h"><span class="dot" style="background:var(--amber)"></span>In motion</div>
-        <ul><li>Lodestone v0.3 — shipping this month.</li><li>SokoArena — active build.</li><li>HackWithUP finals — Aug 31.</li></ul></div>
+        <div class="catsub">What's moving right now</div>
+        <ul><li><b>Lodestone v0.3</b> — shipping this month.</li><li><b>SokoArena</b> — Algorand x402, active build.</li><li><b>HackWithUP finals</b> — Aug 31.</li><li>Investor deck — draft in progress.</li><li>Two meetings tomorrow: standup, Priya 1:1.</li></ul></div>
       <div class="cat"><div class="cat-h"><span class="dot" style="background:var(--violet)"></span>Open loops</div>
-        <ul><li>Investor update owed by Friday.</li><li>Reply to Priya's intro email.</li><li class="t">I'll nudge you before these slip.</li></ul></div>
+        <div class="catsub">Owed, unfinished, easy to drop</div>
+        <ul><li>Investor update — <b>due Friday</b>.</li><li>Reply to Priya's intro email.</li><li>Confirm the demo venue.</li><li>3 flagged threads unread &gt; 2 days.</li><li>Renew the domain (expires in 9 days).</li><li class="t">I'll nudge you before these slip.</li></ul></div>
     </div>
+    <div class="adapt">These four adapt to what you connect — <b>a student</b> would see <b>Courses</b> &amp; <b>Deadlines</b>; <b>a job-seeker</b>, <b>Applications</b> &amp; <b>Network</b>; <b>a parent</b>, <b>Family</b> &amp; <b>Home</b>. Your brain surfaces what actually matters to you.</div>
     <div class="style"><span class="lbl">Your voice</span><b>Warm and direct.</b> You keep follow-ups low-pressure and prefer concise asks that name the next action — I draft in that tone.</div>
     <div class="denter"><button class="cta" id="enter">Enter your workspace →</button></div>
+    </div>
   </div>
 </div>
 <script>
@@ -141,12 +153,13 @@
       var li=Math.min(LOG.length-1,Math.floor(bprog*LOG.length));if(li!==shown){shown=li;blog.textContent="› "+LOG[li];if(Math.random()<1){var k=(Math.random()*N)|0;ripple.on=true;ripple.t=0;ripple.ox=px[k];ripple.oy=py[k];ripple.oz=pz[k];glitch=0.4;}}
       if(bprog>=1){phase="dock";buildingEl.style.opacity="0";setTimeout(function(){buildingEl.style.display="none";},600);dockT=1;setTimeout(function(){digestEl.classList.add("show");badge.classList.add("show");glowEl.style.opacity="1";},700);}}
     dock+=(dockT-dock)*0.05;
-    rotY+=0.0016;if(ripple.on){ripple.t+=0.05;if(ripple.t>2.4)ripple.on=false;}glitch*=0.86;
+    if(phase==="building")rotY+=0.0016;if(ripple.on){ripple.t+=0.05;if(ripple.t>2.4)ripple.on=false;}glitch*=0.86;
     if(phase==="building")glowEl.style.opacity=(build*0.5).toFixed(3);
     nodesEl.textContent=(Math.round((0.15+0.85*build)*22*10)/10)+"K";
     render();last=t;}requestAnimationFrame(loop);}
   addEventListener("mousemove",function(e){mtX=e.clientX/innerWidth*2-1;mtY=e.clientY/innerHeight*2-1;});
   addEventListener("resize",resize);resize();if(reduce){bprog=1;build=1;dock=1;dockT=1;buildingEl.style.display="none";digestEl.classList.add("show");badge.classList.add("show");glowEl.style.opacity="1";render();}else requestAnimationFrame(loop);
+  setInterval(function(){if(phase!=="building"&&!ripple.on&&Math.random()<0.6){var k=(Math.random()*N)|0;ripple.on=true;ripple.t=0;ripple.ox=px[k];ripple.oy=py[k];ripple.oz=pz[k];}},4500);
   document.getElementById("enter").addEventListener("click",function(){this.textContent="Entering…";});
 })();
 </script>
