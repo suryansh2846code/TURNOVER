@@ -7,15 +7,16 @@ import uuid
 
 import httpx
 
-from .base import ChatResult, LLMProvider, Message, Tool, ToolCall
+from .base import ChatResult, LLMProvider, Message, Tool, ToolCall, _saved_key
 
 
 class AnthropicProvider(LLMProvider):
     name = "anthropic"
+    key_env = "ANTHROPIC_API_KEY"
 
     def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
         self.model = model or "claude-sonnet-5"
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "") or _saved_key("ANTHROPIC_API_KEY")
         self.base_url = os.environ.get(
             "ANTHROPIC_BASE_URL", "https://api.anthropic.com"
         )

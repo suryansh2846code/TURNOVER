@@ -868,6 +868,42 @@ async function maybeOnboard() {
   } catch (_) {}
 }
 
+// ── live brain-building status ─────────────────────────────────────────────
+// Sync started in onboarding keeps running here; this pill shows how the brain
+// is filling in real time. Click to kick a fresh sync.
+let _wasSyncing = false;
+async function updateBrainStatus() {
+  const el = $("#brainStatus");
+  if (!el) return;
+  try {
+    const [s, st] = await Promise.all([
+      api("/api/sync/status"), api("/api/brain/stats"),
+    ]);
+    const mem = (st.total || 0).toLocaleString();
+    const ent = (st.graph?.entities || 0).toLocaleString();
+    if (s.syncing) {
+      el.classList.add("syncing");
+      el.innerHTML = `<span class="bs-dot"></span>Building your brain… <b>${mem}</b> memories`;
+    } else {
+      el.classList.remove("syncing");
+      el.innerHTML = `<span class="bs-dot"></span>Brain ready · <b>${mem}</b> memories · <b>${ent}</b> entities`;
+      if (_wasSyncing) loadBrain();   // refresh panels when a sync just finished
+    }
+    _wasSyncing = s.syncing;
+  } catch (_) {}
+}
+{
+  const el = $("#brainStatus");
+  if (el) el.onclick = async () => {
+    try { const r = await api("/api/sync/now", { method: "POST" });
+      toast(r.started ? "syncing your sources…" : (r.reason || "already syncing"));
+      updateBrainStatus();
+    } catch (e) { toast(String(e)); }
+  };
+}
+
 loadAgents(); loadProviders(); loadBrain(); loadTasks(); loadReminders(); loadRoutines(); maybeOnboard();
-// keep time-based panels fresh so fired reminders / completed sends update
+updateBrainStatus();
+// poll the brain status often while it's building, and keep time-based panels fresh
+setInterval(updateBrainStatus, 5000);
 setInterval(() => { loadReminders(); loadRoutines(); }, 45000);

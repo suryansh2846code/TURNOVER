@@ -141,6 +141,8 @@
   .bfoot{position:absolute;left:44px;bottom:22px;z-index:5;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);opacity:0;transition:opacity .5s}
   .stage.brainready .bfoot{opacity:1}
   /* source card connection state */
+  .src.llm-src{border-color:rgba(143,192,255,.28);background:linear-gradient(180deg,rgba(91,155,255,.06),transparent)}
+  .src.llm-src.sel{border-color:var(--blue);background:rgba(91,155,255,.1)}
   .src.busy{opacity:.7;pointer-events:none}
   .src .spin{position:absolute;top:12px;right:12px;width:15px;height:15px;border:2px solid var(--line2);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -359,6 +361,7 @@
     if(txt){var ds=el.querySelector(".ds");if(ds)ds.textContent=txt;}}
 
   function renderSources(list){grid.innerHTML="";
+    grid.appendChild(llmCard());
     list.forEach(function(c){
       var ic=iconFor(c),fs=ic[1].length>1?11:14,on=!!selected[c.name];
       var el=document.createElement("div");el.className="src"+(on?" sel":"");el.dataset.name=c.name;
@@ -372,6 +375,41 @@
         else connectFlow(c,el);});
       grid.appendChild(el);});
     refreshCount();}
+
+  // ── AI model (LLM) — the brain reasons; this is where it thinks ──────────
+  function llmName(){return localStorage.getItem("lodestone_provider")||"";}
+  function llmCard(){
+    var p=llmName(),on=!!p;
+    var el=document.createElement("div");el.className="src llm-src"+(on?" sel":"");el.dataset.name="__llm";
+    el.innerHTML='<div class="ico" style="background:#12203a;color:#8fc0ff;font-size:15px">◆</div>'
+      +'<div class="nm">AI Model</div>'
+      +'<div class="ds">'+esc(on?(p+(localStorage.getItem("lodestone_model")?" · "+localStorage.getItem("lodestone_model"):"")):"Choose where it thinks")+'</div>'
+      +'<div class="add">'+(on?"✓":"+")+'</div>';
+    el.addEventListener("click",openLLM);
+    return el;}
+  async function openLLM(){
+    var provs=[];try{provs=(await api("/api/providers")).providers||[];}catch(e){}
+    var cur=llmName();
+    var opts=provs.map(function(p){return '<option value="'+esc(p.name)+'"'+(p.name===cur?' selected':'')+'>'+esc(p.name)+(p.ready?' · ready':(p.locality==='cloud'?' · needs key':''))+'</option>';}).join('');
+    cmodalOpen('Connect your AI model',
+      '<p>Pick where your agents think. Local models keep everything on your Mac; cloud models need an API key.</p>'
+      +'<label>Provider</label><select id="cmProv" style="width:100%;padding:11px 13px;border:1px solid var(--line2);border-radius:8px;background:#05070d;color:var(--star);font-family:var(--mono);font-size:13px;margin-bottom:8px">'+opts+'</select>'
+      +'<div id="cmDest" class="cmnote"></div>'
+      +'<label>Model <span style="text-transform:none;letter-spacing:0;color:var(--faint)">(optional)</span></label>'
+      +'<input id="cmModel" placeholder="e.g. claude-sonnet-5" value="'+esc(localStorage.getItem("lodestone_model")||"")+'">'
+      +'<div id="cmKeyWrap" style="display:none"><label id="cmKeyLabel">API key</label>'
+      +'<input id="cmKey" type="password" autocomplete="off" spellcheck="false" placeholder="paste your key">'
+      +'<div class="cmnote">Stored locally on your Mac only — never uploaded.</div></div>',
+      async function(){var prov=val("cmProv");if(!prov)return false;var key=val("cmKey");
+        if(key){var r=await api("/api/providers/"+prov+"/key",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:key})});
+          if(!r.ready)throw new Error(r.reason||"That key wasn't accepted");}
+        localStorage.setItem("lodestone_provider",prov);
+        var m=val("cmModel");if(m)localStorage.setItem("lodestone_model",m);else localStorage.removeItem("lodestone_model");
+        renderSources(CONNECTORS.length?CONNECTORS:FALLBACK);ripplePop();return true;},"Save model");
+    function upd(){var p=null,pv=val("cmProv");for(var i=0;i<provs.length;i++)if(provs[i].name===pv)p=provs[i];
+      var d=document.getElementById("cmDest");if(d)d.textContent=p?(p.destination||""):"";
+      var w=document.getElementById("cmKeyWrap");if(w)w.style.display=(p&&p.locality==="cloud"&&!p.ready)?"block":"none";}
+    var sel=document.getElementById("cmProv");if(sel){sel.addEventListener("change",upd);upd();}}
 
   function connectFlow(c,el){
     if(GOOGLE.indexOf(c.name)>=0)return connectGoogle(el);
@@ -540,19 +578,9 @@
   document.getElementById("toBrain").addEventListener("click",function(){this.textContent="Entering…";setTimeout(enterApp,400);});
   var dedit=document.querySelector(".dedit");if(dedit)dedit.addEventListener("click",enterApp);
   var skipTop=document.getElementById("skipTop");if(skipTop)skipTop.addEventListener("click",enterApp);
-
-  // ── resume on reload (Cmd+R): if a sync is mid-flight, drop back into the
-  //     live Build screen instead of restarting from the hero. ──────────────
-  (async function resume(){
-    if(localStorage.getItem("lodestone_onboarded"))return;   // returning user → app handles it
-    var syncing=false;try{syncing=(await api("/api/sync/status")).syncing;}catch(e){return;}
-    if(!syncing)return;
-    didReset=true;                 // a build is already underway — don't wipe it
-    await refreshConnectors();
-    document.getElementById("stSrc").textContent=CONNECTORS.filter(function(c){return c.ready;}).length;
-    enterBuildUI();
-    runBuildProgress(0.9);         // pick up near the tail of the bar
-  })();
+  // On reload (Cmd+R) we always start fresh from the first screen. A sync that's
+  // already running keeps going in the background — track it from the workspace's
+  // brain-status indicator.
 })();
 </script>
 

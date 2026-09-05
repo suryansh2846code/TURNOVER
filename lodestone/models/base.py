@@ -11,6 +11,17 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 
+def _saved_key(env_key: str) -> str:
+    """Fall back to a key saved from the UI (~/Library/Lodestone/secrets.json)
+    when the matching env var isn't set — so users can paste an API key in the
+    onboarding / workspace instead of editing their shell profile."""
+    try:
+        from ..config import get_settings
+        return get_settings().get_secret(env_key) or ""
+    except Exception:
+        return ""
+
+
 @dataclass
 class ToolCall:
     id: str

@@ -12,7 +12,7 @@ import uuid
 
 import httpx
 
-from .base import ChatResult, LLMProvider, Message, Tool, ToolCall
+from .base import ChatResult, LLMProvider, Message, Tool, ToolCall, _saved_key
 
 
 class OpenAICompatProvider(LLMProvider):
@@ -27,7 +27,7 @@ class OpenAICompatProvider(LLMProvider):
         self.model = model or os.environ.get(
             f"{self.name.upper()}_MODEL", self.default_model
         )
-        self.api_key = api_key or os.environ.get(self.key_env, "")
+        self.api_key = api_key or os.environ.get(self.key_env, "") or _saved_key(self.key_env)
         self.base_url = (base_url or os.environ.get(
             f"{self.name.upper()}_BASE_URL", self.default_base
         )).rstrip("/")

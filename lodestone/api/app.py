@@ -317,6 +317,25 @@ def save_connector_secret(name: str, body: SecretIn):
     ready, reason = cls().is_configured()
     return {"saved": True, "ready": ready, "reason": reason}
 
+
+@app.post("/api/providers/{name}/key")
+def save_provider_key(name: str, body: SecretIn):
+    """Save (or clear) an LLM provider's API key from the UI — stored locally in
+    ~/Library/Lodestone/secrets.json and picked up by the provider on next use."""
+    from ..models.registry import _REGISTRY
+    cls = _REGISTRY.get(name)
+    if cls is None:
+        raise HTTPException(404, f"unknown provider '{name}'")
+    key_env = getattr(cls, "key_env", None)
+    if not key_env:
+        raise HTTPException(400, f"'{name}' does not use an API key")
+    get_settings().set_secret(key_env, body.value or None)
+    try:
+        ready, reason = cls().is_ready()
+    except Exception as exc:
+        ready, reason = False, str(exc)[:120]
+    return {"saved": True, "ready": ready, "reason": reason}
+
 @app.post("/api/connectors/{name}/sync")
 def sync(name: str, body: SyncIn):
     try:
