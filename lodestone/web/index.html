@@ -13,16 +13,18 @@
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark"></span><span class="brand-word">Lodestone</span></div>
 
-      <div class="side-label">Agents <button id="newAgentBtn" class="side-add" title="New agent">+</button></div>
+      <div class="side-label">Agents</div>
       <nav id="agentList" class="agents"></nav>
       <button id="newAgentRow" class="new-agent"><span class="na-plus">+</span> New Agent</button>
+      <button id="newAgentBtn" hidden></button>
 
       <div class="side-nav">
-        <button class="snav" data-nav="brain"><span class="snav-ic">◇</span> Brain</button>
-        <button class="snav" data-nav="sources"><span class="snav-ic">▤</span> Connectors</button>
-        <button class="snav" data-nav="tasks"><span class="snav-ic">☑</span> Tasks</button>
-        <button class="snav" data-nav="model"><span class="snav-ic">◐</span> Model</button>
-        <button class="snav" id="helpBtn"><span class="snav-ic">?</span> Getting started</button>
+        <button class="snav" data-nav="brain"><span class="snav-ic"></span> Brain</button>
+        <button class="snav" data-nav="sources"><span class="snav-ic"></span> Connectors</button>
+        <button class="snav" data-nav="tasks"><span class="snav-ic"></span> Tasks</button>
+        <button class="snav" data-nav="tools"><span class="snav-ic"></span> Tools</button>
+        <button class="snav" data-nav="model"><span class="snav-ic"></span> Model</button>
+        <button class="snav" id="helpBtn"><span class="snav-ic"></span> Getting started</button>
       </div>
 
       <div class="side-foot">
@@ -50,11 +52,11 @@
       <div id="messages" class="messages"></div>
 
       <form id="composer" class="composer">
-        <button type="button" class="cmp-ic" id="attachBtn" title="Attach" tabindex="-1">＋</button>
+        <button type="button" class="cmp-ic" id="attachBtn" title="Attach" tabindex="-1"></button>
         <textarea id="input" rows="1" autocomplete="off"
                placeholder="Message your agent… it already knows you."></textarea>
-        <button type="button" class="cmp-ic" id="micBtn" title="Voice (coming soon)" tabindex="-1">🎙</button>
-        <button id="send" type="submit" class="cmp-send" title="Send">↑</button>
+        <button type="button" class="cmp-ic" id="micBtn" title="Voice (coming soon)" tabindex="-1"></button>
+        <button id="send" type="submit" class="cmp-send" title="Send"></button>
       </form>
       <div class="cmp-hints" id="cmpHints"></div>
     </main>
@@ -85,11 +87,17 @@
           </div>
           <div id="taskList" class="tasks"></div>
           <div id="reminderWrap" hidden>
-            <div class="ctx-label">⏰ Reminders</div>
+            <div class="ctx-label">Reminders</div>
             <div id="reminderList" class="tasks"></div>
           </div>
-          <div class="ctx-label">⚡ Automations <button id="newRoutineBtn" class="tiny ghost">+ New</button></div>
+          <div class="ctx-label">Automations <button id="newRoutineBtn" class="tiny ghost">+ New</button></div>
           <div id="routineList" class="tasks"></div>
+        </div>
+
+        <!-- Tools / skills -->
+        <div class="dpanel" data-d="tools" hidden>
+          <p class="tool-intro">The skills your agents use to get things done.</p>
+          <div id="toolList" class="tools"></div>
         </div>
 
         <!-- Model -->
@@ -129,7 +137,7 @@
         </div>
         <label>Instruction (what the agent should do)</label>
         <textarea id="rmInstruction" rows="3" placeholder="e.g. Summarize the new email and send the summary to me@gmail.com"></textarea>
-        <p class="t" style="font-size:11px;margin-top:6px">⚠️ Automations run without a per-time confirm — actions fire automatically. Disable or delete anytime.</p>
+        <p class="t" style="font-size:11px;margin-top:6px">Automations run without a per-time confirm — actions fire automatically. Disable or delete anytime.</p>
       </div>
       <div class="modal-foot"><span></span><button id="rmCreate">Create automation</button></div>
     </div>
@@ -191,7 +199,7 @@
     <!-- brain tools side panel -->
     <aside class="bs-side">
       <div class="bs-side-label">Search</div>
-      <input id="brainSearch" class="ctx-input" autocomplete="off" placeholder="🔍 Search your brain…" />
+      <input id="brainSearch" class="ctx-input" autocomplete="off" placeholder="Search your brain…" />
       <div id="brainStats" hidden></div>
       <div class="bs-side-label">Knowledge graph</div>
       <div id="entities" class="entities"></div>
@@ -202,8 +210,8 @@
       </div>
       <div class="bs-side-label">Backup
         <span class="brain-io">
-          <button id="brainExport" class="tiny ghost" title="Backup your brain">⤓ Export</button>
-          <button id="brainImport" class="tiny ghost" title="Restore a backup">⤒ Import</button>
+          <button id="brainExport" class="tiny ghost" title="Backup your brain">Export</button>
+          <button id="brainImport" class="tiny ghost" title="Restore a backup">Import</button>
           <input id="brainImportFile" type="file" accept="application/json,.json" hidden />
         </span></div>
     </aside>

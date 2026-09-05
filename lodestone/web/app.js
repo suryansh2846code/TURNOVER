@@ -16,6 +16,35 @@ function orbPair(id) {
   return ORB_COLORS[h % ORB_COLORS.length];
 }
 function orbStyle(id) { const [a, b] = orbPair(id); return `background:radial-gradient(circle at 32% 26%, ${a}, ${b} 74%)`; }
+
+// ── minimal line icons (no emoji) ───────────────────────────────────────────
+const _S = (p, s = 16) => `<svg viewBox="0 0 16 16" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const IC = {
+  brain: _S('<path d="M8 1.6l6.4 6.4L8 14.4 1.6 8z"/>'),
+  connectors: _S('<rect x="2.5" y="3" width="11" height="2.6" rx="1"/><rect x="2.5" y="6.7" width="11" height="2.6" rx="1"/><rect x="2.5" y="10.4" width="8" height="2.4" rx="1"/>'),
+  tasks: _S('<rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M5.4 8l1.7 1.7L11 5.9"/>'),
+  tools: _S('<path d="M2 5h6M11 5h3M2 11h3M8 11h6"/><circle cx="9.3" cy="5" r="1.5"/><circle cx="6" cy="11" r="1.5"/>'),
+  model: _S('<circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/>'),
+  help: _S('<circle cx="8" cy="8" r="6"/><path d="M6.2 6.2a1.9 1.9 0 0 1 3.6.7c0 1.3-1.8 1.5-1.8 2.7"/><circle cx="8" cy="11.4" r=".55" fill="currentColor" stroke="none"/>'),
+  message: _S('<path d="M2.5 4.5h11v6.5H7l-3 2v-2H2.5z"/>'),
+  search: _S('<circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2L14 14"/>'),
+  spark: _S('<path d="M8 1.6l1.5 4.9L14 8l-4.5 1.5L8 14.4 6.5 9.5 2 8l4.5-1.5z"/>'),
+  plus: _S('<path d="M8 3.5v9M3.5 8h9"/>', 18),
+  mic: _S('<rect x="6" y="2" width="4" height="7.5" rx="2"/><path d="M4 8a4 4 0 0 0 8 0M8 11.5V14"/>', 17),
+  arrowUp: _S('<path d="M8 12.5V4M4.5 7.5L8 4l3.5 3.5"/>', 17),
+  lock: _S('<rect x="3.5" y="7" width="9" height="6" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>', 13),
+  cloud: _S('<path d="M5 12a3 3 0 0 1 .3-6 3.5 3.5 0 0 1 6.6.8A2.6 2.6 0 0 1 11.5 12z"/>', 13),
+  clock: _S('<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.4"/>'),
+  bolt: _S('<path d="M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z"/>'),
+  attach: _S('<path d="M12 6.5l-5 5a2.4 2.4 0 0 1-3.4-3.4l5.2-5.2a1.6 1.6 0 0 1 2.3 2.3l-5.2 5.2a.8.8 0 0 1-1.1-1.1L9.5 5"/>', 17),
+};
+function applyIcons() {
+  document.querySelectorAll(".snav").forEach((b) => {
+    const el = b.querySelector(".snav-ic"); if (el) el.innerHTML = IC[b.id === "helpBtn" ? "help" : b.dataset.nav] || "";
+  });
+  const set = (id, name) => { const e = $(id); if (e) e.innerHTML = IC[name]; };
+  set("#attachBtn", "attach"); set("#micBtn", "mic"); set("#send", "arrowUp");
+}
 function agentOrbId(a) { return (a && a.id === localStorage.getItem("lodestone_lead_agent")) ? "__lead" : (a ? a.id : ""); }
 function agentDesc(a) {
   if (!a) return "";
@@ -110,7 +139,7 @@ function updatePrivacyBadge() {
   el.hidden = false;
   const local = p.locality === "local";
   el.className = "privacy-badge " + (local ? "loc-local" : "loc-cloud");
-  el.innerHTML = `<span class="pb-ic">${local ? "🔒" : "☁️"}</span>` +
+  el.innerHTML = `<span class="pb-ic">${local ? IC.lock : IC.cloud}</span>` +
     `<span>${local ? "On-device" : "Leaves your Mac"}</span>`;
   el.title = p.destination || "";
 }
@@ -163,10 +192,10 @@ function heroEmpty() {
       </div>
     </div>
     <div class="he-cards">
-      <button class="he-card" data-q="Catch me up — what's new since yesterday?"><span class="hc-ic">💬</span><b>Catch me up</b><span>What's new since yesterday?</span></button>
-      <button class="he-card" data-q="What should I focus on today? Show my open tasks."><span class="hc-ic">☑</span><b>Show my tasks</b><span>What should I focus on today?</span></button>
-      <button class="he-card" data-fill="Find "><span class="hc-ic">🔎</span><b>Find something</b><span>Search across my apps &amp; notes.</span></button>
-      <button class="he-card" data-q="Help me plan my day and week."><span class="hc-ic">✨</span><b>Help me plan</b><span>Plan my day / week.</span></button>
+      <button class="he-card" data-q="Catch me up — what's new since yesterday?"><span class="hc-ic">${IC.message}</span><b>Catch me up</b><span>What's new since yesterday?</span></button>
+      <button class="he-card" data-q="What should I focus on today? Show my open tasks."><span class="hc-ic">${IC.tasks}</span><b>Show my tasks</b><span>What should I focus on today?</span></button>
+      <button class="he-card" data-fill="Find "><span class="hc-ic">${IC.search}</span><b>Find something</b><span>Search across my apps &amp; notes.</span></button>
+      <button class="he-card" data-q="Help me plan my day and week."><span class="hc-ic">${IC.spark}</span><b>Help me plan</b><span>Plan my day / week.</span></button>
     </div>`;
   div.querySelectorAll(".he-card").forEach((c) => c.onclick = () => {
     if (c.dataset.fill) { $("#input").value = c.dataset.fill; $("#input").focus(); autoGrow(); }
@@ -205,23 +234,23 @@ function actionCard(a) {
   let title, rows, verb = "send";
   const at = p.at || p.when;
   if (a.type === "send_email") {
-    title = "✉️ Send email"; verb = at ? "schedule" : "send";
+    title = "Send email"; verb = at ? "schedule" : "send";
     rows = `<div class="ac-row"><b>To</b> ${esc(p.to || "")}</div>
        <div class="ac-row"><b>Subject</b> ${esc(p.subject || "")}</div>
        ${at ? `<div class="ac-row"><b>Send at</b> ${esc(at)}</div>` : ""}
        <div class="ac-body">${esc(p.body || "")}</div>`;
   } else if (a.type === "set_reminder") {
-    title = "⏰ Set reminder"; verb = "set";
+    title = "Set reminder"; verb = "set";
     rows = `<div class="ac-row"><b>Remind</b> ${esc(p.message || "")}</div>
        <div class="ac-row"><b>When</b> ${esc(p.at || p.when || "")}</div>`;
   } else if (a.type === "create_routine") {
-    title = "⚡ Create automation"; verb = "create";
+    title = "Create automation"; verb = "create";
     const trig = p.trigger === "schedule" ? `every ${p.interval_min || 60} min` : "on every new email";
     rows = `<div class="ac-row"><b>Name</b> ${esc(p.name || "Automation")}</div>
        <div class="ac-row"><b>Runs</b> ${trig} · ${esc(p.agent || p.agent_id || "personal")}</div>
        <div class="ac-body">${esc(p.instruction || "")}</div>`;
   } else {
-    title = "📅 Create calendar event"; verb = "create";
+    title = "Create calendar event"; verb = "create";
     rows = `<div class="ac-row"><b>Title</b> ${esc(p.title || "")}</div>
        <div class="ac-row"><b>When</b> ${esc(p.start || "")}${p.end ? " → " + esc(p.end) : ""}</div>
        ${p.description ? `<div class="ac-body">${esc(p.description)}</div>` : ""}`;
@@ -243,14 +272,14 @@ function actionCard(a) {
         body: JSON.stringify({ type: a.type, params: { ...p, agent_id: current } }) });
       const rr = el.querySelector(".ac-result");
       if (r.ok) { rr.innerHTML = `<span class="ac-ok">✓ ${esc(r.detail || "Done")}</span>`; loadReminders(); loadRoutines(); return; }
-      rr.innerHTML = `<span class="ac-err">⚠️ ${esc(r.error || "Failed")}</span>`;
+      rr.innerHTML = `<span class="ac-err">${esc(r.error || "Failed")}</span>`;
       if (r.reauth) {
         const b = document.createElement("button");
         b.className = "tiny"; b.textContent = "Reconnect Google"; b.style.marginTop = "8px";
         b.onclick = async () => { const x = await api("/api/google/reconnect", { method: "POST" }); toast(x.detail || "Opening browser…"); };
         rr.appendChild(document.createElement("br")); rr.appendChild(b);
       }
-    } catch (e) { el.querySelector(".ac-result").innerHTML = `<span class="ac-err">⚠️ ${esc(String(e))}</span>`; }
+    } catch (e) { el.querySelector(".ac-result").innerHTML = `<span class="ac-err">${esc(String(e))}</span>`; }
   };
   return el;
 }
@@ -352,8 +381,8 @@ async function send(text) {
     loadReminders();   // …or set a reminder
   } catch (e) {
     think.done();
-    if (controller && controller.signal.aborted) addMsg("assistant", "⏹ stopped");
-    else addMsg("assistant", "⚠️ " + e);
+    if (controller && controller.signal.aborted) addMsg("assistant", "■ stopped");
+    else addMsg("assistant", "△ " + e);
   }
   finally { controller = null; setBusy(false); }
 }
@@ -425,12 +454,12 @@ function renderGoogleCard(s) {
     const chips = (s.services || []).map((x) => `<span class="gchip">${esc(x)}</span>`).join("");
     el.className = "google-card connected";
     el.innerHTML =
-      `<div class="gc-row"><span class="gc-ic">✅</span>
+      `<div class="gc-row"><span class="gc-ic">✓</span>
          <div class="gc-txt"><b>Google connected</b>
            <span class="gc-sub">${esc(s.account || "signed in")}</span></div>
          <button class="tiny ghost" id="gcDisconnect">Disconnect</button></div>
        <div class="gchips">${chips}</div>
-       <div class="gc-note">🔒 Token stays on your Mac — not sent to any third party.</div>`;
+       <div class="gc-note">Token stays on your Mac — not sent to any third party.</div>`;
     $("#gcDisconnect").onclick = disconnectGoogle;
   } else {
     el.className = "google-card";
@@ -438,7 +467,7 @@ function renderGoogleCard(s) {
       `<div class="gc-txt"><b>Connect Google</b>
          <span class="gc-sub">Gmail · Calendar · Drive — read-only</span></div>
        <button class="gsignin" id="gcConnect"><span class="g-logo">G</span>Sign in with Google</button>
-       <div class="gc-note">🔒 One click. Token stays on your Mac.</div>`;
+       <div class="gc-note">One click. Token stays on your Mac.</div>`;
     $("#gcConnect").onclick = connectGoogle;
   }
 }
@@ -781,7 +810,7 @@ async function openPicker(path) {
     ? `${d.ingestible_here} ingestible file(s) directly here` : "no text files directly here (subfolders may still have them)";
   let rows = "";
   if (d.parent) rows += `<div class="pick-row up" data-go="${esc(d.parent)}">⤴  ..</div>`;
-  rows += d.dirs.map((name) => `<div class="pick-row" data-go="${esc(d.path.replace(/\/$/, "") + "/" + name)}">📁  ${esc(name)}</div>`).join("");
+  rows += d.dirs.map((name) => `<div class="pick-row" data-go="${esc(d.path.replace(/\/$/, "") + "/" + name)}">${esc(name)}</div>`).join("");
   $("#pickList").innerHTML = rows || `<div class="pick-row up">(no subfolders)</div>`;
   document.querySelectorAll("#pickList [data-go]").forEach((el) => el.onclick = () => openPicker(el.dataset.go));
 }
@@ -824,7 +853,7 @@ async function loadRoutines() {
       return `<div class="task"><div class="body">
         <div class="ttl">${esc(r.name)} ${r.enabled ? "" : "<span class='t'>(off)</span>"}</div>
         <div class="due">${trig} · ${esc(r.agent_id)}</div></div>
-        <span><span class="check" data-toggle-r="${r.id}" data-on="${r.enabled}" title="${r.enabled ? "disable" : "enable"}">${r.enabled ? "⏸" : "▶"}</span>
+        <span><span class="check" data-toggle-r="${r.id}" data-on="${r.enabled}" title="${r.enabled ? "disable" : "enable"}">${r.enabled ? "‖" : "▶"}</span>
         <span class="del" data-del-r="${r.id}">✕</span></span></div>`;
     }).join("") : `<div class="tasks-empty">No automations yet.</div>`;
     document.querySelectorAll("[data-toggle-r]").forEach((b) => b.onclick = async () => {
@@ -979,7 +1008,7 @@ async function agentWelcome(id) {
         model: $("#modelName").value.trim() || null }) });
     think.done();
     addMsg("assistant", res.reply);
-  } catch (e) { think.done(); addMsg("assistant", "⚠️ " + e); }
+  } catch (e) { think.done(); addMsg("assistant", "△ " + e); }
   finally { setBusy(false); }
 }
 
@@ -1132,7 +1161,17 @@ $("#bsSync").onclick = async () => {
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#brainScreen").hidden) closeBrainScreen(); });
 
 // ── slide-over drawers opened from the left nav ─────────────────────────────
-const DRAWER_TITLES = { sources: "Connectors", tasks: "Tasks", model: "AI model" };
+const DRAWER_TITLES = { sources: "Connectors", tasks: "Tasks", model: "AI model", tools: "Tools & skills" };
+async function loadTools() {
+  const box = $("#toolList"); if (!box) return;
+  box.innerHTML = `<div class="tasks-empty">loading…</div>`;
+  try {
+    const { tools } = await api("/api/agents/tools");
+    box.innerHTML = tools.map((t) =>
+      `<div class="tool"><div class="tool-nm">${esc(t.name)}</div><div class="tool-ds">${esc(t.description || "")}</div></div>`).join("")
+      || `<div class="tasks-empty">no tools</div>`;
+  } catch (e) { box.innerHTML = `<div class="tasks-empty">couldn't load tools</div>`; }
+}
 function openDrawer(name) {
   const bg = $("#drawerBg"); if (!bg) return;
   $("#drawerTitle").textContent = DRAWER_TITLES[name] || name;
@@ -1141,6 +1180,7 @@ function openDrawer(name) {
   if (name === "sources") loadBrain();
   if (name === "tasks") { loadTasks(); loadReminders(); loadRoutines(); }
   if (name === "model") loadProviders();
+  if (name === "tools") loadTools();
 }
 function closeDrawer() { const bg = $("#drawerBg"); if (bg) bg.hidden = true; }
 document.querySelectorAll(".snav").forEach((b) => b.onclick = () => {
@@ -1180,6 +1220,7 @@ window.addEventListener("keydown", (e) => {
 
 (async () => {
   if (await maybeOnboard()) return;   // redirecting to onboarding — stop here
+  applyIcons();
   loadAgents(); loadProviders(); loadBrain(); loadTasks(); loadReminders(); loadRoutines();
   updateBrainStatus(); maybeWelcome();
   // poll the brain status often while it's building, and keep time-based panels fresh

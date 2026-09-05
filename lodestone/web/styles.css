@@ -1,6 +1,7 @@
 :root {
   --bg: #0a0b0e; --panel: #101216; --panel-2: #15181e; --raise: #1b1f27;
-  --border: rgba(255,255,255,.07); --border2: rgba(255,255,255,.12);
+  /* borderless design — separation comes from panel fills, not lines */
+  --border: transparent; --border2: transparent;
   --text: #e9edf3; --muted: #9aa3b2; --faint: #5c6473;
   --accent: #6ea8fe; --accent-2: #58c896; --north: #f2c879; --danger: #ff6b6b;
   --user: #1d222b;
@@ -357,6 +358,22 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 *::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 6px; }
 *::-webkit-scrollbar-track { background: transparent; }
 button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, .agent:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── line icons (no emoji) ────────────────────────────────────────────── */
+.snav-ic, .cmp-ic, .cmp-send, .hc-ic, .pb-ic { display: inline-flex; align-items: center; justify-content: center; }
+.snav-ic { width: 18px; color: var(--muted); }
+.snav:hover .snav-ic { color: var(--text); }
+.hc-ic { color: var(--muted); }
+.hc-ic svg { width: 19px; height: 19px; }
+.cmp-ic svg, .cmp-send svg { width: 17px; height: 17px; }
+.pb-ic svg { width: 12px; height: 12px; }
+
+/* tools / skills list */
+.tool-intro { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; }
+.tools { display: flex; flex-direction: column; gap: 7px; }
+.tool { background: var(--panel-2); border-radius: 10px; padding: 11px 13px; }
+.tool-nm { font-family: var(--mono); font-size: 12.5px; color: var(--text); }
+.tool-ds { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.45; }
 
 @media (max-width: 1080px) {
   .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
