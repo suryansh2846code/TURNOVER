@@ -134,6 +134,43 @@
     </div>
   </div>
 
+  <!-- lead-agent welcome (first entry after onboarding) -->
+  <div id="welcome" class="welcome-bg" hidden>
+    <div class="welcome-box">
+      <div class="w-eyebrow">Step 04 · Your team</div>
+      <h2>Meet your <b>lead agent</b>.</h2>
+      <p>This one leads your whole team. It knows your world from your brain,
+        coordinates the specialist agents, and is always your first stop —
+        it helps you with everything. Give it a name.</p>
+      <label>Name your lead agent</label>
+      <div class="w-row">
+        <input id="wName" maxlength="24" autocomplete="off" spellcheck="false"
+               placeholder="e.g. Atlas, Nova, Sage" value="Atlas" />
+        <button id="wCreate">Create →</button>
+      </div>
+      <p class="w-note" id="wNote">It's built from your brain — this takes a moment.</p>
+      <button id="wSkip" class="w-skip">Skip for now</button>
+    </div>
+  </div>
+
+  <!-- live brain-building panel (opened from the header brain button) -->
+  <div id="brainBuild" class="modal-bg" hidden>
+    <div class="modal bb-modal">
+      <div class="modal-head"><b>Your brain</b><button id="bbClose" class="ghost tiny">✕</button></div>
+      <div class="bb-body">
+        <div class="bb-state" id="bbState">Checking…</div>
+        <div class="bb-bar"><div class="bb-fill" id="bbFill"></div></div>
+        <div class="bb-stats">
+          <div class="bb-stat"><b id="bbMem">0</b><span>Memories</span></div>
+          <div class="bb-stat"><b id="bbEnt">0</b><span>Entities</span></div>
+          <div class="bb-stat"><b id="bbRel">0</b><span>Facts</span></div>
+        </div>
+        <p class="bb-note">Your brain keeps learning in the background — everything stays on your Mac.</p>
+        <button id="bbSync" class="tiny" style="width:100%">Sync now</button>
+      </div>
+    </div>
+  </div>
+
   <!-- brain detail (entity facts / memory search) -->
   <div id="brainModal" class="modal-bg" hidden>
     <div class="modal">

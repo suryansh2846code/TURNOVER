@@ -184,6 +184,183 @@ def brain_reset(body: ResetIn | None = None):
             out["google_error"] = str(exc)[:120]
     return out
 
+def _extract_json(text: str) -> dict:
+    """Pull the first JSON object out of an LLM reply (which may wrap it in prose
+    or ```json fences)."""
+    import json as _json
+    s = (text or "").strip()
+    a, b = s.find("{"), s.rfind("}")
+    if a >= 0 and b > a:
+        s = s[a:b + 1]
+    return _json.loads(s)
+
+
+# maps a memory source to one of the four persona buckets
+_PERSONA_CAT = {"gmail": "comm", "apple_mail": "comm", "imessage": "comm", "slack": "comm",
+                "gcal": "personal", "apple_calendar": "personal",
+                "gdrive": "work", "github": "work", "linear": "work", "notion": "work",
+                "files": "learning", "notes": "learning"}
+
+
+def _base_personas() -> list[dict]:
+    brain = get_brain()
+    by_source = brain.stats().get("by_source", {})
+    counts = {"work": 0, "learning": 0, "comm": 0, "personal": 0}
+    for src, c in by_source.items():
+        counts[_PERSONA_CAT.get(src, _PERSONA_CAT.get(src.split(":")[0], "work"))] += c
+    names = [e["name"] for e in brain.graph.top_entities(limit=24)]
+    per = max(1, -(-len(names) // 4))
+
+    def themes(i):
+        return names[i * per:i * per + per][:5]
+    tpl = [("work", "Work", "What you're building and working on."),
+           ("learning", "Learning", "What you're exploring and learning."),
+           ("comm", "Communication", "Who you talk to and collaborate with."),
+           ("personal", "Personal", "Your life outside work.")]
+    return [{"key": k, "title": t, "items": counts[k], "themes": themes(i), "summary": s}
+            for i, (k, t, s) in enumerate(tpl)]
+
+
+@app.post("/api/brain/digest")
+def brain_digest():
+    """The 'Here's your brain' digest — real, LLM-written second-person personas
+    grounded in the user's actual brain. Falls back to counts + themes when there
+    is no data yet or no model is connected."""
+    from ..models.registry import get_provider
+    from ..models.base import Message
+    personas = _base_personas()
+    brain = get_brain()
+    total = brain.stats().get("total", 0)
+    s = get_settings()
+    provider = get_provider(s.model_provider, s.model_name)
+    try:
+        ready, _ = provider.is_ready()
+    except Exception:
+        ready = False
+    if total == 0 or not ready:
+        return {"personas": personas, "generated": False}
+    ctx = brain.recall(
+        "the user's work and projects, what they're learning, who they "
+        "communicate with, and their personal life", limit=24).get("context", "")
+    ent_line = ", ".join(e["name"] for e in brain.graph.top_entities(limit=24))
+    prompt = (
+        "You are profiling a user from their own data. Using ONLY the CONTEXT and "
+        "ENTITIES below, write a concise second-person profile in four areas: Work, "
+        "Learning, Communication, Personal. For each area give 2-3 concrete sentences "
+        "about THIS specific person, then 3-5 short key themes. Do not invent facts.\n"
+        'Return STRICT JSON only: {"work":{"summary":"...","themes":["..."]},'
+        '"learning":{"summary":"...","themes":["..."]},'
+        '"communication":{"summary":"...","themes":["..."]},'
+        '"personal":{"summary":"...","themes":["..."]}}\n\n'
+        f"ENTITIES: {ent_line}\n\nCONTEXT:\n{ctx[:6000]}"
+    )
+    try:
+        res = provider.chat([Message(role="user", content=prompt)],
+                            temperature=0.4, max_tokens=900)
+        data = _extract_json(res.text)
+        keymap = {"work": "work", "learning": "learning",
+                  "communication": "comm", "personal": "personal"}
+        for area, pk in keymap.items():
+            d = data.get(area) or {}
+            for p in personas:
+                if p["key"] == pk:
+                    if d.get("summary"):
+                        p["summary"] = str(d["summary"]).strip()
+                    if isinstance(d.get("themes"), list) and d["themes"]:
+                        p["themes"] = [str(t).strip() for t in d["themes"][:5]]
+        return {"personas": personas, "generated": True}
+    except Exception as exc:
+        return {"personas": personas, "generated": False, "error": str(exc)[:160]}
+
+
+class LeadIn(BaseModel):
+    name: str = "Atlas"
+
+
+@app.post("/api/agents/lead")
+def create_lead_agent(body: LeadIn):
+    """Create the user's lead agent — head of the team + chief of staff —
+    with a system prompt personalised from the brain."""
+    from ..agents.custom import get_custom_store
+    brain = get_brain()
+    name = (body.name or "").strip() or "Atlas"
+    ctx = brain.recall(
+        "who the user is — their work, projects, interests, the people in "
+        "their life, and how they spend their time", limit=16).get("context", "")
+    persona = (ctx or "").strip()[:2600]
+    system = (
+        f"You are {name}, the user's lead agent — the head of their Lodestone team "
+        "and their personal chief of staff. You are their first point of contact and "
+        "you help with everything: you know their whole world from the shared brain, "
+        "you coordinate the specialist agents (Inbox, Launch, Research, Personal), and "
+        "you hand off or pull them in when useful. Be warm, concise, and proactive; "
+        "when you don't know something, use your tools (search the brain, the web, "
+        "tasks, Gmail).\n\n"
+        + (f"WHAT YOU ALREADY KNOW ABOUT THE USER:\n{persona}\n" if persona else "")
+    )
+    a = get_custom_store().create(
+        name, "lead agent · chief of staff", system,
+        ["search_brain", "remember", "list_entities", "web_search",
+         "add_task", "list_tasks", "complete_task", "gmail_search"], [])
+    return {"id": a.id, "name": a.name, "role": a.role}
+
+
+def _fallback_welcome(name: str) -> str:
+    return (
+        f"Hi — I'm **{name}**, the lead of your Lodestone team. I know your world "
+        "from your brain and I'm your first stop for anything. Here's how to get "
+        "the most out of Lodestone:\n\n"
+        "- **Chat with me** for anything — I'll pull in the specialists (Inbox, "
+        "Launch, Research, Personal) when they fit. Switch agents in the left rail.\n"
+        "- **Your brain** (right panel) holds your memories and a knowledge graph. "
+        "Search it, click an entity for its facts, or *teach it* a new fact anytime.\n"
+        "- **Tasks & Automations** let me and the team act for you — capture to-dos "
+        "and set things to run on a trigger or schedule.\n"
+        "- **Connectors** keep your brain fresh — add more sources whenever you like; "
+        "everything stays on your Mac.\n\n"
+        "Ask me anything to get started — try *“what should I focus on today?”*"
+    )
+
+
+@app.post("/api/agents/{agent_id}/welcome")
+def agent_welcome(agent_id: str, body: ChatIn | None = None):
+    """A one-time, personalised welcome from an agent that introduces itself and
+    teaches the app. Generated fresh (not persisted to chat history)."""
+    from ..agents.presets import get_agent
+    from ..models.registry import get_provider
+    from ..models.base import Message
+    try:
+        agent = get_agent(agent_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'")
+    s = get_settings()
+    provider = get_provider((body.provider if body else None) or s.model_provider,
+                            (body.model if body else None) or s.model_name)
+    try:
+        ready, _ = provider.is_ready()
+    except Exception:
+        ready = False
+    if not ready:
+        return {"reply": _fallback_welcome(agent.name)}
+    seed = (
+        "You are meeting the user for the very first time as their lead agent. "
+        "Write a warm welcome that: (1) greets them and introduces yourself in 1-2 "
+        "sentences using what you already know about them from the brain (be specific "
+        "but natural); (2) teaches them how to use Lodestone in short skimmable "
+        "bullet points — chatting with you and switching to the specialist agents "
+        "(Inbox, Launch, Research, Personal); the Brain panel (memories, the knowledge "
+        "graph, and teaching it new facts); Tasks and Automations; and connecting more "
+        "sources (all on-device). End by inviting them to ask you anything. Use Markdown."
+    )
+    try:
+        res = provider.chat([Message(role="system", content=agent.system_message()),
+                             Message(role="user", content=seed)],
+                            temperature=0.5, max_tokens=700)
+        return {"reply": (res.text or "").strip() or _fallback_welcome(agent.name)}
+    except Exception:
+        return {"reply": _fallback_welcome(agent.name)}
+
+
 @app.get("/api/brain/entities")
 def entities(limit: int = 30):
     return {"entities": get_brain().graph.top_entities(limit=limit)}

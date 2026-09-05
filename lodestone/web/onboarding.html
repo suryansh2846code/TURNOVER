@@ -491,6 +491,9 @@
   var didReset=false;
   async function startFromZero(){
     if(didReset)return;didReset=true;
+    // truly new-user: wipe brain + credentials server-side AND clear local prefs
+    try{["lodestone_onboarded","lodestone_lead_agent","lodestone_provider","lodestone_model"]
+      .forEach(function(k){localStorage.removeItem(k);});}catch(e){}
     try{await api("/api/brain/reset",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({memories:true,secrets:true,google:true})});}catch(e){}
     selected={};await refreshConnectors();}
@@ -512,31 +515,27 @@
 
   function runBuildProgress(startPct){
     var fill=document.getElementById("bFill"),pct=document.getElementById("bPct"),det=document.getElementById("bDet"),
-        itemsEl=document.getElementById("stItems"),entEl=document.getElementById("stEnt"),prog=startPct||0,shown=-1;
-    // A first Gmail/Drive sync can ingest thousands of items over many minutes, so
-    // we DON'T block on the whole sync finishing. We move on once the brain has
-    // taken shape — sync keeps enriching it in the background, live in the app.
-    var t0=Date.now(),MAXWAIT=20000,SETTLE=18000,lastTotal=0,stable=0,finishing=false;
+        itemsEl=document.getElementById("stItems"),entEl=document.getElementById("stEnt"),prog=startPct||0.06,shown=-1;
+    // The build never "completes" here — the brain keeps growing in the background.
+    // We show it taking shape for a moment, then hand off to the snapshot (digest);
+    // from the workspace the brain button opens the live building status.
+    var t0=Date.now(),DWELL=6500,finishing=false;
     if(buildIv){clearInterval(buildIv);}
     buildIv=setInterval(async function(){
-      var syncing=false,total=0,ents=0;
-      try{syncing=(await api("/api/sync/status")).syncing;}catch(e){}
+      var total=0,ents=0;
       try{var st=await api("/api/brain/stats");total=st.total||0;ents=(st.graph&&st.graph.entities)||0;}catch(e){}
-      if(total>lastTotal){lastTotal=total;stable=0;}else{stable++;}
       var elapsed=Date.now()-t0;
-      // ready to finish: sync ended · OR data arrived and inflow paused · OR we've
-      // shown enough of the build and something is in the brain · OR hard cap.
-      var enough=(!syncing)||(total>0&&stable>=5&&elapsed>SETTLE)||(total>0&&elapsed>=MAXWAIT)||elapsed>=MAXWAIT+15000;
-      var target=enough?1:0.92;prog=Math.min(target,prog+(enough?0.08:0.02));
+      // progress keeps moving but is intentionally never full — it's still building
+      prog=Math.min(0.7,prog+0.03);
       fill.style.width=(prog*100)+"%";pct.textContent=Math.round(prog*100)+"%";
       itemsEl.textContent=total.toLocaleString();entEl.textContent=ents.toLocaleString();
-      var li=Math.min(LOG.length-1,Math.floor((enough?1:prog)*LOG.length));
+      var li=Math.min(LOG.length-1,Math.floor((elapsed/DWELL)*LOG.length));
       if(li!==shown){shown=li;det.textContent=LOG[li];ripplePop();}
-      if(enough&&prog>=1&&!finishing){finishing=true;clearInterval(buildIv);buildIv=null;
-        det.textContent=syncing?"Your brain is taking shape — it keeps learning in the background.":"Your brain is ready.";
+      if(elapsed>=DWELL&&!finishing){finishing=true;clearInterval(buildIv);buildIv=null;
+        det.textContent="Assembling your snapshot…";
         setTimeout(function(){stage.classList.remove("building");stage.classList.add("brainready");
           document.querySelectorAll(".step")[2].classList.add("act");document.querySelector('.step[id="stepBuild"]').classList.remove("act");
-          populateDigest();},900);}
+          populateDigest();},600);}
     },700);
   }
 
@@ -552,25 +551,22 @@
   document.getElementById("cancel").addEventListener("click",function(){
     api("/api/sync/cancel",{method:"POST"}).catch(function(){});backToConnect();});
 
-  // ── digest: fill the cards from the real brain ───────────────────────────
-  var CAT={gmail:"comm",apple_mail:"comm",imessage:"comm",slack:"comm",
-    gcal:"personal",apple_calendar:"personal",
-    gdrive:"work",github:"work",linear:"work",notion:"work",
-    files:"learning",notes:"learning"};
+  // ── digest: real, LLM-written personas grounded in the brain ─────────────
   async function populateDigest(){
-    var st,ents;
-    try{st=await api("/api/brain/stats");}catch(e){st={total:0,by_source:{},graph:{entities:0}};}
-    try{ents=(await api("/api/brain/entities?limit=24")).entities||[];}catch(e){ents=[];}
-    var bs=st.by_source||{},counts={work:0,learning:0,comm:0,personal:0};
-    Object.keys(bs).forEach(function(src){var c=CAT[src]||CAT[src.split(":")[0]]||"work";counts[c]+=bs[src];});
     var cards=document.querySelectorAll(".digest .dcard"),order=["work","learning","comm","personal"];
-    var names=ents.map(function(e){return e.name;}),per=Math.ceil((names.length||1)/4);
-    cards.forEach(function(card,i){
-      var it=card.querySelector(".dc-it");if(it)it.textContent=(counts[order[i]]||0).toLocaleString()+" items";
-      var slice=names.slice(i*per,i*per+per).slice(0,5);
-      var k=card.querySelector(".dc-k span");if(k&&slice.length)k.textContent="Key themes: "+slice.join(", ");});
-    if((st.total||0)===0){var p=document.querySelector(".dhead p");
-      if(p)p.textContent="Your brain is just getting started. Connect a source and this fills in with what matters to you.";}
+    // clear the placeholder prose while the real profile is generated
+    cards.forEach(function(card){var b=card.querySelector(".dc-p");if(b)b.textContent="Reading your world…";
+      var k=card.querySelector(".dc-k span");if(k)k.textContent="";});
+    try{var st=await api("/api/brain/stats");
+      if((st.total||0)===0){var p=document.querySelector(".dhead p");
+        if(p)p.textContent="Your brain is just getting started. Connect a source and this fills in with what matters to you.";}
+    }catch(e){}
+    var data=null;try{data=await api("/api/brain/digest",{method:"POST"});}catch(e){}
+    var byKey={};((data&&data.personas)||[]).forEach(function(p){byKey[p.key]=p;});
+    cards.forEach(function(card,i){var p=byKey[order[i]];if(!p)return;
+      var it=card.querySelector(".dc-it");if(it)it.textContent=(p.items||0).toLocaleString()+" items";
+      var b=card.querySelector(".dc-p");if(b)b.textContent=p.summary||"";
+      var k=card.querySelector(".dc-k span");if(k)k.textContent=(p.themes&&p.themes.length)?("Key themes: "+p.themes.join(", ")):"";});
   }
 
   // ── navigation / completion ──────────────────────────────────────────────

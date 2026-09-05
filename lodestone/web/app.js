@@ -42,11 +42,16 @@ function md(src) {
 async function loadAgents() {
   const d = await api("/api/agents");
   agents = d.agents;
-  $("#agentList").innerHTML = agents.map((a) => `
-    <div class="agent ${a.id === current ? "active" : ""}" data-id="${a.id}">
-      <span class="n">${esc(a.name)}${a.custom ? ` <span class="del-agent" data-del-agent="${a.id}">✕</span>` : ""}</span>
+  // pin the lead agent (created at welcome) to the top
+  const leadId = localStorage.getItem("lodestone_lead_agent");
+  agents.sort((a, b) => (b.id === leadId ? 1 : 0) - (a.id === leadId ? 1 : 0));
+  $("#agentList").innerHTML = agents.map((a) => {
+    const lead = a.id === leadId;
+    return `
+    <div class="agent ${a.id === current ? "active" : ""} ${lead ? "lead" : ""}" data-id="${a.id}">
+      <span class="n">${esc(a.name)}${lead ? ` <span class="lead-tag">Lead</span>` : ""}${a.custom && !lead ? ` <span class="del-agent" data-del-agent="${a.id}">✕</span>` : ""}</span>
       <span class="r">${esc(a.role)}</span>
-    </div>`).join("");
+    </div>`; }).join("");
   document.querySelectorAll(".agent").forEach((el) => el.onclick = (e) => {
     if (e.target.dataset.delAgent) return;   // handled below
     selectAgent(el.dataset.id);
@@ -857,15 +862,70 @@ $("#brainImportFile").onchange = async (e) => {
 };
 
 async function maybeOnboard() {
-  // First run (fresh brain, or this browser has never onboarded) → the full
-  // cinematic Connect → Build → Your Brain flow. The quick modal stays wired to
-  // the "? Getting started" button as a lightweight refresher.
+  // Never onboarded in this browser → the full cinematic Connect → Build → Your
+  // Brain flow.
+  if (!localStorage.getItem("lodestone_onboarded")) {
+    window.location.href = "/onboarding";
+    return true;
+  }
+  // Brain was wiped / is empty and nothing is syncing → treat as a fresh start
+  // and re-run onboarding, once per session (so skipping doesn't loop).
+  if (!sessionStorage.getItem("ls_saw_onboarding")) {
+    try {
+      const [s, sync] = await Promise.all([api("/api/brain/stats"), api("/api/sync/status")]);
+      if ((s.total || 0) === 0 && !sync.syncing) {
+        sessionStorage.setItem("ls_saw_onboarding", "1");
+        window.location.href = "/onboarding";
+        return true;
+      }
+    } catch (_) {}
+  }
+  return false;
+}
+
+// ── first entry: meet + name your lead agent, who then teaches the app ──────
+async function maybeWelcome() {
+  if (!localStorage.getItem("lodestone_onboarded")) return;
+  if (localStorage.getItem("lodestone_lead_agent")) return;   // already have a lead
+  const wrap = $("#welcome"); if (!wrap) return;
+  wrap.hidden = false;
+  const inp = $("#wName"); inp.focus(); inp.select();
+  const go = () => createLead(inp.value.trim());
+  $("#wCreate").onclick = go;
+  inp.onkeydown = (e) => { if (e.key === "Enter") go(); };
+  $("#wSkip").onclick = () => { wrap.hidden = true; localStorage.setItem("lodestone_lead_agent", "skipped"); };
+}
+async function createLead(name) {
+  name = (name || "Atlas").trim() || "Atlas";
+  const btn = $("#wCreate"), note = $("#wNote");
+  btn.disabled = true; btn.textContent = "Creating…"; note.textContent = `Building ${name} from your brain…`;
   try {
-    const s = await api("/api/brain/stats");
-    if (s.total === 0 || !localStorage.getItem("lodestone_onboarded")) {
-      window.location.href = "/onboarding";
-    }
-  } catch (_) {}
+    const r = await api("/api/agents/lead", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }) });
+    localStorage.setItem("lodestone_lead_agent", r.id);
+    $("#welcome").hidden = true;
+    await loadAgents();
+    await selectAgent(r.id);
+    agentWelcome(r.id);           // the agent introduces itself + teaches the app
+  } catch (e) {
+    btn.disabled = false; btn.textContent = "Create →"; toast(String(e));
+    note.textContent = "Couldn't create the agent — try again.";
+  }
+}
+async function agentWelcome(id) {
+  if (busy) return;
+  setBusy(true);
+  const think = makeThinking($("#provider").value);
+  try {
+    const res = await api(`/api/agents/${id}/welcome`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "welcome", provider: $("#provider").value,
+        model: $("#modelName").value.trim() || null }) });
+    think.done();
+    addMsg("assistant", res.reply);
+  } catch (e) { think.done(); addMsg("assistant", "⚠️ " + e); }
+  finally { setBusy(false); }
 }
 
 // ── live brain-building status ─────────────────────────────────────────────
@@ -892,18 +952,54 @@ async function updateBrainStatus() {
     _wasSyncing = s.syncing;
   } catch (_) {}
 }
+// clicking the header status opens the live brain-building panel
 {
   const el = $("#brainStatus");
-  if (el) el.onclick = async () => {
-    try { const r = await api("/api/sync/now", { method: "POST" });
-      toast(r.started ? "syncing your sources…" : (r.reason || "already syncing"));
-      updateBrainStatus();
-    } catch (e) { toast(String(e)); }
-  };
+  if (el) el.onclick = () => openBrainBuild();
 }
 
-loadAgents(); loadProviders(); loadBrain(); loadTasks(); loadReminders(); loadRoutines(); maybeOnboard();
-updateBrainStatus();
-// poll the brain status often while it's building, and keep time-based panels fresh
-setInterval(updateBrainStatus, 5000);
-setInterval(() => { loadReminders(); loadRoutines(); }, 45000);
+// ── brain-building panel (the "brain button") ───────────────────────────────
+let _bbPoll = null;
+async function refreshBrainBuild() {
+  try {
+    const [s, st] = await Promise.all([api("/api/sync/status"), api("/api/brain/stats")]);
+    const mem = st.total || 0, ent = st.graph?.entities || 0, rel = st.graph?.relations || 0;
+    $("#bbMem").textContent = mem.toLocaleString();
+    $("#bbEnt").textContent = ent.toLocaleString();
+    $("#bbRel").textContent = rel.toLocaleString();
+    const state = $("#bbState"), fill = $("#bbFill");
+    if (s.syncing) {
+      state.textContent = "Building your brain…"; state.classList.remove("done");
+      // there's no true %, so show lively motion capped under full while it grows
+      const w = Math.min(90, 20 + (mem % 400) / 400 * 70);
+      fill.style.width = w + "%";
+    } else {
+      state.textContent = "Brain ready"; state.classList.add("done");
+      fill.style.width = mem > 0 ? "100%" : "0%";
+    }
+  } catch (_) {}
+}
+function openBrainBuild() {
+  const m = $("#brainBuild"); if (!m) return;
+  m.hidden = false;
+  refreshBrainBuild();
+  clearInterval(_bbPoll); _bbPoll = setInterval(refreshBrainBuild, 3000);
+}
+function closeBrainBuild() { $("#brainBuild").hidden = true; clearInterval(_bbPoll); _bbPoll = null; }
+$("#bbClose").onclick = closeBrainBuild;
+$("#brainBuild").onclick = (e) => { if (e.target.id === "brainBuild") closeBrainBuild(); };
+$("#bbSync").onclick = async () => {
+  try { const r = await api("/api/sync/now", { method: "POST" });
+    toast(r.started ? "syncing your sources…" : (r.reason || "already syncing"));
+    refreshBrainBuild(); updateBrainStatus();
+  } catch (e) { toast(String(e)); }
+};
+
+(async () => {
+  if (await maybeOnboard()) return;   // redirecting to onboarding — stop here
+  loadAgents(); loadProviders(); loadBrain(); loadTasks(); loadReminders(); loadRoutines();
+  updateBrainStatus(); maybeWelcome();
+  // poll the brain status often while it's building, and keep time-based panels fresh
+  setInterval(updateBrainStatus, 5000);
+  setInterval(() => { loadReminders(); loadRoutines(); }, 45000);
+})();

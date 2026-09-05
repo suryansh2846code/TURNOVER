@@ -429,6 +429,11 @@ select:focus, input:focus, textarea:focus { border-color: var(--accent); }
 /* cards: glow-on-active + accent chat bubble */
 .agent.active { background: rgba(91,155,255,.06); border-color: var(--accent);
   box-shadow: 0 0 0 1px rgba(91,155,255,.15); }
+.agent.lead { border-color: color-mix(in srgb, var(--north) 30%, var(--border2)); }
+.agent.lead .n { color: var(--text); }
+.lead-tag { font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--north); border: 1px solid color-mix(in srgb, var(--north) 40%, transparent);
+  border-radius: 999px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
 .msg.user { background: var(--user); border-color: rgba(91,155,255,.35); white-space: pre-wrap; }
 
 /* brain-status pill in mono */
@@ -437,3 +442,54 @@ select:focus, input:focus, textarea:focus { border-color: var(--accent); }
 /* modals sit on the same deep ground */
 .modal { background: var(--panel); border-color: var(--border2); }
 .modal-bg { background: rgba(3,5,10,.72); backdrop-filter: blur(4px); }
+
+/* lead-agent welcome overlay */
+.welcome-bg { position: fixed; inset: 0; z-index: 60; display: flex;
+  align-items: center; justify-content: center;
+  background: radial-gradient(120% 90% at 50% -10%, rgba(20,28,48,.5), transparent 60%), rgba(3,5,10,.86);
+  backdrop-filter: blur(6px); }
+.welcome-bg[hidden] { display: none; }
+.welcome-box { width: min(520px, 92vw); border: 1px solid var(--border2);
+  background: #0b0f18; border-radius: 16px; padding: 34px 34px 26px;
+  box-shadow: 0 30px 90px rgba(0,0,0,.6); }
+.w-eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .28em;
+  text-transform: uppercase; color: var(--faint); }
+.welcome-box h2 { font-family: var(--sans); font-weight: 600; font-size: 30px;
+  letter-spacing: -.02em; margin: 10px 0 12px; }
+.welcome-box h2 b { font-weight: 300;
+  background: linear-gradient(100deg, #a9d3ff, #5b9bff);
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+.welcome-box > p { color: var(--muted); font-size: 13.5px; line-height: 1.65; margin: 0 0 22px; }
+.welcome-box label { display: block; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+.w-row { display: flex; gap: 10px; }
+.w-row input { flex: 1; background: #05070d; color: var(--text);
+  border: 1px solid var(--border2); border-radius: 8px; padding: 12px 14px;
+  font-family: var(--sans); font-size: 15px; }
+.w-row input:focus { outline: none; border-color: var(--accent); }
+.w-row button { background: #d6dae2; color: #08090d; border-color: #d6dae2; }
+.w-row button:hover { background: #eef1f5; }
+.w-note { font-size: 11.5px; color: var(--faint); margin: 10px 0 0; }
+.w-skip { display: block; margin: 18px auto 0; background: none; border: 0;
+  color: var(--muted); font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+  text-transform: uppercase; cursor: pointer; padding: 4px; }
+.w-skip:hover { color: var(--text); background: none; border: 0; }
+
+/* brain-building panel */
+.bb-modal { width: 380px; }
+.bb-body { padding: 18px 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.bb-state { font-family: var(--mono); font-size: 11.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--accent); }
+.bb-state.done { color: var(--accent-2); }
+.bb-bar { height: 5px; border-radius: 4px; background: rgba(223,231,242,.1); overflow: hidden; }
+.bb-fill { height: 100%; width: 0; border-radius: 4px;
+  background: linear-gradient(90deg, #3f7fe0, #7ec0ff); box-shadow: 0 0 12px rgba(120,180,255,.5);
+  transition: width .5s ease; }
+.bb-stats { display: flex; gap: 10px; }
+.bb-stat { flex: 1; text-align: center; border: 1px solid var(--border);
+  border-radius: 9px; padding: 10px 6px; background: var(--panel-2); }
+.bb-stat b { display: block; font-size: 19px; font-family: var(--sans); font-weight: 600;
+  color: var(--text); font-variant-numeric: tabular-nums; }
+.bb-stat span { font-family: var(--mono); font-size: 9px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--faint); }
+.bb-note { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0; }
