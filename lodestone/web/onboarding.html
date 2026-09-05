@@ -89,6 +89,10 @@
   .privacy .pi{color:var(--blue);flex:none}.privacy b{font-size:12px}.privacy p{margin:2px 0 0;font-size:10.5px;color:var(--faint)}.privacy a{margin-left:auto;color:var(--blue);font-size:11px;text-transform:uppercase;text-decoration:none;white-space:nowrap}
   .cfixed{position:absolute;right:44px;bottom:34px;z-index:6;opacity:0;pointer-events:none;transition:opacity .5s ease .3s}
   .stage.on .cfixed{opacity:1;pointer-events:auto}
+  .creq{position:absolute;right:44px;bottom:78px;z-index:6;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--north);opacity:0;pointer-events:none;transition:opacity .4s;display:flex;align-items:center;gap:7px}
+  .stage.on .creq.show{opacity:.9}
+  .stage.building .creq{opacity:0}
+  .creq .rq{width:5px;height:5px;border-radius:50%;background:var(--north);box-shadow:0 0 8px rgba(245,200,119,.5)}
   .stage.building .cfixed{opacity:0;pointer-events:none}
   .cbtn{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);background:#20242e;border:1px solid var(--line2);border-radius:4px;padding:13px 28px;cursor:not-allowed;transition:all .2s}
   .cbtn.ready{color:#08090d;background:#d6dae2;border-color:#d6dae2;cursor:pointer}.cbtn.ready:hover{background:#eef1f5}
@@ -228,6 +232,7 @@
     <div class="bPriv"><span class="pi"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="4" y="8" width="10" height="7" rx="1.5"/><path d="M6 8V6a3 3 0 0 1 6 0v2"/></svg></span><div><b>All processing happens locally.</b><p>Your data never leaves your device.</p></div></div>
     <button class="cancel" id="cancel">Cancel</button>
   </div>
+  <div class="creq" id="creq"><span class="rq"></span><span id="creqText">Connect Gmail &amp; an AI model to continue</span></div>
   <button class="cbtn cfixed" id="continue">Continue →</button>
   <div class="digest">
     <div class="dhead"><div class="eyebrow">Step 03</div><h1>Here's your <b>brain.</b></h1><p>A quick snapshot of what we understand about you. You can always refine this later.</p></div>
@@ -364,7 +369,14 @@
   var grid=document.getElementById("srcs"),cnt=document.getElementById("selcnt"),cont=document.getElementById("continue");
   var CONNECTORS=[],selected={};
   function selCount(){var n=0;for(var k in selected)if(selected[k])n++;return n;}
-  function refreshCount(){var n=selCount();cnt.textContent=n;cont.classList.toggle("ready",n>0);colorT=Math.min(1,n/3);}
+  function canContinue(){return !!selected["gmail"] && !!llmName();}
+  function refreshCount(){var n=selCount();cnt.textContent=n;colorT=Math.min(1,n/3);
+    var ok=canContinue();cont.classList.toggle("ready",ok);
+    var creq=document.getElementById("creq"),creqText=document.getElementById("creqText");
+    if(!creq)return;
+    if(ok){creq.classList.remove("show");}
+    else{var need=[];if(!selected["gmail"])need.push("Gmail");if(!llmName())need.push("an AI model");
+      creqText.textContent="Connect "+need.join(" & ")+" to continue";creq.classList.add("show");}}
   function setBusy(el,on,txt){if(!el)return;el.classList.toggle("busy",on);
     var add=el.querySelector(".add");if(add)add.innerHTML=on?'<span class="spin"></span>':(selected[el.dataset.name]?"✓":"+");
     if(txt){var ds=el.querySelector(".ds");if(ds)ds.textContent=txt;}}
@@ -562,7 +574,7 @@
   }
 
   async function startBuild(){
-    if(selCount()<1)return;
+    if(!canContinue()){refreshCount();return;}   // Gmail + an AI model are required
     enterBuildUI();
     document.getElementById("stSrc").textContent=selCount();
     // every chosen source is already connected — kick a real sync of them all
