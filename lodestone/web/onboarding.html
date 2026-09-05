@@ -528,24 +528,30 @@
     // The bar loads until the profile has been EXTRACTED — then we hand off to the
     // digest with the cards already populated. It never shows 100% (the brain keeps
     // growing in the background; the workspace brain button shows live status).
-    var t0=Date.now(),MINWAIT=4500,finishing=false,digestData=null;digestDone=false;
+    var t0=Date.now(),MINWAIT=4500,HARDCAP=45000,finishing=false;
+    var digestData=null,fetchStarted=false,firstDataAt=0;digestDone=false;
     document.querySelector(".digest").classList.remove("ready");
-    // empty-brain copy for the digest header
-    api("/api/brain/stats").then(function(st){if((st.total||0)===0){var p=document.querySelector(".dhead p");
-      if(p)p.textContent="Your brain is just getting started. Connect a source and this fills in with what matters to you.";}}).catch(function(){});
-    // start extracting the profile; the bar keeps loading until this resolves
-    fetchDigestData().then(function(d){digestData=d;});
     if(buildIv){clearInterval(buildIv);}
     buildIv=setInterval(async function(){
-      var total=0,ents=0;
+      var total=0,ents=0,syncing=true;
       try{var st=await api("/api/brain/stats");total=st.total||0;ents=(st.graph&&st.graph.entities)||0;}catch(e){}
-      var elapsed=Date.now()-t0,ready=(digestData!==null&&elapsed>=MINWAIT);
-      // ease toward ~0.86 while waiting (always moving), and toward ~0.96 once the
-      // profile is ready — never a hard stall, never a full/"completed" bar.
-      prog+=ready?(0.96-prog)*0.14:(0.86-prog)*0.05;
+      try{syncing=(await api("/api/sync/status")).syncing;}catch(e){}
+      var elapsed=Date.now()-t0;
+      if(total>0&&!firstDataAt)firstDataAt=Date.now();
+      // Only extract the profile once REAL data has landed (plus a few seconds for
+      // the first batch to settle) — so the cards show real counts + a real,
+      // LLM-written profile, not an empty "0 items" snapshot. Cap the wait so a
+      // slow/empty sync still resolves.
+      var dataSettled=firstDataAt&&(Date.now()-firstDataAt)>=3500;
+      var giveUp=elapsed>=HARDCAP||(!syncing&&elapsed>=8000);
+      if(!fetchStarted&&(dataSettled||giveUp)){fetchStarted=true;fetchDigestData().then(function(d){digestData=d;});}
+      var ready=(digestData!==null&&elapsed>=MINWAIT);
+      // ease toward ~0.82 while gathering + extracting (always moving), toward
+      // ~0.96 once the profile is ready — never a hard stall, never a full bar.
+      prog+=ready?(0.96-prog)*0.14:(0.82-prog)*0.035;
       fill.style.width=(prog*100)+"%";pct.textContent=Math.round(prog*100)+"%";
       itemsEl.textContent=total.toLocaleString();entEl.textContent=ents.toLocaleString();
-      var li=Math.min(LOG.length-1,Math.floor((elapsed/5200)*LOG.length));
+      var li=Math.min(LOG.length-1,Math.floor((elapsed/6500)*LOG.length));
       if(li!==shown){shown=li;det.textContent=LOG[li];ripplePop();}
       if(ready&&prog>=0.9&&!finishing){finishing=true;clearInterval(buildIv);buildIv=null;
         det.textContent="Assembling your snapshot…";
@@ -575,7 +581,13 @@
     if(digestDone)return;digestDone=true;
     var digest=document.querySelector(".digest");
     var cards=document.querySelectorAll(".digest .dcard"),order=["work","learning","comm","personal"];
-    var byKey={};((data&&data.personas)||[]).forEach(function(p){byKey[p.key]=p;});
+    var personas=(data&&data.personas)||[];
+    var totalItems=personas.reduce(function(a,p){return a+(p.items||0);},0);
+    var hp=document.querySelector(".dhead p");
+    if(hp)hp.textContent=totalItems>0
+      ? "A quick snapshot of what we understand about you. You can always refine this later."
+      : "Your brain is still filling in — this snapshot grows as your sources finish syncing.";
+    var byKey={};personas.forEach(function(p){byKey[p.key]=p;});
     cards.forEach(function(card,i){var p=byKey[order[i]];if(!p)return;
       var it=card.querySelector(".dc-it");if(it)it.textContent=(p.items||0).toLocaleString()+" items";
       var b=card.querySelector(".dc-p");if(b)b.textContent=p.summary||"";
@@ -601,8 +613,11 @@
   function fetchDigestData(){
     return new Promise(function(resolve){
       var done=false;
-      var t=setTimeout(function(){if(!done){done=true;computeFallback().then(resolve);}},22000);
-      api("/api/brain/digest",{method:"POST"}).then(function(d){if(!done){done=true;clearTimeout(t);resolve(d);}})
+      var t=setTimeout(function(){if(!done){done=true;computeFallback().then(resolve);}},30000);
+      api("/api/brain/digest",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({message:"digest",provider:localStorage.getItem("lodestone_provider")||null,
+          model:localStorage.getItem("lodestone_model")||null})})
+        .then(function(d){if(!done){done=true;clearTimeout(t);resolve(d);}})
         .catch(function(){if(!done){done=true;clearTimeout(t);computeFallback().then(resolve);}});
     });
   }

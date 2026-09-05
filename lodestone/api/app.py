@@ -222,17 +222,19 @@ def _base_personas() -> list[dict]:
 
 
 @app.post("/api/brain/digest")
-def brain_digest():
+def brain_digest(body: ChatIn | None = None):
     """The 'Here's your brain' digest — real, LLM-written second-person personas
-    grounded in the user's actual brain. Falls back to counts + themes when there
-    is no data yet or no model is connected."""
+    grounded in the user's actual brain. Uses the caller's chosen model (falling
+    back to the server default), and to counts + themes when there is no data yet
+    or no model is connected."""
     from ..models.registry import get_provider
     from ..models.base import Message
     personas = _base_personas()
     brain = get_brain()
     total = brain.stats().get("total", 0)
     s = get_settings()
-    provider = get_provider(s.model_provider, s.model_name)
+    provider = get_provider((body.provider if body else None) or s.model_provider,
+                            (body.model if body else None) or s.model_name)
     try:
         ready, _ = provider.is_ready()
     except Exception:
