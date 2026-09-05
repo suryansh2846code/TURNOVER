@@ -1181,21 +1181,36 @@ $("#bsClose").onclick = closeBrainScreen;
 // queue drains, showing live progress. General across any connector's content.
 let _enriching = false;
 { const eb = $("#enrichBtn"); if (eb) eb.onclick = async () => {
-  if (_enriching) { _enriching = false; return; }   // click again to stop
-  _enriching = true; eb.textContent = "Stop";
+  if (_enriching) {                       // second click → stop after this batch
+    _enriching = false; eb.textContent = "Stopping…"; return;
+  }
+  _enriching = true; eb.classList.add("running");
   const st = $("#enrichStatus");
+  let total = 0, gainEnt = 0, gainFact = 0;
+  const setP = (pct) => eb.style.setProperty("--p", pct + "%");
   try {
     while (_enriching) {
+      eb.textContent = "Stop";
       const r = await api("/api/brain/enrich", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: "enrich", provider: $("#provider").value,
           model: $("#modelName").value.trim() || null }) });
-      if (st) st.textContent = `+${r.entities} entities, +${r.facts} facts · ${r.remaining.toLocaleString()} memories left…`;
+      if (total === 0) total = r.remaining + r.processed;   // approx work at start
+      gainEnt += r.entities; gainFact += r.facts;
+      const done = Math.max(0, total - r.remaining);
+      const pct = total ? Math.min(100, Math.round(done / total * 100)) : 0;
+      setP(pct);
+      if (_enriching) eb.textContent = `Stop · ${pct}%`;
+      if (st) st.textContent = `+${gainEnt} entities · +${gainFact} facts · ${done.toLocaleString()}/${total.toLocaleString()} memories`;
       loadBrain(); _bsRefresh();
-      if (r.remaining === 0 || r.processed === 0) { if (st) st.textContent = "Graph is fully enriched."; break; }
+      if (r.remaining === 0 || r.processed === 0) {
+        if (st) st.textContent = `Done · +${gainEnt} entities · +${gainFact} facts`;
+        break;
+      }
     }
+    if (!_enriching && st) st.textContent = `Stopped · +${gainEnt} entities · +${gainFact} facts`;
   } catch (e) { if (st) st.textContent = String(e); }
-  finally { _enriching = false; eb.textContent = "Enrich with AI"; }
+  finally { _enriching = false; eb.classList.remove("running"); setP(0); eb.textContent = "Enrich with AI"; }
 }; }
 $("#bsSync").onclick = async () => {
   try { const r = await api("/api/sync/now", { method: "POST" });
