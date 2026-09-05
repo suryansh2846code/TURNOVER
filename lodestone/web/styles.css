@@ -48,7 +48,21 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* ── sidebar ──────────────────────────────────────────────────────────── */
 .sidebar { display: flex; flex-direction: column; gap: 4px; padding: 18px 14px;
-  border-right: 1px solid var(--border); overflow-y: auto; }
+  border-right: 1px solid rgba(255,255,255,.07); overflow-y: auto; }
+.collapse-btn { margin-left: auto; width: 22px; height: 22px; border-radius: 6px; background: transparent;
+  color: var(--muted); font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.collapse-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
+
+/* collapsed sidebar (icon rail) */
+.app.collapsed { grid-template-columns: 66px 1fr; }
+.app.collapsed .sidebar { padding: 18px 9px; }
+.app.collapsed .brand { justify-content: center; gap: 0; }
+.app.collapsed .brand-mark, .app.collapsed .brand-word, .app.collapsed .side-label,
+.app.collapsed .a-meta, .app.collapsed .agent .dot, .app.collapsed .na-tx,
+.app.collapsed .snav-tx, .app.collapsed .user-nm { display: none; }
+.app.collapsed .collapse-btn { margin-left: 0; }
+.app.collapsed .agent, .app.collapsed .snav, .app.collapsed .new-agent, .app.collapsed .user-chip { justify-content: center; }
+.app.collapsed .agent { padding: 8px; } .app.collapsed .snav { padding: 9px; }
 .brand { display: flex; align-items: center; gap: 11px; padding: 2px 6px 16px;
   font-family: var(--mono); letter-spacing: .32em; text-transform: uppercase; font-size: 13px; }
 .brand-mark { width: 13px; height: 13px; transform: rotate(45deg);

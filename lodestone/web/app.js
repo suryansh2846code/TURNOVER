@@ -40,10 +40,25 @@ const IC = {
 };
 function applyIcons() {
   document.querySelectorAll(".snav").forEach((b) => {
-    const el = b.querySelector(".snav-ic"); if (el) el.innerHTML = IC[b.id === "helpBtn" ? "help" : b.dataset.nav] || "";
+    const el = b.querySelector(".snav-ic"); if (!el) return;
+    const key = b.id === "helpBtn" ? "help" : (b.dataset.nav === "sources" ? "connectors" : b.dataset.nav);
+    el.innerHTML = IC[key] || "";
   });
   const set = (id, name) => { const e = $(id); if (e) e.innerHTML = IC[name]; };
   set("#attachBtn", "attach"); set("#micBtn", "mic"); set("#send", "arrowUp");
+}
+
+// collapse / expand the sidebar (persisted)
+function setCollapsed(on) {
+  const app = document.querySelector(".app"); if (!app) return;
+  app.classList.toggle("collapsed", on);
+  const b = $("#collapseBtn"); if (b) { b.textContent = on ? "›" : "‹"; b.title = on ? "Expand sidebar" : "Collapse sidebar"; }
+  try { localStorage.setItem("ls_collapsed", on ? "1" : ""); } catch (_) {}
+}
+{
+  const b = $("#collapseBtn");
+  if (b) b.onclick = () => setCollapsed(!document.querySelector(".app").classList.contains("collapsed"));
+  setCollapsed(localStorage.getItem("ls_collapsed") === "1");
 }
 function agentOrbId(a) { return (a && a.id === localStorage.getItem("lodestone_lead_agent")) ? "__lead" : (a ? a.id : ""); }
 function agentDesc(a) {
