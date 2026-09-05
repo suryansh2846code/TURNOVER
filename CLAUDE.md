@@ -83,8 +83,14 @@ Order: **Hero → Connect → Build → Digest → Workspace (welcome + lead age
 - **Cmd/Ctrl+R** is bound in JS (both pages) to reload to the first screen — the
   webview doesn't wire the browser reload shortcut. Onboarding reloads to the hero;
   the workspace navigates to `/onboarding`.
-- **The workspace re-skin** is a layered override block at the end of `styles.css`
-  using the onboarding design tokens; keep element ids/classes so `app.js` still works.
+- **The workspace** (`index.html`/`styles.css`/`app.js`) is a 3-column layout —
+  agent rail (gradient **orb** avatars per agent, `orbStyle()`), chat (serif hero
+  empty-state with quick-action cards + orb-avatar assistant messages + pill
+  composer), and a right **Context / Tools** panel (`switchTab`). The header brain
+  pill and the sidebar **Brain** nav open the full-screen **Your Brain** screen
+  (`openBrainScreen`, a self-contained canvas neural viz whose density tracks the
+  memory count). Keep every element id — `app.js` injects into many of them
+  (custom-app form, google card, secret form are built at runtime into modals).
 - Adding a new pydantic body model used by a route: **define it above the route** —
   FastAPI resolves the annotation at decoration time.
 - Git: never add a `Co-Authored-By: Claude` trailer to commits/PRs.

@@ -7,6 +7,28 @@ let CONNECTORS = [];
 function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
 function esc(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
+// gradient orb avatar per agent (stable colour from the id; the lead is always blue)
+const ORB_COLORS = [["#8fb0ff", "#2f3a5e"], ["#7fd8b0", "#1f4636"], ["#c3a0f5", "#382a54"],
+  ["#e0b489", "#48331f"], ["#e79aa0", "#48232e"], ["#9ad0e0", "#1e444f"], ["#b8c0cf", "#2b3140"]];
+function orbPair(id) {
+  if (id === "__lead") return ORB_COLORS[0];
+  let h = 0; for (const ch of String(id || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return ORB_COLORS[h % ORB_COLORS.length];
+}
+function orbStyle(id) { const [a, b] = orbPair(id); return `background:radial-gradient(circle at 32% 26%, ${a}, ${b} 74%)`; }
+function agentOrbId(a) { return (a && a.id === localStorage.getItem("lodestone_lead_agent")) ? "__lead" : (a ? a.id : ""); }
+function agentDesc(a) {
+  if (!a) return "";
+  if (a.id === localStorage.getItem("lodestone_lead_agent")) return "Leads your team and helps with everything — your first stop for anything.";
+  return "Helps you with " + (a.role || "your work") + ".";
+}
+
+// which side panel / view a sidebar nav item opens
+function switchTab(tab) {
+  document.querySelectorAll(".ctx-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+  document.querySelectorAll(".ctx-pane").forEach((p) => p.hidden = p.dataset.pane !== tab);
+}
+
 // tiny, safe markdown renderer (escapes first, then applies a subset)
 function mdInline(s) {
   return s
@@ -48,9 +70,14 @@ async function loadAgents() {
   $("#agentList").innerHTML = agents.map((a) => {
     const lead = a.id === leadId;
     return `
-    <div class="agent ${a.id === current ? "active" : ""} ${lead ? "lead" : ""}" data-id="${a.id}">
-      <span class="n">${esc(a.name)}${lead ? ` <span class="lead-tag">Lead</span>` : ""}${a.custom && !lead ? ` <span class="del-agent" data-del-agent="${a.id}">✕</span>` : ""}</span>
-      <span class="r">${esc(a.role)}</span>
+    <div class="agent ${a.id === current ? "active" : ""}" data-id="${a.id}">
+      <span class="orb" style="${orbStyle(agentOrbId(a))}"></span>
+      <div class="a-meta">
+        <div class="n">${esc(a.name)}${lead ? ` <span class="lead-tag">Lead</span>` : ""}</div>
+        <div class="r">${esc(a.role)}</div>
+      </div>
+      ${a.custom && !lead ? `<span class="del-agent" data-del-agent="${a.id}">✕</span>`
+        : (a.id === current ? `<span class="dot"></span>` : "")}
     </div>`; }).join("");
   document.querySelectorAll(".agent").forEach((el) => el.onclick = (e) => {
     if (e.target.dataset.delAgent) return;   // handled below
@@ -105,22 +132,54 @@ async function loadProviders() {
 async function selectAgent(id) {
   if (busy) { toast("finishing current reply…"); return; }
   current = id;
-  const a = agents.find((x) => x.id === id);
+  const a = agents.find((x) => x.id === id) || { name: "—", role: "", tools: [] };
+  const oid = agentOrbId(a);
   $("#agentName").textContent = a.name;
-  $("#agentRole").textContent = a.role + " · tools: " + a.tools.join(", ");
+  $("#agentRole").textContent = a.role;
+  const chOrb = $("#chOrb"); if (chOrb) chOrb.style.cssText = orbStyle(oid);
+  const ctxOrb = $("#ctxOrb"); if (ctxOrb) ctxOrb.style.cssText = orbStyle(oid);
+  if ($("#ctxAgentName")) $("#ctxAgentName").textContent = a.name;
+  if ($("#ctxAgentRole")) $("#ctxAgentRole").textContent = a.role;
+  if ($("#ctxAgentDesc")) $("#ctxAgentDesc").textContent = agentDesc(a);
+  $("#input").placeholder = "Message " + a.name + "…";
   document.querySelectorAll(".agent").forEach((el) => el.classList.toggle("active", el.dataset.id === id));
+  loadAgents();   // refresh the active dot in the rail
   const { history } = await api(`/api/agents/${id}/history`);
   renderHistory(history);
+}
+
+function heroEmpty() {
+  const a = agents.find((x) => x.id === current) || { name: "your agent" };
+  const hr = new Date().getHours();
+  const greet = hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
+  const div = document.createElement("div");
+  div.className = "hero-empty";
+  div.innerHTML = `
+    <div class="he-top">
+      <span class="orb orb-xl" style="${orbStyle(agentOrbId(a))}"></span>
+      <div>
+        <h1 class="he-hi">${greet}.</h1>
+        <p class="he-sub">Your second brain, always on your side. Ask ${esc(a.name)} anything — it already knows your world.</p>
+      </div>
+    </div>
+    <div class="he-cards">
+      <button class="he-card" data-q="Catch me up — what's new since yesterday?"><span class="hc-ic">💬</span><b>Catch me up</b><span>What's new since yesterday?</span></button>
+      <button class="he-card" data-q="What should I focus on today? Show my open tasks."><span class="hc-ic">☑</span><b>Show my tasks</b><span>What should I focus on today?</span></button>
+      <button class="he-card" data-fill="Find "><span class="hc-ic">🔎</span><b>Find something</b><span>Search across my apps &amp; notes.</span></button>
+      <button class="he-card" data-q="Help me plan my day and week."><span class="hc-ic">✨</span><b>Help me plan</b><span>Plan my day / week.</span></button>
+    </div>`;
+  div.querySelectorAll(".he-card").forEach((c) => c.onclick = () => {
+    if (c.dataset.fill) { $("#input").value = c.dataset.fill; $("#input").focus(); autoGrow(); }
+    else send(c.dataset.q);
+  });
+  return div;
 }
 
 function renderHistory(history) {
   const box = $("#messages");
   box.innerHTML = "";
   const msgs = history.filter((m) => m.role === "user" || m.role === "assistant");
-  if (!msgs.length) {
-    box.innerHTML = `<div class="msg empty">This agent shares your brain. Say hello — it already knows you.</div>`;
-    return;
-  }
+  if (!msgs.length) { box.appendChild(heroEmpty()); return; }
   for (const m of msgs) addMsg(m.role, m.content);   // so history shows action cards too
   box.scrollTop = box.scrollHeight;
 }
@@ -197,18 +256,21 @@ function actionCard(a) {
 }
 
 function addMsg(role, text) {
+  const box = $("#messages");
+  const he = box.querySelector(".hero-empty"); if (he) he.remove();
   if (role === "assistant") {
     const { clean, actions } = parseActions(text);
     const el = document.createElement("div");
     el.className = "msg assistant";
-    el.innerHTML = md(clean);
-    $("#messages").appendChild(el);
-    for (const a of actions) $("#messages").appendChild(actionCard(a));
-    $("#messages").scrollTop = 1e9; return el;
+    const oid = agentOrbId(agents.find((x) => x.id === current));
+    el.innerHTML = `<span class="orb a-orb" style="${orbStyle(oid)}"></span><div class="a-body">${md(clean)}</div>`;
+    box.appendChild(el);
+    for (const a of actions) box.appendChild(actionCard(a));
+    box.scrollTop = 1e9; return el;
   }
   const el = document.createElement("div");
   el.className = "msg " + role; el.textContent = text;
-  $("#messages").appendChild(el); $("#messages").scrollTop = 1e9; return el;
+  box.appendChild(el); box.scrollTop = 1e9; return el;
 }
 function addTrace(steps) {
   if (!steps.length) return;
@@ -308,6 +370,8 @@ async function loadBrain() {
     <div class="b"><div class="num">${s.total}</div><div class="lbl">memories</div></div>
     <div class="b"><div class="num">${s.graph.entities}</div><div class="lbl">entities</div></div>
     <div class="b"><div class="num">${s.graph.relations}</div><div class="lbl">facts</div></div>`;
+  if ($("#ctxMem")) $("#ctxMem").textContent = s.total > 0 ? "On" : "Empty";
+  if ($("#ctxEntities")) $("#ctxEntities").textContent = (s.graph.entities || 0).toLocaleString();
   const { entities } = await api("/api/brain/entities?limit=20");
   $("#entities").innerHTML = entities.length ? entities.map((e) =>
     `<div class="ent" data-entity="${e.id}" title="click for facts"><span class="etype ${e.type}">${e.type}</span> ${esc(e.name)} <span class="t">${e.mentions}×</span></div>`).join("")
@@ -316,6 +380,7 @@ async function loadBrain() {
     el.onclick = () => openEntity(el.dataset.entity));
   const { connectors } = await api("/api/connectors");
   CONNECTORS = connectors;
+  if ($("#ctxSources")) $("#ctxSources").textContent = connectors.filter((c) => c.ready).length;
   const staleAfterMin = Math.max(120, (SYNC_INTERVAL_MIN || 30) * 4);
   $("#connectors").innerHTML = connectors.map((c) => {
     const ls = c.state?.last_sync ? new Date(c.state.last_sync) : null;
@@ -952,48 +1017,112 @@ async function updateBrainStatus() {
     _wasSyncing = s.syncing;
   } catch (_) {}
 }
-// clicking the header status opens the live brain-building panel
-{
-  const el = $("#brainStatus");
-  if (el) el.onclick = () => openBrainBuild();
-}
+// clicking the header status (or the sidebar Brain nav) opens the full brain screen
+{ const el = $("#brainStatus"); if (el) el.onclick = () => openBrainScreen(); }
 
-// ── brain-building panel (the "brain button") ───────────────────────────────
-let _bbPoll = null;
-async function refreshBrainBuild() {
+// ── full-screen "Your Brain" view: live neural viz + real building status ────
+let _bsPoll = null, _bsRaf = null, _bsNodes = null, _bsRot = 0, _bsDensity = 0.15;
+function _bsBuildNodes() {
+  // ~520 points on a jittered sphere → reads as a neural cluster
+  const N = 520, pts = [];
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), th = i * 2.399963;
+    const jit = 0.12;
+    pts.push({ x: Math.cos(th) * r + (Math.random() - 0.5) * jit, y: y + (Math.random() - 0.5) * jit,
+      z: Math.sin(th) * r + (Math.random() - 0.5) * jit, p: Math.random() * 6.28 });
+  }
+  _bsNodes = pts;
+}
+function _bsDraw() {
+  const cv = $("#bsCanvas"); if (!cv || $("#brainScreen").hidden) return;
+  const dpr = Math.min(devicePixelRatio || 1, 2), W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  _bsRot += 0.0016;
+  const cx = W / 2, cy = H * 0.46, R = Math.min(W, H) * 0.30;
+  const sy = Math.sin(_bsRot), cyr = Math.cos(_bsRot), t = Date.now() / 1000;
+  const shown = Math.max(40, Math.floor(_bsNodes.length * (0.25 + 0.75 * _bsDensity)));
+  const proj = [];
+  for (let i = 0; i < shown; i++) {
+    const n = _bsNodes[i];
+    const x1 = n.x * cyr + n.z * sy, z1 = -n.x * sy + n.z * cyr;
+    const sx = cx + x1 * R, sYy = cy + n.y * R, depth = (z1 + 1) / 2;
+    proj.push({ sx, sy: sYy, depth, p: n.p });
+  }
+  // links between nearby points (front-ish only)
+  ctx.lineWidth = 0.6;
+  for (let i = 0; i < proj.length; i += 2) {
+    for (let j = i + 1; j < Math.min(i + 10, proj.length); j++) {
+      const dx = proj[i].sx - proj[j].sx, dy = proj[i].sy - proj[j].sy, d = dx * dx + dy * dy;
+      if (d < 46 * 46 && proj[i].depth > 0.35) {
+        ctx.strokeStyle = `rgba(120,160,240,${(0.05 + 0.06 * proj[i].depth).toFixed(3)})`;
+        ctx.beginPath(); ctx.moveTo(proj[i].sx, proj[i].sy); ctx.lineTo(proj[j].sx, proj[j].sy); ctx.stroke();
+      }
+    }
+  }
+  for (const p of proj) {
+    const pulse = 0.5 + 0.5 * Math.sin(t * 1.5 + p.p);
+    const a = (0.25 + 0.6 * p.depth) * (0.6 + 0.4 * pulse);
+    const rad = 0.7 + 1.7 * p.depth;
+    ctx.fillStyle = `rgba(${170 + 60 * p.depth | 0},${195 + 40 * p.depth | 0},255,${a.toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(p.sx, p.sy, rad, 0, 6.283); ctx.fill();
+  }
+  _bsRaf = requestAnimationFrame(_bsDraw);
+}
+async function _bsRefresh() {
   try {
     const [s, st] = await Promise.all([api("/api/sync/status"), api("/api/brain/stats")]);
     const mem = st.total || 0, ent = st.graph?.entities || 0, rel = st.graph?.relations || 0;
-    $("#bbMem").textContent = mem.toLocaleString();
-    $("#bbEnt").textContent = ent.toLocaleString();
-    $("#bbRel").textContent = rel.toLocaleString();
-    const state = $("#bbState"), fill = $("#bbFill");
-    if (s.syncing) {
-      state.textContent = "Building your brain…"; state.classList.remove("done");
-      // there's no true %, so show lively motion capped under full while it grows
-      const w = Math.min(90, 20 + (mem % 400) / 400 * 70);
-      fill.style.width = w + "%";
-    } else {
-      state.textContent = "Brain ready"; state.classList.add("done");
-      fill.style.width = mem > 0 ? "100%" : "0%";
-    }
+    $("#bsMem").textContent = mem.toLocaleString();
+    $("#bsEnt").textContent = ent.toLocaleString();
+    $("#bsRel").textContent = rel.toLocaleString();
+    _bsDensity = Math.min(1, 0.15 + mem / 4000);
+    const state = $("#bsState");
+    if (s.syncing) { state.textContent = "Building your brain…"; state.classList.remove("done"); }
+    else { state.textContent = "Brain ready"; state.classList.add("done"); }
   } catch (_) {}
 }
-function openBrainBuild() {
-  const m = $("#brainBuild"); if (!m) return;
+function openBrainScreen() {
+  const m = $("#brainScreen"); if (!m) return;
   m.hidden = false;
-  refreshBrainBuild();
-  clearInterval(_bbPoll); _bbPoll = setInterval(refreshBrainBuild, 3000);
+  if (!_bsNodes) _bsBuildNodes();
+  _bsRefresh(); clearInterval(_bsPoll); _bsPoll = setInterval(_bsRefresh, 2500);
+  cancelAnimationFrame(_bsRaf); _bsRaf = requestAnimationFrame(_bsDraw);
 }
-function closeBrainBuild() { $("#brainBuild").hidden = true; clearInterval(_bbPoll); _bbPoll = null; }
-$("#bbClose").onclick = closeBrainBuild;
-$("#brainBuild").onclick = (e) => { if (e.target.id === "brainBuild") closeBrainBuild(); };
-$("#bbSync").onclick = async () => {
+function closeBrainScreen() {
+  $("#brainScreen").hidden = true;
+  clearInterval(_bsPoll); _bsPoll = null; cancelAnimationFrame(_bsRaf); _bsRaf = null;
+}
+$("#bsClose").onclick = closeBrainScreen;
+$("#bsSync").onclick = async () => {
   try { const r = await api("/api/sync/now", { method: "POST" });
     toast(r.started ? "syncing your sources…" : (r.reason || "already syncing"));
-    refreshBrainBuild(); updateBrainStatus();
+    _bsRefresh(); updateBrainStatus();
   } catch (e) { toast(String(e)); }
 };
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#brainScreen").hidden) closeBrainScreen(); });
+
+// sidebar nav + context tabs + user chip
+document.querySelectorAll(".ctx-tab").forEach((t) => t.onclick = () => switchTab(t.dataset.tab));
+document.querySelectorAll(".snav").forEach((b) => b.onclick = () => {
+  if (b.dataset.nav === "brain") return openBrainScreen();
+  switchTab("tools");
+  if (b.id === "helpBtn") toast("Connect sources and choose your model here.");
+});
+{ const nr = $("#newAgentRow"); if (nr) nr.onclick = () => $("#newAgentBtn").click(); }
+
+// composer slash-style hint chips
+{
+  const hints = [["/catch me up", "Catch me up — what's new since yesterday?"],
+    ["/tasks", "What should I focus on today? Show my open tasks."],
+    ["/find", "Find "], ["/plan", "Help me plan my day and week."]];
+  const box = $("#cmpHints");
+  if (box) box.innerHTML = hints.map((h, i) => `<span data-i="${i}">${esc(h[0])}</span>`).join("");
+  if (box) box.querySelectorAll("span").forEach((s) => s.onclick = () => {
+    const [, q] = hints[+s.dataset.i];
+    if (q.endsWith(" ")) { $("#input").value = q; $("#input").focus(); autoGrow(); } else send(q);
+  });
+}
 
 // Cmd/Ctrl+R → back to the first screen (the hero). The desktop app runs in a
 // webview where the browser reload shortcut isn't wired, so we bind it ourselves.

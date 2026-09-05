@@ -8,88 +8,131 @@
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <div class="topbar">
-    <div class="tb-brand"><span class="tb-mark"></span>Lodestone</div>
-    <div class="tb-trust">On-device · Private · Yours</div>
-  </div>
   <div class="app">
-    <!-- Left: agents -->
+    <!-- ── Left: agents ─────────────────────────────────────────────── -->
     <aside class="sidebar">
-      <div class="side-label conn-head">Agents
-        <button id="newAgentBtn" class="tiny ghost">＋ New</button></div>
+      <div class="brand"><span class="brand-mark"></span><span class="brand-word">Lodestone</span></div>
+
+      <div class="side-label">Agents <button id="newAgentBtn" class="side-add" title="New agent">+</button></div>
       <nav id="agentList" class="agents"></nav>
+      <button id="newAgentRow" class="new-agent"><span class="na-plus">+</span> New Agent</button>
+
+      <div class="side-nav">
+        <button class="snav" data-nav="brain"><span class="snav-ic">◇</span> Brain</button>
+        <button class="snav" data-nav="sources"><span class="snav-ic">▤</span> Sources</button>
+        <button class="snav" data-nav="tasks"><span class="snav-ic">☑</span> Tasks</button>
+        <button class="snav" id="helpBtn"><span class="snav-ic">?</span> Getting started</button>
+      </div>
+
       <div class="side-foot">
-        <div class="side-label">Model</div>
-        <select id="provider"></select>
-        <input id="modelName" class="model-input" autocomplete="off" placeholder="model name (optional)" />
-        <div id="modelHint" class="model-hint"></div>
-        <div id="privacyBadge" class="privacy-badge" hidden></div>
-        <button id="helpBtn" class="ghost tiny" style="margin-top:8px">? Getting started</button>
+        <button class="user-chip" id="userChip"><span class="user-av" id="userAv">S</span><span class="user-nm">You</span></button>
       </div>
     </aside>
 
-    <!-- Center: chat -->
+    <!-- ── Center: chat ─────────────────────────────────────────────── -->
     <main class="chat">
       <header class="chat-head">
-        <div>
-          <h2 id="agentName">—</h2>
-          <p id="agentRole" class="muted"></p>
+        <div class="ch-agent">
+          <span class="orb" id="chOrb"></span>
+          <div class="ch-meta">
+            <div class="ch-name" id="agentName">—</div>
+            <div class="ch-role" id="agentRole"></div>
+          </div>
         </div>
-        <div class="head-right">
-          <button id="brainStatus" class="brain-status" title="Your brain keeps learning in the background — click to sync now"></button>
+        <div class="ch-right">
+          <span class="tb-trust">On-device · Private · Yours</span>
+          <button id="brainStatus" class="brain-status" title="Your brain — click to open"></button>
           <button id="clearBtn" class="ghost tiny">Clear chat</button>
         </div>
       </header>
+
       <div id="messages" class="messages"></div>
+
       <form id="composer" class="composer">
+        <button type="button" class="cmp-ic" id="attachBtn" title="Attach" tabindex="-1">＋</button>
         <textarea id="input" rows="1" autocomplete="off"
-               placeholder="Ask your agent… it already knows you.  (Enter to send, Shift+Enter for newline)"></textarea>
-        <button id="send" type="submit">Send</button>
+               placeholder="Message your agent… it already knows you."></textarea>
+        <button type="button" class="cmp-ic" id="micBtn" title="Voice (coming soon)" tabindex="-1">🎙</button>
+        <button id="send" type="submit" class="cmp-send" title="Send">↑</button>
       </form>
+      <div class="cmp-hints" id="cmpHints"></div>
     </main>
 
-    <!-- Right: tasks + brain -->
-    <aside class="brainpanel">
-      <div class="side-label">Tasks <span id="taskCount" class="muted"></span></div>
-      <div class="addtask">
-        <input id="taskInput" autocomplete="off"
-               placeholder="Add a task… e.g. call Sam tomorrow" />
-        <button id="taskAdd" class="tiny">Add</button>
-      </div>
-      <div id="taskList" class="tasks"></div>
-
-      <div id="reminderWrap" hidden>
-        <div class="side-label">⏰ Reminders</div>
-        <div id="reminderList" class="tasks"></div>
+    <!-- ── Right: context / tools ───────────────────────────────────── -->
+    <aside class="ctx">
+      <div class="ctx-tabs">
+        <button class="ctx-tab active" data-tab="context">Context</button>
+        <button class="ctx-tab" data-tab="tools">Tools</button>
       </div>
 
-      <div class="side-label conn-head">⚡ Automations
-        <button id="newRoutineBtn" class="tiny ghost">＋ New</button></div>
-      <div id="routineList" class="tasks"></div>
+      <!-- Context tab -->
+      <div class="ctx-pane" data-pane="context">
+        <div class="ctx-agent">
+          <span class="orb orb-lg" id="ctxOrb"></span>
+          <div class="ctx-agent-meta">
+            <div class="ctx-agent-nm" id="ctxAgentName">—</div>
+            <div class="ctx-agent-role" id="ctxAgentRole"></div>
+          </div>
+          <p class="ctx-agent-desc" id="ctxAgentDesc"></p>
+        </div>
 
-      <div class="side-label">Brain
-        <span class="brain-io">
-          <button id="brainExport" class="tiny ghost" title="Download a backup of your brain">⤓ Export</button>
-          <button id="brainImport" class="tiny ghost" title="Restore from a backup">⤒ Import</button>
-          <input id="brainImportFile" type="file" accept="application/json,.json" hidden />
-        </span></div>
-      <div id="brainStats" class="brain-stats"></div>
-      <div class="addbox">
-        <textarea id="ingestText" rows="2" placeholder="Teach the brain something…"></textarea>
-        <button id="ingestBtn" class="tiny">Add to brain</button>
+        <div class="ctx-rows">
+          <div class="ctx-row"><span class="cr-ic">◇</span> Memory <b id="ctxMem" class="cr-val">On</b></div>
+          <div class="ctx-row"><span class="cr-ic">▤</span> Sources <b id="ctxSources" class="cr-val">0</b></div>
+          <div class="ctx-row"><span class="cr-ic">◈</span> Entities <b id="ctxEntities" class="cr-val">0</b></div>
+        </div>
+
+        <div class="ctx-label">Your brain</div>
+        <input id="brainSearch" class="ctx-input" autocomplete="off" placeholder="🔍 Search your brain…" />
+        <div id="brainStats" class="brain-stats"></div>
+        <div id="entities" class="entities"></div>
+        <div class="ctx-quote">“A more focused you.”<span>—</span></div>
       </div>
-      <div class="side-label">Knowledge graph</div>
-      <input id="brainSearch" class="brain-search" autocomplete="off"
-             placeholder="🔍 Search your brain…" />
-      <div id="entities" class="entities"></div>
-      <div class="side-label conn-head">Connectors
-        <button id="syncAll" class="tiny ghost">sync all</button></div>
-      <div id="syncStatus" class="sync-status"></div>
-      <div id="googleCard" class="google-card" hidden></div>
-      <div id="connectors" class="connectors"></div>
-      <button id="addCustomApp" class="tiny ghost" style="margin-top:8px">+ Connect a custom app</button>
+
+      <!-- Tools tab -->
+      <div class="ctx-pane" data-pane="tools" hidden>
+        <div class="ctx-label">Model</div>
+        <select id="provider"></select>
+        <input id="modelName" class="ctx-input" autocomplete="off" placeholder="model name (optional)" />
+        <div id="modelHint" class="model-hint"></div>
+        <div id="privacyBadge" class="privacy-badge" hidden></div>
+
+        <div class="ctx-label">Tasks <span id="taskCount" class="muted"></span></div>
+        <div class="addtask">
+          <input id="taskInput" autocomplete="off" placeholder="Add a task…" />
+          <button id="taskAdd" class="tiny">Add</button>
+        </div>
+        <div id="taskList" class="tasks"></div>
+
+        <div id="reminderWrap" hidden>
+          <div class="ctx-label">⏰ Reminders</div>
+          <div id="reminderList" class="tasks"></div>
+        </div>
+
+        <div class="ctx-label">⚡ Automations <button id="newRoutineBtn" class="tiny ghost">+ New</button></div>
+        <div id="routineList" class="tasks"></div>
+
+        <div class="ctx-label">Teach the brain</div>
+        <div class="addbox">
+          <textarea id="ingestText" rows="2" placeholder="Tell it a fact…"></textarea>
+          <button id="ingestBtn" class="tiny">Add to brain</button>
+        </div>
+        <div class="ctx-label">Data
+          <span class="brain-io">
+            <button id="brainExport" class="tiny ghost" title="Backup your brain">⤓</button>
+            <button id="brainImport" class="tiny ghost" title="Restore a backup">⤒</button>
+            <input id="brainImportFile" type="file" accept="application/json,.json" hidden />
+          </span></div>
+
+        <div class="ctx-label">Sources <button id="syncAll" class="tiny ghost">sync all</button></div>
+        <div id="syncStatus" class="sync-status"></div>
+        <div id="googleCard" class="google-card" hidden></div>
+        <div id="connectors" class="connectors"></div>
+        <button id="addCustomApp" class="tiny ghost" style="margin-top:8px">+ Connect a custom app</button>
+      </div>
     </aside>
   </div>
+
   <!-- new automation / routine -->
   <div id="routineModal" class="modal-bg" hidden>
     <div class="modal">
@@ -110,7 +153,7 @@
         </div>
         <label>Instruction (what the agent should do)</label>
         <textarea id="rmInstruction" rows="3" placeholder="e.g. Summarize the new email and send the summary to me@gmail.com"></textarea>
-        <p class="t" style="font-size:11px;margin-top:6px">⚠️ Automations run without a per-time confirm — actions (like sending) fire automatically. You can disable or delete anytime.</p>
+        <p class="t" style="font-size:11px;margin-top:6px">⚠️ Automations run without a per-time confirm — actions fire automatically. Disable or delete anytime.</p>
       </div>
       <div class="modal-foot"><span></span><button id="rmCreate">Create automation</button></div>
     </div>
@@ -134,7 +177,15 @@
     </div>
   </div>
 
-  <!-- lead-agent welcome (first entry after onboarding) -->
+  <!-- brain detail (entity facts / memory search) -->
+  <div id="brainModal" class="modal-bg" hidden>
+    <div class="modal">
+      <div class="modal-head"><b id="bmTitle">Details</b><button id="bmClose" class="ghost tiny">✕</button></div>
+      <div id="bmBody" class="bm-body"></div>
+    </div>
+  </div>
+
+  <!-- lead-agent welcome -->
   <div id="welcome" class="welcome-bg" hidden>
     <div class="welcome-box">
       <div class="w-eyebrow">Step 04 · Your team</div>
@@ -153,90 +204,37 @@
     </div>
   </div>
 
-  <!-- live brain-building panel (opened from the header brain button) -->
-  <div id="brainBuild" class="modal-bg" hidden>
-    <div class="modal bb-modal">
-      <div class="modal-head"><b>Your brain</b><button id="bbClose" class="ghost tiny">✕</button></div>
-      <div class="bb-body">
-        <div class="bb-state" id="bbState">Checking…</div>
-        <div class="bb-bar"><div class="bb-fill" id="bbFill"></div></div>
-        <div class="bb-stats">
-          <div class="bb-stat"><b id="bbMem">0</b><span>Memories</span></div>
-          <div class="bb-stat"><b id="bbEnt">0</b><span>Entities</span></div>
-          <div class="bb-stat"><b id="bbRel">0</b><span>Facts</span></div>
-        </div>
-        <p class="bb-note">Your brain keeps learning in the background — everything stays on your Mac.</p>
-        <button id="bbSync" class="tiny" style="width:100%">Sync now</button>
+  <!-- full-screen brain screen -->
+  <div id="brainScreen" class="brainscreen" hidden>
+    <canvas id="bsCanvas"></canvas>
+    <div class="bs-top">
+      <div class="bs-title">Your brain</div>
+      <button id="bsClose" class="ghost tiny">Close ✕</button>
+    </div>
+    <div class="bs-hud">
+      <div class="bs-state" id="bsState">Building your brain…</div>
+      <div class="bs-metrics">
+        <div class="bs-m"><b id="bsMem">0</b><span>Memories</span></div>
+        <div class="bs-m"><b id="bsEnt">0</b><span>Entities</span></div>
+        <div class="bs-m"><b id="bsRel">0</b><span>Facts</span></div>
       </div>
+      <button id="bsSync" class="tiny">Sync now</button>
+      <p class="bs-note">Your brain keeps learning in the background — everything stays on your device.</p>
     </div>
   </div>
 
-  <!-- brain detail (entity facts / memory search) -->
-  <div id="brainModal" class="modal-bg" hidden>
-    <div class="modal">
-      <div class="modal-head">
-        <b id="bmTitle">Details</b>
-        <button id="bmClose" class="ghost tiny">✕</button>
-      </div>
-      <div id="bmBody" class="bm-body"></div>
-    </div>
-  </div>
-
-  <!-- onboarding -->
-  <div id="onboard" class="modal-bg" hidden>
-    <div class="modal onboard">
-      <div class="onboard-head">
-        <span class="logo big">◆</span>
-        <h2>Welcome to Lodestone</h2>
-        <p class="muted">Your agents get smart by knowing <b>you</b>. Connect a
-          source once — everything stays on your Mac — and every agent already
-          knows your world. Pick any that fit; you can add more later.</p>
-      </div>
-      <div class="ob-cards">
-        <button class="ob-card" id="obGoogle">
-          <span class="ob-ic">🔗</span>
-          <b>Sign in with Google</b>
-          <span class="muted">Gmail, Drive &amp; Calendar — one click, read-only.</span>
-        </button>
-        <button class="ob-card" id="obLocal">
-          <span class="ob-ic">💻</span>
-          <b>Use what's on your Mac</b>
-          <span class="muted">Apple Mail, Calendar, iMessage, folders — no sign-in.</span>
-        </button>
-        <button class="ob-card" id="obApps">
-          <span class="ob-ic">🧩</span>
-          <b>Connect an app</b>
-          <span class="muted">Notion, Linear, GitHub, or any custom API.</span>
-        </button>
-        <button class="ob-card" id="obFact">
-          <span class="ob-ic">✏️</span>
-          <b>Just tell it a fact</b>
-          <span class="muted">Type something you want your agents to know.</span>
-        </button>
-      </div>
-      <div class="onboard-foot">
-        <span class="muted tiny">Then ask any agent — it answers from your brain,
-          and searches the web when needed.</span>
-        <span style="flex:1"></span>
-        <button id="obSkip" class="ghost tiny">Skip for now</button>
-        <button id="obDone">Start using Lodestone</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- folder picker -->
+  <!-- hidden legacy hooks kept so app.js stays wired -->
+  <div id="brainBuild" hidden></div><span id="bbState" hidden></span><span id="bbFill" hidden></span>
+  <span id="bbMem" hidden></span><span id="bbEnt" hidden></span><span id="bbRel" hidden></span>
+  <button id="bbClose" hidden></button><button id="bbSync" hidden></button>
+  <div id="onboard" hidden></div><button id="obGoogle" hidden></button><button id="obLocal" hidden></button>
+  <button id="obApps" hidden></button><button id="obFact" hidden></button><button id="obSkip" hidden></button><button id="obDone" hidden></button>
   <div id="picker" class="modal-bg" hidden>
     <div class="modal">
-      <div class="modal-head">
-        <b>Pick a folder to ingest</b>
-        <button id="pickClose" class="ghost tiny">✕</button>
-      </div>
+      <div class="modal-head"><b>Pick a folder to ingest</b><button id="pickClose" class="ghost tiny">✕</button></div>
       <div id="pickPath" class="pick-path"></div>
       <div id="pickList" class="pick-list"></div>
-      <div class="modal-foot">
-        <span id="pickInfo" class="muted"></span>
-        <button id="pickIngest">Ingest this folder</button>
-      </div>
+      <div class="modal-foot"><span id="pickInfo" class="muted"></span><button id="pickIngest">Ingest this folder</button></div>
     </div>
   </div>
 
