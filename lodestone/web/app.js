@@ -1012,6 +1012,25 @@ async function updateBrainStatus() {
 
 // ── full-screen "Your Brain" view: live neural viz + real building status ────
 let _bsPoll = null, _bsRaf = null, _bsNodes = null, _bsRot = 0, _bsDensity = 0.15;
+// mouse interaction state for the brain viz
+let _bsMX = 0, _bsMY = 0, _bsTMX = 0, _bsTMY = 0;       // eased vs target parallax
+let _bsHoverX = -9999, _bsHoverY = -9999;               // cursor in canvas px
+let _bsDrag = false, _bsDragRot = 0, _bsSpin = 1, _bsLastX = 0, _bsWired = false;
+function _bsWire() {
+  if (_bsWired) return; _bsWired = true;
+  const cv = $("#bsCanvas"); if (!cv) return;
+  cv.style.cursor = "grab";
+  cv.addEventListener("pointermove", (e) => {
+    const r = cv.getBoundingClientRect();
+    _bsHoverX = e.clientX - r.left; _bsHoverY = e.clientY - r.top;
+    _bsTMX = (_bsHoverX / r.width) * 2 - 1; _bsTMY = (_bsHoverY / r.height) * 2 - 1;
+    if (_bsDrag) { _bsDragRot += (e.clientX - _bsLastX) * 0.006; _bsLastX = e.clientX; }
+  });
+  cv.addEventListener("pointerleave", () => { _bsHoverX = -9999; _bsHoverY = -9999; _bsTMX = 0; _bsTMY = 0; });
+  cv.addEventListener("pointerdown", (e) => { _bsDrag = true; _bsLastX = e.clientX; _bsSpin = 0.15; cv.style.cursor = "grabbing"; try { cv.setPointerCapture(e.pointerId); } catch (_) {} });
+  const end = () => { _bsDrag = false; _bsSpin = 1; cv.style.cursor = "grab"; };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+}
 function _bsBuildNodes() {
   // ~520 points on a jittered sphere → reads as a neural cluster
   const N = 520, pts = [];
@@ -1028,34 +1047,51 @@ function _bsDraw() {
   const dpr = Math.min(devicePixelRatio || 1, 2), W = cv.clientWidth, H = cv.clientHeight;
   if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
   const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
-  _bsRot += 0.0016;
+  _bsMX += (_bsTMX - _bsMX) * 0.06; _bsMY += (_bsTMY - _bsMY) * 0.06;   // ease parallax
+  _bsRot += 0.0016 * _bsSpin;
   // centre the sphere in the space to the right of the tools panel
   const cx = Math.min(W / 2 + 180, W - 60), cy = H * 0.46, R = Math.min(W * 0.5, H) * 0.34;
-  const sy = Math.sin(_bsRot), cyr = Math.cos(_bsRot), t = Date.now() / 1000;
+  // rotation = auto-spin + drag + mouse parallax; tilt up/down with the cursor
+  const ay = _bsRot + _bsDragRot + _bsMX * 0.5, tilt = -_bsMY * 0.4;
+  const sy = Math.sin(ay), cyr = Math.cos(ay), st = Math.sin(tilt), ct = Math.cos(tilt), t = Date.now() / 1000;
   const bright = 0.5 + 0.5 * _bsDensity;   // fuller/brighter as the brain grows
-  const proj = [];
+  const HOV = 130, proj = [];
   for (let i = 0; i < _bsNodes.length; i++) {   // always render the whole brain
     const n = _bsNodes[i];
-    const x1 = n.x * cyr + n.z * sy, z1 = -n.x * sy + n.z * cyr;
-    const sx = cx + x1 * R, sYy = cy + n.y * R, depth = (z1 + 1) / 2;
-    proj.push({ sx, sy: sYy, depth, p: n.p });
+    const x1 = n.x * cyr + n.z * sy, z1 = -n.x * sy + n.z * cyr, y1 = n.y;
+    const y2 = y1 * ct - z1 * st, z2 = y1 * st + z1 * ct;
+    const sx = cx + x1 * R, sYy = cy - y2 * R, depth = (z2 + 1) / 2;
+    const hd = Math.hypot(sx - _bsHoverX, sYy - _bsHoverY);
+    proj.push({ sx, sy: sYy, depth, p: n.p, near: hd < HOV ? 1 - hd / HOV : 0 });
   }
-  // synapse links between nearby points
+  // synapse links between nearby points (brighter near the cursor)
   ctx.lineWidth = 0.6;
   for (let i = 0; i < proj.length; i += 1) {
     for (let j = i + 1; j < Math.min(i + 8, proj.length); j++) {
       const dx = proj[i].sx - proj[j].sx, dy = proj[i].sy - proj[j].sy, d = dx * dx + dy * dy;
-      if (d < 52 * 52 && proj[i].depth > 0.3) {
-        ctx.strokeStyle = `rgba(120,160,240,${(0.04 + 0.08 * proj[i].depth * bright).toFixed(3)})`;
+      const nearBoost = Math.max(proj[i].near, proj[j].near);
+      if (d < (52 + nearBoost * 40) * (52 + nearBoost * 40) && (proj[i].depth > 0.3 || nearBoost > 0)) {
+        const la = 0.04 + 0.08 * proj[i].depth * bright + nearBoost * 0.35;
+        ctx.strokeStyle = `rgba(${120 + nearBoost * 70 | 0},${160 + nearBoost * 40 | 0},255,${la.toFixed(3)})`;
         ctx.beginPath(); ctx.moveTo(proj[i].sx, proj[i].sy); ctx.lineTo(proj[j].sx, proj[j].sy); ctx.stroke();
+      }
+    }
+  }
+  // probe lines from the cursor to the nodes it's hovering
+  if (_bsHoverX > -9000) {
+    for (const p of proj) {
+      if (p.near > 0.15) {
+        ctx.strokeStyle = `rgba(150,190,255,${(p.near * 0.4).toFixed(3)})`;
+        ctx.beginPath(); ctx.moveTo(_bsHoverX, _bsHoverY); ctx.lineTo(p.sx, p.sy); ctx.stroke();
       }
     }
   }
   for (const p of proj) {
     const pulse = 0.5 + 0.5 * Math.sin(t * 1.5 + p.p);
-    const a = (0.22 + 0.62 * p.depth) * (0.6 + 0.4 * pulse) * bright;
-    const rad = 0.7 + 1.8 * p.depth;
-    ctx.fillStyle = `rgba(${170 + 60 * p.depth | 0},${195 + 40 * p.depth | 0},255,${a.toFixed(3)})`;
+    const a = Math.min(1, (0.22 + 0.62 * p.depth) * (0.6 + 0.4 * pulse) * bright + p.near * 0.6);
+    const rad = 0.7 + 1.8 * p.depth + p.near * 2.4;
+    const g = 195 + 40 * p.depth + p.near * 20;
+    ctx.fillStyle = `rgba(${170 + 60 * p.depth + p.near * 15 | 0},${g | 0},255,${a.toFixed(3)})`;
     ctx.beginPath(); ctx.arc(p.sx, p.sy, rad, 0, 6.283); ctx.fill();
   }
   _bsRaf = requestAnimationFrame(_bsDraw);
@@ -1077,6 +1113,7 @@ function openBrainScreen() {
   const m = $("#brainScreen"); if (!m) return;
   m.hidden = false;
   if (!_bsNodes) _bsBuildNodes();
+  _bsWire();                          // mouse: parallax tilt, hover glow, drag-rotate
   try { loadBrain(); } catch (_) {}   // fill the side panel (stats, entities)
   _bsRefresh(); clearInterval(_bsPoll); _bsPoll = setInterval(_bsRefresh, 2500);
   cancelAnimationFrame(_bsRaf); _bsRaf = requestAnimationFrame(_bsDraw);
