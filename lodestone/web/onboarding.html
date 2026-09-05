@@ -476,19 +476,29 @@
     try{await api("/api/sync/now",{method:"POST"});}catch(e){}
     var fill=document.getElementById("bFill"),pct=document.getElementById("bPct"),det=document.getElementById("bDet"),
         itemsEl=document.getElementById("stItems"),entEl=document.getElementById("stEnt"),prog=0,shown=-1;
+    // A first Gmail/Drive sync can ingest thousands of items over many minutes, so
+    // we DON'T block on the whole sync finishing. We move on once the brain has
+    // taken shape — sync keeps enriching it in the background, live in the app.
+    var t0=Date.now(),MAXWAIT=20000,SETTLE=18000,lastTotal=0,stable=0,finishing=false;
     buildIv=setInterval(async function(){
       var syncing=false,total=0,ents=0;
       try{syncing=(await api("/api/sync/status")).syncing;}catch(e){}
       try{var st=await api("/api/brain/stats");total=st.total||0;ents=(st.graph&&st.graph.entities)||0;}catch(e){}
-      var target=syncing?0.92:1;prog=Math.min(target,prog+(syncing?0.02:0.08));
+      if(total>lastTotal){lastTotal=total;stable=0;}else{stable++;}
+      var elapsed=Date.now()-t0;
+      // ready to finish: sync ended · OR data arrived and inflow paused · OR we've
+      // shown enough of the build and something is in the brain · OR hard cap.
+      var enough=(!syncing)||(total>0&&stable>=5&&elapsed>SETTLE)||(total>0&&elapsed>=MAXWAIT)||elapsed>=MAXWAIT+15000;
+      var target=enough?1:0.92;prog=Math.min(target,prog+(enough?0.08:0.02));
       fill.style.width=(prog*100)+"%";pct.textContent=Math.round(prog*100)+"%";
       itemsEl.textContent=total.toLocaleString();entEl.textContent=ents.toLocaleString();
-      var li=Math.min(LOG.length-1,Math.floor(prog*LOG.length));
+      var li=Math.min(LOG.length-1,Math.floor((enough?1:prog)*LOG.length));
       if(li!==shown){shown=li;det.textContent=LOG[li];ripplePop();}
-      if(!syncing&&prog>=1){clearInterval(buildIv);buildIv=null;det.textContent="Your brain is ready.";
+      if(enough&&prog>=1&&!finishing){finishing=true;clearInterval(buildIv);buildIv=null;
+        det.textContent=syncing?"Your brain is taking shape — it keeps learning in the background.":"Your brain is ready.";
         setTimeout(function(){stage.classList.remove("building");stage.classList.add("brainready");
           document.querySelectorAll(".step")[2].classList.add("act");document.querySelector('.step[id="stepBuild"]').classList.remove("act");
-          populateDigest();},700);}
+          populateDigest();},900);}
     },700);
   }
   cont.addEventListener("click",startBuild);
