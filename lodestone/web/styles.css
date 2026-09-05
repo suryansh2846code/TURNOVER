@@ -1,15 +1,27 @@
 :root {
-  --bg: #0c0f14; --panel: #141922; --panel-2: #1b2230; --border: #26303f;
-  --text: #e6edf3; --muted: #8b98a9; --accent: #6ea8fe; --accent-2: #38d39f;
-  --user: #223a5e; --tool: #1e2c22;
+  /* onboarding palette */
+  --bg: #05070d; --panel: #0b0f18; --panel-2: #0e131e;
+  --border: rgba(223,231,242,.1); --border2: rgba(223,231,242,.18);
+  --text: #dfe7f2; --muted: #7a8397; --faint: #4a5266;
+  --accent: #5b9bff; --accent-2: #5fcf8e; --north: #f5c877; --danger: #ff6b6b;
+  --user: rgba(91,155,255,.10); --tool: rgba(95,207,142,.06);
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, "SF Pro Display", "Helvetica Neue", system-ui, Arial, sans-serif;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
-  font: 14.5px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--bg); color: var(--text);
+  font: 14px/1.55 var(--sans);
+  color: var(--text);
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(rgba(223,231,242,.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(223,231,242,.022) 1px, transparent 1px),
+    radial-gradient(120% 85% at 45% -10%, rgba(20,28,48,.4), transparent 60%);
+  background-size: 40px 40px, 40px 40px, 100% 100%;
 }
-.app { display: grid; grid-template-columns: 220px 1fr 300px; height: 100vh; }
+.app { display: grid; grid-template-columns: 232px 1fr 312px; height: 100vh; }
 
 /* sidebar */
 .sidebar, .brainpanel {
@@ -357,3 +369,71 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
   .brainpanel { border-left: 0; border-top: 1px solid var(--border); }
   .chat { min-height: 60vh; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Onboarding re-skin — same visual language as the Connect → Build flow.
+   Layered last so it wins on equal specificity; structure/IDs untouched.
+   ══════════════════════════════════════════════════════════════════════════ */
+body { display: flex; flex-direction: column; height: 100%; }
+.app { height: auto; flex: 1; min-height: 0; background: transparent; }
+
+/* top brand bar */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 15px 22px; border-bottom: 1px solid var(--border);
+  background: rgba(5,7,13,.55); backdrop-filter: blur(6px);
+}
+.topbar .tb-brand {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .42em;
+  text-transform: uppercase; color: var(--text);
+}
+.topbar .tb-mark {
+  width: 13px; height: 13px; transform: rotate(45deg);
+  border: 1.5px solid var(--north); box-shadow: 0 0 12px rgba(245,200,119,.25);
+}
+.topbar .tb-trust {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .22em;
+  text-transform: uppercase; color: var(--faint);
+}
+
+/* panels + brand */
+.sidebar, .brainpanel { background: rgba(11,15,24,.66); }
+.brand { font-family: var(--mono); letter-spacing: .3em; text-transform: uppercase;
+  font-size: 12px; }
+.logo { color: var(--north); filter: drop-shadow(0 0 10px rgba(245,200,119,.35)); }
+
+/* section labels → mono eyebrow */
+.side-label { font-family: var(--mono); font-size: 10px; letter-spacing: .22em; color: var(--faint); }
+
+/* headings → display sans */
+.chat-head h2, .modal-head b, #bmTitle { font-family: var(--sans); font-weight: 600; letter-spacing: -.01em; }
+
+/* buttons → onboarding language (dark default, one light primary = Send) */
+button { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  background: #141a26; color: var(--text); border: 1px solid var(--border2); border-radius: 5px;
+  padding: 11px 18px; font-weight: 500; transition: background .16s, border-color .16s, color .16s; }
+button:hover { background: #1a2130; border-color: var(--accent); filter: none; }
+button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border2); border-radius: 999px; }
+button.ghost:hover { color: var(--text); border-color: var(--text); background: transparent; }
+button.tiny { padding: 6px 12px; font-size: 10px; letter-spacing: .08em; }
+#send { background: #d6dae2; color: #08090d; border-color: #d6dae2; }
+#send:hover { background: #eef1f5; }
+
+/* inputs → dark ground + hairline borders */
+select, .model-input, .brain-search, .addtask input, .addbox textarea,
+.composer textarea, .am-body input, .am-body textarea, #taskInput, #ingestText {
+  background: #05070d; border-color: var(--border2); }
+select:focus, input:focus, textarea:focus { border-color: var(--accent); }
+
+/* cards: glow-on-active + accent chat bubble */
+.agent.active { background: rgba(91,155,255,.06); border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(91,155,255,.15); }
+.msg.user { background: var(--user); border-color: rgba(91,155,255,.35); white-space: pre-wrap; }
+
+/* brain-status pill in mono */
+.brain-status { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; }
+
+/* modals sit on the same deep ground */
+.modal { background: var(--panel); border-color: var(--border2); }
+.modal-bg { background: rgba(3,5,10,.72); backdrop-filter: blur(4px); }
