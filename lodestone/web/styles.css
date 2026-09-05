@@ -326,9 +326,18 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .brainscreen { position: fixed; inset: 0; z-index: 70; background: #05070d; overflow: hidden; }
 .brainscreen[hidden] { display: none; }
 #bsCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.bs-side { position: absolute; left: 28px; top: 74px; bottom: 28px; width: 330px; z-index: 3;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 9px;
+  background: rgba(11,15,24,.55); backdrop-filter: blur(10px);
+  border: 1px solid var(--border); border-radius: 16px; padding: 18px; }
+.bs-side-label { display: flex; align-items: center; justify-content: space-between;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--faint); margin-top: 8px; }
+.bs-side-label:first-child { margin-top: 0; }
 .bs-top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 22px 30px; z-index: 2; }
 .bs-title { font-family: var(--mono); font-size: 13px; letter-spacing: .3em; text-transform: uppercase; color: var(--text); }
-.bs-hud { position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%); z-index: 2; text-align: center; width: min(560px, 90vw); }
+.bs-hud { position: absolute; left: calc(50% + 175px); bottom: 8%; transform: translateX(-50%); z-index: 2; text-align: center; width: min(520px, 60vw); }
+@media (max-width: 900px) { .bs-side { display: none; } .bs-hud { left: 50%; } }
 .bs-state { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
 .bs-state.done { color: var(--accent-2); }
 .bs-metrics { display: flex; gap: 14px; justify-content: center; margin-bottom: 18px; }

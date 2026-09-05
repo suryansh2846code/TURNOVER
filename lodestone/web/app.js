@@ -1029,31 +1029,32 @@ function _bsDraw() {
   if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
   const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
   _bsRot += 0.0016;
-  const cx = W / 2, cy = H * 0.46, R = Math.min(W, H) * 0.30;
+  // centre the sphere in the space to the right of the tools panel
+  const cx = Math.min(W / 2 + 180, W - 60), cy = H * 0.46, R = Math.min(W * 0.5, H) * 0.34;
   const sy = Math.sin(_bsRot), cyr = Math.cos(_bsRot), t = Date.now() / 1000;
-  const shown = Math.max(40, Math.floor(_bsNodes.length * (0.25 + 0.75 * _bsDensity)));
+  const bright = 0.5 + 0.5 * _bsDensity;   // fuller/brighter as the brain grows
   const proj = [];
-  for (let i = 0; i < shown; i++) {
+  for (let i = 0; i < _bsNodes.length; i++) {   // always render the whole brain
     const n = _bsNodes[i];
     const x1 = n.x * cyr + n.z * sy, z1 = -n.x * sy + n.z * cyr;
     const sx = cx + x1 * R, sYy = cy + n.y * R, depth = (z1 + 1) / 2;
     proj.push({ sx, sy: sYy, depth, p: n.p });
   }
-  // links between nearby points (front-ish only)
+  // synapse links between nearby points
   ctx.lineWidth = 0.6;
-  for (let i = 0; i < proj.length; i += 2) {
-    for (let j = i + 1; j < Math.min(i + 10, proj.length); j++) {
+  for (let i = 0; i < proj.length; i += 1) {
+    for (let j = i + 1; j < Math.min(i + 8, proj.length); j++) {
       const dx = proj[i].sx - proj[j].sx, dy = proj[i].sy - proj[j].sy, d = dx * dx + dy * dy;
-      if (d < 46 * 46 && proj[i].depth > 0.35) {
-        ctx.strokeStyle = `rgba(120,160,240,${(0.05 + 0.06 * proj[i].depth).toFixed(3)})`;
+      if (d < 52 * 52 && proj[i].depth > 0.3) {
+        ctx.strokeStyle = `rgba(120,160,240,${(0.04 + 0.08 * proj[i].depth * bright).toFixed(3)})`;
         ctx.beginPath(); ctx.moveTo(proj[i].sx, proj[i].sy); ctx.lineTo(proj[j].sx, proj[j].sy); ctx.stroke();
       }
     }
   }
   for (const p of proj) {
     const pulse = 0.5 + 0.5 * Math.sin(t * 1.5 + p.p);
-    const a = (0.25 + 0.6 * p.depth) * (0.6 + 0.4 * pulse);
-    const rad = 0.7 + 1.7 * p.depth;
+    const a = (0.22 + 0.62 * p.depth) * (0.6 + 0.4 * pulse) * bright;
+    const rad = 0.7 + 1.8 * p.depth;
     ctx.fillStyle = `rgba(${170 + 60 * p.depth | 0},${195 + 40 * p.depth | 0},255,${a.toFixed(3)})`;
     ctx.beginPath(); ctx.arc(p.sx, p.sy, rad, 0, 6.283); ctx.fill();
   }
@@ -1076,6 +1077,7 @@ function openBrainScreen() {
   const m = $("#brainScreen"); if (!m) return;
   m.hidden = false;
   if (!_bsNodes) _bsBuildNodes();
+  try { loadBrain(); } catch (_) {}   // fill the side panel (stats, entities)
   _bsRefresh(); clearInterval(_bsPoll); _bsPoll = setInterval(_bsRefresh, 2500);
   cancelAnimationFrame(_bsRaf); _bsRaf = requestAnimationFrame(_bsDraw);
 }
@@ -1093,19 +1095,20 @@ $("#bsSync").onclick = async () => {
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#brainScreen").hidden) closeBrainScreen(); });
 
 // ── slide-over drawers opened from the left nav ─────────────────────────────
-const DRAWER_TITLES = { brain: "Brain", sources: "Sources", tasks: "Tasks", model: "AI model" };
+const DRAWER_TITLES = { sources: "Connectors", tasks: "Tasks", model: "AI model" };
 function openDrawer(name) {
   const bg = $("#drawerBg"); if (!bg) return;
   $("#drawerTitle").textContent = DRAWER_TITLES[name] || name;
   document.querySelectorAll(".dpanel").forEach((p) => p.hidden = p.dataset.d !== name);
   bg.hidden = false;
-  if (name === "brain" || name === "sources") loadBrain();
+  if (name === "sources") loadBrain();
   if (name === "tasks") { loadTasks(); loadReminders(); loadRoutines(); }
   if (name === "model") loadProviders();
 }
 function closeDrawer() { const bg = $("#drawerBg"); if (bg) bg.hidden = true; }
 document.querySelectorAll(".snav").forEach((b) => b.onclick = () => {
   if (b.id === "helpBtn") return openDrawer("sources");
+  if (b.dataset.nav === "brain") return openBrainScreen();   // Brain → full-screen viz + tools
   openDrawer(b.dataset.nav);
 });
 $("#drawerClose").onclick = closeDrawer;

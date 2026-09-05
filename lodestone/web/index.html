@@ -19,7 +19,7 @@
 
       <div class="side-nav">
         <button class="snav" data-nav="brain"><span class="snav-ic">◇</span> Brain</button>
-        <button class="snav" data-nav="sources"><span class="snav-ic">▤</span> Sources</button>
+        <button class="snav" data-nav="sources"><span class="snav-ic">▤</span> Connectors</button>
         <button class="snav" data-nav="tasks"><span class="snav-ic">☑</span> Tasks</button>
         <button class="snav" data-nav="model"><span class="snav-ic">◐</span> Model</button>
         <button class="snav" id="helpBtn"><span class="snav-ic">?</span> Getting started</button>
@@ -67,27 +67,7 @@
       <div class="drawer-head"><b id="drawerTitle">Brain</b><button id="drawerClose" class="ghost tiny">✕</button></div>
       <div class="drawer-body">
 
-        <!-- Brain -->
-        <div class="dpanel" data-d="brain">
-          <input id="brainSearch" class="ctx-input" autocomplete="off" placeholder="🔍 Search your brain…" />
-          <div id="brainStats" class="brain-stats"></div>
-          <button id="viewBrainBtn" class="tiny ghost" style="width:100%;margin-top:2px">◇ Open brain visualization →</button>
-          <div class="ctx-label">Knowledge graph</div>
-          <div id="entities" class="entities"></div>
-          <div class="ctx-label">Teach the brain</div>
-          <div class="addbox">
-            <textarea id="ingestText" rows="2" placeholder="Tell it a fact…"></textarea>
-            <button id="ingestBtn" class="tiny">Add to brain</button>
-          </div>
-          <div class="ctx-label">Backup
-            <span class="brain-io">
-              <button id="brainExport" class="tiny ghost" title="Backup your brain">⤓ Export</button>
-              <button id="brainImport" class="tiny ghost" title="Restore a backup">⤒ Import</button>
-              <input id="brainImportFile" type="file" accept="application/json,.json" hidden />
-            </span></div>
-        </div>
-
-        <!-- Sources -->
+        <!-- Connectors -->
         <div class="dpanel" data-d="sources" hidden>
           <div class="ctx-label">Connected sources <button id="syncAll" class="tiny ghost">sync all</button></div>
           <div id="syncStatus" class="sync-status"></div>
@@ -207,6 +187,27 @@
       <div class="bs-title">Your brain</div>
       <button id="bsClose" class="ghost tiny">Close ✕</button>
     </div>
+
+    <!-- brain tools side panel -->
+    <aside class="bs-side">
+      <div class="bs-side-label">Search</div>
+      <input id="brainSearch" class="ctx-input" autocomplete="off" placeholder="🔍 Search your brain…" />
+      <div id="brainStats" hidden></div>
+      <div class="bs-side-label">Knowledge graph</div>
+      <div id="entities" class="entities"></div>
+      <div class="bs-side-label">Teach the brain</div>
+      <div class="addbox">
+        <textarea id="ingestText" rows="2" placeholder="Tell it a fact…"></textarea>
+        <button id="ingestBtn" class="tiny">Add to brain</button>
+      </div>
+      <div class="bs-side-label">Backup
+        <span class="brain-io">
+          <button id="brainExport" class="tiny ghost" title="Backup your brain">⤓ Export</button>
+          <button id="brainImport" class="tiny ghost" title="Restore a backup">⤒ Import</button>
+          <input id="brainImportFile" type="file" accept="application/json,.json" hidden />
+        </span></div>
+    </aside>
+
     <div class="bs-hud">
       <div class="bs-state" id="bsState">Building your brain…</div>
       <div class="bs-metrics">
@@ -218,6 +219,7 @@
       <p class="bs-note">Your brain keeps learning in the background — everything stays on your device.</p>
     </div>
   </div>
+  <button id="viewBrainBtn" hidden></button>
 
   <!-- hidden legacy hooks kept so app.js stays wired -->
   <div id="brainBuild" hidden></div><span id="bbState" hidden></span><span id="bbFill" hidden></span>
