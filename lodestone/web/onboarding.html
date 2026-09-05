@@ -525,26 +525,33 @@
   function runBuildProgress(startPct){
     var fill=document.getElementById("bFill"),pct=document.getElementById("bPct"),det=document.getElementById("bDet"),
         itemsEl=document.getElementById("stItems"),entEl=document.getElementById("stEnt"),prog=startPct||0.06,shown=-1;
-    // The build never "completes" here — the brain keeps growing in the background.
-    // We show it taking shape for a moment, then hand off to the snapshot (digest);
-    // from the workspace the brain button opens the live building status.
-    var t0=Date.now(),DWELL=6500,finishing=false;
+    // The bar loads until the profile has been EXTRACTED — then we hand off to the
+    // digest with the cards already populated. It never shows 100% (the brain keeps
+    // growing in the background; the workspace brain button shows live status).
+    var t0=Date.now(),MINWAIT=4500,finishing=false,digestData=null;digestDone=false;
+    document.querySelector(".digest").classList.remove("ready");
+    // empty-brain copy for the digest header
+    api("/api/brain/stats").then(function(st){if((st.total||0)===0){var p=document.querySelector(".dhead p");
+      if(p)p.textContent="Your brain is just getting started. Connect a source and this fills in with what matters to you.";}}).catch(function(){});
+    // start extracting the profile; the bar keeps loading until this resolves
+    fetchDigestData().then(function(d){digestData=d;});
     if(buildIv){clearInterval(buildIv);}
     buildIv=setInterval(async function(){
       var total=0,ents=0;
       try{var st=await api("/api/brain/stats");total=st.total||0;ents=(st.graph&&st.graph.entities)||0;}catch(e){}
-      var elapsed=Date.now()-t0;
-      // progress keeps moving but is intentionally never full — it's still building
-      prog=Math.min(0.7,prog+0.03);
+      var elapsed=Date.now()-t0,ready=(digestData!==null&&elapsed>=MINWAIT);
+      // ease toward ~0.86 while waiting (always moving), and toward ~0.96 once the
+      // profile is ready — never a hard stall, never a full/"completed" bar.
+      prog+=ready?(0.96-prog)*0.14:(0.86-prog)*0.05;
       fill.style.width=(prog*100)+"%";pct.textContent=Math.round(prog*100)+"%";
       itemsEl.textContent=total.toLocaleString();entEl.textContent=ents.toLocaleString();
-      var li=Math.min(LOG.length-1,Math.floor((elapsed/DWELL)*LOG.length));
+      var li=Math.min(LOG.length-1,Math.floor((elapsed/5200)*LOG.length));
       if(li!==shown){shown=li;det.textContent=LOG[li];ripplePop();}
-      if(elapsed>=DWELL&&!finishing){finishing=true;clearInterval(buildIv);buildIv=null;
+      if(ready&&prog>=0.9&&!finishing){finishing=true;clearInterval(buildIv);buildIv=null;
         det.textContent="Assembling your snapshot…";
         setTimeout(function(){stage.classList.remove("building");stage.classList.add("brainready");
           document.querySelectorAll(".step")[2].classList.add("act");document.querySelector('.step[id="stepBuild"]').classList.remove("act");
-          populateDigest();},600);}
+          fillCards(digestData);},500);}   // cards arrive already populated
     },700);
   }
 
@@ -589,17 +596,15 @@
     return {personas:["work","learning","comm","personal"].map(function(k,i){
       return {key:k,items:counts[k],summary:titles[k],themes:names.slice(i*per,i*per+per).slice(0,5)};})};
   }
-  async function populateDigest(){
-    digestDone=false;
-    document.querySelector(".digest").classList.remove("ready");
-    try{var st=await api("/api/brain/stats");
-      if((st.total||0)===0){var p=document.querySelector(".dhead p");
-        if(p)p.textContent="Your brain is just getting started. Connect a source and this fills in with what matters to you.";}
-    }catch(e){}
-    // safety net: reveal with computed (real) personas if extraction takes too long
-    var fallback=setTimeout(async function(){fillCards(await computeFallback());},22000);
-    try{var data=await api("/api/brain/digest",{method:"POST"});clearTimeout(fallback);fillCards(data);}
-    catch(e){clearTimeout(fallback);fillCards(await computeFallback());}
+  // Resolve the digest personas: LLM-written when possible, computed (real counts
+  // + themes) as a fallback, and a hard 22s timeout so the bar never loads forever.
+  function fetchDigestData(){
+    return new Promise(function(resolve){
+      var done=false;
+      var t=setTimeout(function(){if(!done){done=true;computeFallback().then(resolve);}},22000);
+      api("/api/brain/digest",{method:"POST"}).then(function(d){if(!done){done=true;clearTimeout(t);resolve(d);}})
+        .catch(function(){if(!done){done=true;clearTimeout(t);computeFallback().then(resolve);}});
+    });
   }
 
   // ── navigation / completion ──────────────────────────────────────────────
@@ -607,9 +612,13 @@
   document.getElementById("toBrain").addEventListener("click",function(){this.textContent="Entering…";setTimeout(enterApp,400);});
   var dedit=document.querySelector(".dedit");if(dedit)dedit.addEventListener("click",enterApp);
   var skipTop=document.getElementById("skipTop");if(skipTop)skipTop.addEventListener("click",enterApp);
-  // On reload (Cmd+R) we always start fresh from the first screen. A sync that's
-  // already running keeps going in the background — track it from the workspace's
-  // brain-status indicator.
+
+  // Cmd/Ctrl+R → reload to the first screen (the hero). The desktop app runs in a
+  // webview where the browser's own reload shortcut isn't wired, so we bind it.
+  window.addEventListener("keydown",function(e){
+    if((e.metaKey||e.ctrlKey)&&(e.key==="r"||e.key==="R"||e.code==="KeyR")){e.preventDefault();
+      if(location.pathname==="/onboarding"){location.reload();}else{location.assign("/onboarding");}}
+  },true);
 })();
 </script>
 

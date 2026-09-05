@@ -995,6 +995,15 @@ $("#bbSync").onclick = async () => {
   } catch (e) { toast(String(e)); }
 };
 
+// Cmd/Ctrl+R → back to the first screen (the hero). The desktop app runs in a
+// webview where the browser reload shortcut isn't wired, so we bind it ourselves.
+window.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && (e.key === "r" || e.key === "R" || e.code === "KeyR")) {
+    e.preventDefault();
+    window.location.assign("/onboarding");
+  }
+}, true);
+
 (async () => {
   if (await maybeOnboard()) return;   // redirecting to onboarding — stop here
   loadAgents(); loadProviders(); loadBrain(); loadTasks(); loadReminders(); loadRoutines();
