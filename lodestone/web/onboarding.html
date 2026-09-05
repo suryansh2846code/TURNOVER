@@ -124,13 +124,21 @@
   .dhead h1{margin:8px 0 10px;font-family:var(--sans);font-weight:600;font-size:clamp(34px,4vw,52px);line-height:1;letter-spacing:-.03em}
   .dhead h1 b{font-weight:300;background:linear-gradient(100deg,#a9d3ff,#5b9bff);-webkit-background-clip:text;background-clip:text;color:transparent}
   .dhead p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.6}
-  .dcard{position:absolute;width:min(370px,27vw);border:1px solid var(--line);background:rgba(11,15,24,.72);backdrop-filter:blur(3px);border-radius:12px;padding:20px}
-  .dcard.tl{left:60px;top:24%}.dcard.bl{left:60px;top:56%}.dcard.tr{right:60px;top:24%}.dcard.br{right:60px;top:56%}
+  /* loader shown until the profile is extracted */
+  .dloading{position:absolute;left:50%;top:30%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);white-space:nowrap;transition:opacity .4s}
+  .digest.ready .dloading{opacity:0;pointer-events:none}
+  .dspin{width:14px;height:14px;border:2px solid var(--line2);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+  /* cards stay hidden until the profile is ready, then fade in staggered */
+  .dcard{position:absolute;width:min(360px,26vw);max-height:38vh;overflow:hidden;border:1px solid var(--line);background:rgba(11,15,24,.72);backdrop-filter:blur(3px);border-radius:12px;padding:20px;opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .5s ease,transform .5s ease}
+  .digest.ready .dcard{opacity:1;transform:none;pointer-events:auto}
+  .digest.ready .dcard.tl{transition-delay:.05s}.digest.ready .dcard.tr{transition-delay:.15s}
+  .digest.ready .dcard.bl{transition-delay:.25s}.digest.ready .dcard.br{transition-delay:.35s}
+  .dcard.tl{left:60px;top:23%}.dcard.bl{left:60px;top:57%}.dcard.tr{right:60px;top:23%}.dcard.br{right:60px;top:57%}
   .dc-h{display:flex;align-items:center;gap:11px;margin-bottom:13px}
   .dc-ic{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:none}
   .dc-nm{font-family:var(--sans);font-weight:600;font-size:14px;color:var(--star)}
   .dc-it{margin-left:auto;font-size:11px;color:var(--muted)}
-  .dc-p{margin:0;font-size:12px;line-height:1.6;color:var(--star);opacity:.92}
+  .dc-p{margin:0;font-size:12px;line-height:1.6;color:var(--star);opacity:.92;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
   .dc-k{margin:14px 0 0;font-size:11px;color:var(--faint);line-height:1.5;display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
   .dc-k .ar{color:var(--muted)}
   .dcont{position:absolute;left:50%;bottom:11%;transform:translateX(-50%);text-align:center}
@@ -223,6 +231,7 @@
   <button class="cbtn cfixed" id="continue">Continue →</button>
   <div class="digest">
     <div class="dhead"><div class="eyebrow">Step 03</div><h1>Here's your <b>brain.</b></h1><p>A quick snapshot of what we understand about you. You can always refine this later.</p></div>
+    <div class="dloading" id="dloading"><span class="dspin"></span>Analyzing your brain…</div>
     <div class="dcard tl"><div class="dc-h"><span class="dc-ic" style="background:rgba(180,152,240,.14);color:#b498f0"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="6" width="12" height="8" rx="1.5"/><path d="M7 6V5a2 2 0 0 1 4 0v1"/></svg></span><span class="dc-nm">Work</span><span class="dc-it">8.4K items</span></div>
       <p class="dc-p">You're a founder-engineer, currently building Lodestone. You work with AI tools, product design, and development, and often explore ideas late at night. You're also preparing for hackathons and stay updated with tech, startups, and productivity tools.</p>
       <div class="dc-k"><span>Key themes: AI, Product, Development, Startups, Hackathons</span><span class="ar">→</span></div></div>
@@ -552,21 +561,45 @@
     api("/api/sync/cancel",{method:"POST"}).catch(function(){});backToConnect();});
 
   // ── digest: real, LLM-written personas grounded in the brain ─────────────
-  async function populateDigest(){
+  //  Cards stay hidden (loader spins) until the profile is extracted, then fade
+  //  in. A hard timeout falls back to computed personas so it never hangs.
+  var digestDone=false;
+  function fillCards(data){
+    if(digestDone)return;digestDone=true;
+    var digest=document.querySelector(".digest");
     var cards=document.querySelectorAll(".digest .dcard"),order=["work","learning","comm","personal"];
-    // clear the placeholder prose while the real profile is generated
-    cards.forEach(function(card){var b=card.querySelector(".dc-p");if(b)b.textContent="Reading your world…";
-      var k=card.querySelector(".dc-k span");if(k)k.textContent="";});
-    try{var st=await api("/api/brain/stats");
-      if((st.total||0)===0){var p=document.querySelector(".dhead p");
-        if(p)p.textContent="Your brain is just getting started. Connect a source and this fills in with what matters to you.";}
-    }catch(e){}
-    var data=null;try{data=await api("/api/brain/digest",{method:"POST"});}catch(e){}
     var byKey={};((data&&data.personas)||[]).forEach(function(p){byKey[p.key]=p;});
     cards.forEach(function(card,i){var p=byKey[order[i]];if(!p)return;
       var it=card.querySelector(".dc-it");if(it)it.textContent=(p.items||0).toLocaleString()+" items";
       var b=card.querySelector(".dc-p");if(b)b.textContent=p.summary||"";
       var k=card.querySelector(".dc-k span");if(k)k.textContent=(p.themes&&p.themes.length)?("Key themes: "+p.themes.join(", ")):"";});
+    digest.classList.add("ready");            // reveal the cards + hide the loader
+  }
+  async function computeFallback(){
+    var st={total:0,by_source:{}},ents=[];
+    try{st=await api("/api/brain/stats");}catch(e){}
+    try{ents=(await api("/api/brain/entities?limit=24")).entities||[];}catch(e){}
+    var CAT={gmail:"comm",apple_mail:"comm",imessage:"comm",slack:"comm",gcal:"personal",apple_calendar:"personal",
+      gdrive:"work",github:"work",linear:"work",notion:"work",files:"learning",notes:"learning"};
+    var counts={work:0,learning:0,comm:0,personal:0},bs=st.by_source||{};
+    Object.keys(bs).forEach(function(s){counts[CAT[s]||CAT[s.split(":")[0]]||"work"]+=bs[s];});
+    var names=ents.map(function(e){return e.name;}),per=Math.max(1,Math.ceil((names.length||1)/4));
+    var titles={work:"What you're building and working on.",learning:"What you're exploring and learning.",
+      comm:"Who you talk to and collaborate with.",personal:"Your life outside work."};
+    return {personas:["work","learning","comm","personal"].map(function(k,i){
+      return {key:k,items:counts[k],summary:titles[k],themes:names.slice(i*per,i*per+per).slice(0,5)};})};
+  }
+  async function populateDigest(){
+    digestDone=false;
+    document.querySelector(".digest").classList.remove("ready");
+    try{var st=await api("/api/brain/stats");
+      if((st.total||0)===0){var p=document.querySelector(".dhead p");
+        if(p)p.textContent="Your brain is just getting started. Connect a source and this fills in with what matters to you.";}
+    }catch(e){}
+    // safety net: reveal with computed (real) personas if extraction takes too long
+    var fallback=setTimeout(async function(){fillCards(await computeFallback());},22000);
+    try{var data=await api("/api/brain/digest",{method:"POST"});clearTimeout(fallback);fillCards(data);}
+    catch(e){clearTimeout(fallback);fillCards(await computeFallback());}
   }
 
   // ── navigation / completion ──────────────────────────────────────────────
