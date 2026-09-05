@@ -346,6 +346,24 @@ class Brain:
                 "entities": self.graph.stats()["entities"],
                 "facts": self.graph.stats()["relations"]}
 
+    def reset(self) -> dict[str, Any]:
+        """Wipe ALL brain data — every memory, entity, relation and the remembered
+        connector sync state. Irreversible. Used by onboarding's 'start from zero'
+        so the user rebuilds their brain from scratch."""
+        before = self.store.count()
+        with self.store._lock:
+            for tbl in ("relations", "entities", "connector_state", "memories"):
+                try:
+                    self.store._conn.execute(f"DELETE FROM {tbl}")
+                except Exception:
+                    pass
+            self.store._conn.commit()
+        # invalidate the in-memory vector cache so recall reflects the wipe
+        self.store._dirty = True
+        self.store._vecs = None
+        self.store._ids = []
+        return {"reset": True, "removed_memories": before}
+
     def run_migrations(self) -> dict[str, Any]:
         """Auto-migrate derived data when the code version changed — so every
         user's brain upgrades itself on startup, with no manual re-embed/rebuild.

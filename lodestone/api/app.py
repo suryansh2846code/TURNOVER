@@ -144,6 +144,39 @@ def clear(agent_id: str):
 def brain_stats():
     return get_brain().stats()
 
+
+class ResetIn(BaseModel):
+    memories: bool = True   # wipe all memories + graph + connector state
+    secrets: bool = True    # forget saved connector tokens (Notion/GitHub/Linear…)
+    google: bool = True     # sign out of Google (so onboarding re-consents)
+
+
+@app.post("/api/brain/reset")
+def brain_reset(body: ResetIn | None = None):
+    """Start-from-zero: wipe the brain and, optionally, forget every connector
+    credential so the onboarding flow reconnects each source from scratch."""
+    body = body or ResetIn()
+    out: dict[str, Any] = {}
+    if body.memories:
+        out.update(get_brain().reset())
+    if body.secrets:
+        cleared = []
+        for name, cls in REGISTRY.items():
+            field = getattr(cls, "secret_field", None)
+            if field and field.get("key"):
+                get_settings().set_secret(field["key"], None)
+                cleared.append(name)
+        out["secrets_cleared"] = cleared
+    if body.google:
+        try:
+            from ..connectors.google_auth import disconnect
+            disconnect()
+            out["google_disconnected"] = True
+        except Exception as exc:
+            out["google_disconnected"] = False
+            out["google_error"] = str(exc)[:120]
+    return out
+
 @app.get("/api/brain/entities")
 def entities(limit: int = 30):
     return {"entities": get_brain().graph.top_entities(limit=limit)}
