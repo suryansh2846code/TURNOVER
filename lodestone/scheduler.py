@@ -95,6 +95,19 @@ class Scheduler:
         if removed:
             summary["_deduped"] = removed
 
+        # enrich the knowledge graph from everything just synced (LLM-first,
+        # incremental) — this is what makes the graph rich from ANY connector.
+        try:
+            # Free, automatic heuristic pass keeps the graph populated from every
+            # source. The richer LLM enrichment is opt-in (the "Enrich with AI"
+            # button) so we never spend model tokens without the user asking.
+            from .brain import get_brain
+            got = get_brain().enrich_until_done(fast=True, max_batches=12)
+            if got.get("entities") or got.get("facts"):
+                summary["_graph"] = {k: got[k] for k in ("entities", "facts", "remaining")}
+        except Exception:
+            log.exception("graph enrichment after sync failed")
+
         # fire routines: new-email ones if mail arrived, plus any due schedule ones
         try:
             from .routines import sweep

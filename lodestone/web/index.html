@@ -201,7 +201,12 @@
       <div class="bs-side-label">Search</div>
       <input id="brainSearch" class="ctx-input" autocomplete="off" placeholder="Search your brain…" />
       <div id="brainStats" hidden></div>
-      <div class="bs-side-label">Knowledge graph <button id="rebuildBtn" class="tiny ghost">Clean up</button></div>
+      <div class="bs-side-label">Knowledge graph
+        <span style="display:flex;gap:5px">
+          <button id="enrichBtn" class="tiny">Enrich with AI</button>
+          <button id="rebuildBtn" class="tiny ghost">Clean up</button>
+        </span></div>
+      <div id="enrichStatus" class="model-hint"></div>
       <div id="entities" class="entities"></div>
       <div class="bs-side-label">Teach the brain</div>
       <div class="addbox">

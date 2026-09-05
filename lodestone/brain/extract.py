@@ -77,6 +77,18 @@ _NOISE = {
     "dear", "best", "great", "good", "welcome", "please", "kindly", "yours",
     "figure", "table", "diagram", "example", "solution", "problem", "theorem",
     "definition", "introduction", "conclusion", "abstract", "values", "value",
+    # email CTAs / UI actions
+    "apply", "join", "view", "learn", "check", "click", "register", "download",
+    "install", "subscribe", "follow", "share", "save", "open", "close", "read",
+    "watch", "listen", "buy", "shop", "sign", "login", "logout", "signup",
+    "enroll", "explore", "discover", "browse", "continue", "confirm", "verify",
+    "activate", "upgrade", "renew", "book", "schedule", "rsvp", "attend",
+    "location", "venue", "online", "offline", "virtual", "webinar", "session",
+    # months / timezones / time
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december", "jan", "feb", "mar", "apr",
+    "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
+    "gmt", "utc", "pst", "est", "ist", "cst", "edt", "pdt",
     # email / html boilerplate
     "subject", "doctype", "arial", "helvetica", "verdana", "sans", "serif",
     "mailto", "unsubscribe", "viewport", "charset", "span", "div", "href",
@@ -244,3 +256,41 @@ def extract_llm(text: str, provider_name: str | None = None) -> dict | None:
 
 def extract(text: str, provider_name: str | None = None) -> dict:
     return extract_llm(text, provider_name) or extract_heuristic(text)
+
+
+# ── general text cleaning (works for ANY connector's raw content) ───────────
+_HTML_TAG = re.compile(r"<[^>]+>")
+_HTML_ENT = re.compile(r"&[a-z#0-9]+;", re.I)
+_URL = re.compile(r"https?://\S+|www\.\S+")
+_QUOTED = re.compile(r"^\s*>.*$", re.M)                       # quoted email replies
+_LONG_TOKEN = re.compile(r"\S{40,}")                          # base64 / hashes / ids
+_BOILER = re.compile(r"(?im)^\s*(unsubscribe|view (this|it) in|sent from my|"
+                     r"do not reply|this (e-?mail|message)|confidential|"
+                     r"©|all rights reserved|privacy policy).*$")
+_WS = re.compile(r"[ \t ]+")
+_MULTINL = re.compile(r"\n{3,}")
+
+
+def clean_for_extraction(text: str) -> str:
+    """Strip markup, quoted replies, URLs, boilerplate and encoded blobs so the
+    extractor sees human language, whatever connector the text came from."""
+    t = text or ""
+    t = _HTML_TAG.sub(" ", t)
+    t = _HTML_ENT.sub(" ", t)
+    t = _QUOTED.sub("", t)
+    t = _BOILER.sub("", t)
+    t = _URL.sub(" ", t)
+    t = _LONG_TOKEN.sub(" ", t)
+    t = _WS.sub(" ", t)
+    t = _MULTINL.sub("\n\n", t)
+    return t.strip()
+
+
+def is_graphable(text: str) -> bool:
+    """General signal test: is there enough clean human-language content here to
+    pull entities from? (Rejects tiny snippets and data/code dumps.)"""
+    t = (text or "").strip()
+    if len(t) < 40:
+        return False
+    letters = sum(c.isalpha() for c in t)
+    return letters >= 30 and letters / len(t) > 0.45

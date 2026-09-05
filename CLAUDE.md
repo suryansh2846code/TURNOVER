@@ -17,7 +17,17 @@ own model. Everything runs and stays on the user's machine.
   - `index.html` + `app.js` + `styles.css` — the workspace.
   - `onboarding.html` — the self-contained cinematic onboarding (Connect → Build →
     Your Brain), inline `<style>`/`<script>` + an encoded brain point-cloud (`DATA`).
-- `lodestone/brain/` — `brain.py` (store + graph facade), `graph.py`, extraction.
+- `lodestone/brain/` — `brain.py` (store + graph facade + **enrichment**), `graph.py`,
+  `extract.py`. **Knowledge graph = general enrichment pipeline** (works for ANY
+  connector, incl. custom): memories carry a `graphed` flag; `Brain.enrich()` drains
+  ungraphed memories → `clean_for_extraction()` (strip HTML/quotes/boilerplate/
+  encoded blobs) → `is_graphable()` gate → **LLM extraction** (rich, precise, uses
+  the caller's model) or the offline heuristic fallback, batched to cut calls.
+  Automatic background pass after each sync is **heuristic (free)**; the richer
+  **LLM pass is opt-in** ("Enrich with AI" button → `POST /api/brain/enrich`,
+  looped). `rebuild_graph()` clears the graph + re-queues everything (`POST
+  /api/brain/rebuild`). Never gate the graph on a hard-coded source allowlist —
+  it's content-based and general.
 - `lodestone/connectors/` — one class per source (`gmail`, `gcal`, `gdrive`, `notion`,
   `github`, `linear`, `files`, `notes`, apple_*, `imessage`, custom). Registered in
   `connectors/__init__.py::REGISTRY`.

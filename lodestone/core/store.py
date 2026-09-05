@@ -183,6 +183,32 @@ class MemoryStore:
     def count(self) -> int:
         return self._conn.execute("SELECT COUNT(*) AS c FROM memories").fetchone()["c"]
 
+    # ── knowledge-graph enrichment queue ─────────────────────────────────
+    def list_ungraphed(self, limit: int = 40) -> list[Memory]:
+        """Memories not yet processed by the graph enricher, newest first."""
+        rows = self._conn.execute(
+            "SELECT * FROM memories WHERE graphed=0 ORDER BY created_at DESC LIMIT ?",
+            (limit,)).fetchall()
+        return [_row_to_memory(r) for r in rows]
+
+    def count_ungraphed(self) -> int:
+        return self._conn.execute(
+            "SELECT COUNT(*) AS c FROM memories WHERE graphed=0").fetchone()["c"]
+
+    def mark_graphed(self, ids: list[str]) -> None:
+        if not ids:
+            return
+        with self._lock:
+            self._conn.executemany(
+                "UPDATE memories SET graphed=1 WHERE id=?", [(i,) for i in ids])
+            self._conn.commit()
+
+    def reset_graphed(self) -> None:
+        """Mark everything as needing (re)graphing — used before a full rebuild."""
+        with self._lock:
+            self._conn.execute("UPDATE memories SET graphed=0")
+            self._conn.commit()
+
     def stats(self) -> dict[str, Any]:
         rows = self._conn.execute(
             "SELECT source, COUNT(*) AS c FROM memories GROUP BY source"

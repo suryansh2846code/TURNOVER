@@ -363,11 +363,23 @@ def agent_welcome(agent_id: str, body: ChatIn | None = None):
         return {"reply": _fallback_welcome(agent.name)}
 
 
+@app.post("/api/brain/enrich")
+def brain_enrich(body: ChatIn | None = None):
+    """Process one batch of un-graphed memories into the knowledge graph, using
+    the caller's model (LLM-first, heuristic fallback). Call repeatedly to drain."""
+    provider = body.provider if body else None
+    return get_brain().enrich(limit=40, provider_name=provider)
+
+
 @app.post("/api/brain/rebuild")
 def brain_rebuild():
-    """Re-extract the knowledge graph from prose memories with the current
-    (stricter) extractor — cleans out junk entities/facts. Memories are untouched."""
-    return get_brain().rebuild_graph()
+    """Wipe the graph and re-queue every memory, then refill it in the background
+    with the free offline extractor (cleans out junk, no model tokens)."""
+    import threading
+    out = get_brain().rebuild_graph()
+    threading.Thread(target=lambda: get_brain().enrich_until_done(fast=True),
+                     daemon=True).start()
+    return out
 
 
 @app.get("/api/brain/entities")

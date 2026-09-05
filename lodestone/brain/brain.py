@@ -38,6 +38,7 @@ class Brain:
         added_mem = 0
         entities = 0
         facts = 0
+        graphed_ids: list[str] = []
         for i, chunk in enumerate(chunk_text(text)):
             mem = self.store.add(
                 text=chunk, source=source, kind=kind,
@@ -49,14 +50,89 @@ class Brain:
                 continue
             added_mem += 1
             if build_graph:
-                e, f = self._graph_from(chunk, mem.id, fast=fast)
+                # immediate heuristic graph for curated/interactive content; mark
+                # done so the background LLM enricher doesn't double-count it.
+                e, f = self._graph_from(extractor.clean_for_extraction(chunk), mem.id, fast=fast)
                 entities += e
                 facts += f
+                graphed_ids.append(mem.id)
+        if graphed_ids:
+            self.store.mark_graphed(graphed_ids)
         return {"memories": added_mem, "entities": entities, "facts": facts}
+
+    # ── background enrichment: turn raw memories into a rich graph ───────────
+    def enrich(self, limit: int = 40, provider_name: str | None = None,
+               fast: bool = False) -> dict[str, Any]:
+        """Process up to `limit` un-graphed memories into the knowledge graph.
+        Uses the connected LLM when available (precise, works for ANY source —
+        Gmail, Drive, Notion, custom apps…), batching short memories into one call
+        to keep it cheap; falls back to the offline heuristic. Incremental: call
+        repeatedly (the scheduler does) until `remaining` is 0."""
+        mems = self.store.list_ungraphed(limit=limit)
+        if not mems:
+            return {"processed": 0, "entities": 0, "facts": 0, "remaining": 0}
+        use_llm = False
+        if not fast:
+            try:
+                from ..models.registry import get_provider
+                from ..config import get_settings
+                p = get_provider(provider_name or get_settings().model_provider)
+                use_llm = p.name != "mock" and p.is_ready()[0]
+            except Exception:
+                use_llm = False
+        ents = facts = 0
+        done: list[str] = []
+
+        if use_llm:
+            batch: list[str] = []
+            batch_ids: list[str] = []
+            blen = 0
+
+            def flush():
+                nonlocal ents, facts, blen
+                if not batch:
+                    return
+                combined = "\n\n---\n\n".join(batch)
+                data = extractor.extract_llm(combined, provider_name) \
+                    or extractor.extract_heuristic(combined)
+                e, f = self._apply_graph(data, batch_ids[0])
+                ents += e
+                facts += f
+                done.extend(batch_ids)
+                batch.clear()
+                batch_ids.clear()
+                blen = 0
+
+            for m in mems:
+                ct = extractor.clean_for_extraction(m.text)
+                if not extractor.is_graphable(ct):
+                    done.append(m.id)          # nothing to graph — mark handled
+                    continue
+                if batch and blen + len(ct) > 3500:
+                    flush()
+                batch.append(ct)
+                batch_ids.append(m.id)
+                blen += len(ct)
+            flush()
+        else:
+            for m in mems:
+                ct = extractor.clean_for_extraction(m.text)
+                if extractor.is_graphable(ct):
+                    e, f = self._graph_from(ct, m.id, fast=True)
+                    ents += e
+                    facts += f
+                done.append(m.id)
+
+        self.store.mark_graphed(done)
+        return {"processed": len(done), "entities": ents, "facts": facts,
+                "remaining": self.store.count_ungraphed()}
 
     def _graph_from(self, text: str, mem_id: str, fast: bool = False) -> tuple[int, int]:
         data = (extractor.extract_heuristic(text) if fast
                 else extractor.extract(text))
+        return self._apply_graph(data, mem_id)
+
+    def _apply_graph(self, data: dict, mem_id: str) -> tuple[int, int]:
         name_to_id: dict[str, str] = {}
         for ent in data.get("entities", []):
             eid = self.graph.upsert_entity(
@@ -325,30 +401,31 @@ class Brain:
         return mem.kind in {"note", "fact"}
 
     def rebuild_graph(self) -> dict[str, Any]:
-        """Wipe the knowledge graph and re-extract it from prose memories only,
-        applying the current (stricter) extractor. Fixes graphs built by older,
-        looser extraction; leaves searchable memories untouched."""
+        """Wipe the knowledge graph and queue every memory for re-extraction with
+        the current extractor. The enricher (LLM-first) refills it — call enrich()
+        repeatedly, or let the scheduler do it in the background. Memories untouched."""
         with self.store._lock:
             self.store._conn.execute("DELETE FROM relations")
             self.store._conn.execute("DELETE FROM entities")
             self.store._conn.commit()
-        entities = facts = scanned = 0
-        offset = 0
-        while True:
-            batch = self.store.list(limit=500, offset=offset)
-            if not batch:
+        self.store.reset_graphed()
+        return {"reset": True, "remaining": self.store.count_ungraphed(),
+                "entities": 0, "facts": 0}
+
+    def enrich_until_done(self, provider_name: str | None = None,
+                          max_batches: int = 200, fast: bool = False) -> dict[str, Any]:
+        """Drain the enrichment queue (bounded). Safe to run in a background thread.
+        `fast=True` uses the free offline heuristic (auto/background); the default
+        uses the connected LLM for a rich, precise graph (on-demand)."""
+        total = {"processed": 0, "entities": 0, "facts": 0, "remaining": 0}
+        for _ in range(max_batches):
+            r = self.enrich(limit=40, provider_name=provider_name, fast=fast)
+            for k in ("processed", "entities", "facts"):
+                total[k] += r[k]
+            total["remaining"] = r["remaining"]
+            if r["processed"] == 0 or r["remaining"] == 0:
                 break
-            for mem in batch:
-                if not self._is_prose(mem):
-                    continue
-                e, f = self._graph_from(mem.text, mem.id, fast=True)
-                entities += e
-                facts += f
-                scanned += 1
-            offset += len(batch)
-        return {"scanned_prose_memories": scanned,
-                "entities": self.graph.stats()["entities"],
-                "facts": self.graph.stats()["relations"]}
+        return total
 
     def reset(self) -> dict[str, Any]:
         """Wipe ALL brain data — every memory, entity, relation and the remembered
@@ -385,9 +462,11 @@ class Brain:
             done["reembedded"] = store.reembed_all()
             store.set_meta("embedder_sig", cur_sig)
 
-        # 2) knowledge graph: rebuild if the extractor version changed
+        # 2) knowledge graph: rebuild if the extractor version changed, then do a
+        # free heuristic pass so the graph is populated (LLM enrichment is opt-in).
         if store.get_meta("extractor_version") != extractor.EXTRACTOR_VERSION:
-            g = self.rebuild_graph()
+            self.rebuild_graph()
+            g = self.enrich_until_done(fast=True, max_batches=1000)
             done["graph_rebuilt"] = g.get("entities")
             store.set_meta("extractor_version", extractor.EXTRACTOR_VERSION)
 

@@ -1168,12 +1168,34 @@ function closeBrainScreen() {
 }
 $("#bsClose").onclick = closeBrainScreen;
 { const rb = $("#rebuildBtn"); if (rb) rb.onclick = async () => {
+  if (!confirm("Rebuild the knowledge graph from scratch? (Memories are kept.)")) return;
   rb.disabled = true; rb.textContent = "Cleaning…";
-  try { const r = await api("/api/brain/rebuild", { method: "POST" });
-    toast(`Graph rebuilt · ${r.entities} entities · ${r.facts} facts`);
+  try { await api("/api/brain/rebuild", { method: "POST" });
+    toast("Rebuilding graph in the background…");
     loadBrain(); _bsRefresh();
   } catch (e) { toast(String(e)); }
   finally { rb.disabled = false; rb.textContent = "Clean up"; }
+}; }
+
+// Enrich with AI — loop the LLM enricher (uses the connected model) until the
+// queue drains, showing live progress. General across any connector's content.
+let _enriching = false;
+{ const eb = $("#enrichBtn"); if (eb) eb.onclick = async () => {
+  if (_enriching) { _enriching = false; return; }   // click again to stop
+  _enriching = true; eb.textContent = "Stop";
+  const st = $("#enrichStatus");
+  try {
+    while (_enriching) {
+      const r = await api("/api/brain/enrich", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "enrich", provider: $("#provider").value,
+          model: $("#modelName").value.trim() || null }) });
+      if (st) st.textContent = `+${r.entities} entities, +${r.facts} facts · ${r.remaining.toLocaleString()} memories left…`;
+      loadBrain(); _bsRefresh();
+      if (r.remaining === 0 || r.processed === 0) { if (st) st.textContent = "Graph is fully enriched."; break; }
+    }
+  } catch (e) { if (st) st.textContent = String(e); }
+  finally { _enriching = false; eb.textContent = "Enrich with AI"; }
 }; }
 $("#bsSync").onclick = async () => {
   try { const r = await api("/api/sync/now", { method: "POST" });

@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS memories (
     embed_dim   INTEGER,
     embed_model TEXT,
     content_hash TEXT,
-    event_date  TEXT          -- real date of the item (email/event), ISO YYYY-MM-DD
+    event_date  TEXT,         -- real date of the item (email/event), ISO YYYY-MM-DD
+    graphed     INTEGER NOT NULL DEFAULT 0   -- processed by the graph enricher yet?
 );
 
 CREATE INDEX IF NOT EXISTS idx_memories_source ON memories(source);
@@ -88,6 +89,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(memories)")}
     if "event_date" not in cols:
         conn.execute("ALTER TABLE memories ADD COLUMN event_date TEXT")
+    # graphed: 0 = not yet processed by the knowledge-graph enricher, 1 = done.
+    if "graphed" not in cols:
+        conn.execute("ALTER TABLE memories ADD COLUMN graphed INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_mem_event_date "
                  "ON memories(event_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_mem_graphed ON memories(graphed)")
     conn.commit()
