@@ -927,23 +927,13 @@ $("#brainImportFile").onchange = async (e) => {
 };
 
 async function maybeOnboard() {
-  // Never onboarded in this browser → the full cinematic Connect → Build → Your
-  // Brain flow.
+  // Only a genuine first run (never onboarded in this browser) goes to the
+  // onboarding flow. Once onboarded, reloading always stays in the workspace —
+  // even if the brain is still empty/building. (A reset clears this flag, so the
+  // reset flow still sends you back through onboarding.)
   if (!localStorage.getItem("lodestone_onboarded")) {
     window.location.href = "/onboarding";
     return true;
-  }
-  // Brain was wiped / is empty and nothing is syncing → treat as a fresh start
-  // and re-run onboarding, once per session (so skipping doesn't loop).
-  if (!sessionStorage.getItem("ls_saw_onboarding")) {
-    try {
-      const [s, sync] = await Promise.all([api("/api/brain/stats"), api("/api/sync/status")]);
-      if ((s.total || 0) === 0 && !sync.syncing) {
-        sessionStorage.setItem("ls_saw_onboarding", "1");
-        window.location.href = "/onboarding";
-        return true;
-      }
-    } catch (_) {}
   }
   return false;
 }
@@ -1137,12 +1127,14 @@ window.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#drawer
   });
 }
 
-// Cmd/Ctrl+R → back to the first screen (the hero). The desktop app runs in a
-// webview where the browser reload shortcut isn't wired, so we bind it ourselves.
+// Cmd/Ctrl+R → refresh the workspace in place (picks up new code — assets are
+// served no-cache). The desktop app runs in a webview where the browser's reload
+// shortcut isn't wired, so we bind it ourselves. Note: it reloads "/", NOT the
+// onboarding — a reload here should never restart onboarding.
 window.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && (e.key === "r" || e.key === "R" || e.code === "KeyR")) {
     e.preventDefault();
-    window.location.assign("/onboarding");
+    window.location.reload();
   }
 }, true);
 
