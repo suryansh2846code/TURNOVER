@@ -46,6 +46,13 @@ def sync_status():
             "syncing": s.syncing, "last_run": s.last_run, "last_result": s.last_result}
 
 
+@app.post("/api/sync/cancel")
+def sync_cancel():
+    """Stop an in-flight sync. Cooperative — the current source finishes but no
+    further sources are synced, and `syncing` clears shortly after."""
+    return {"cancelled": get_scheduler().cancel_sync()}
+
+
 @app.post("/api/sync/now")
 def sync_now():
     import threading

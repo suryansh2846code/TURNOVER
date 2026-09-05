@@ -467,19 +467,19 @@
   function backToConnect(){if(buildIv){clearInterval(buildIv);buildIv=null;}stage.classList.remove("building");
     document.querySelector('.step[id="stepBuild"]').classList.remove("act");document.querySelectorAll(".step")[0].classList.add("act");}
 
-  async function startBuild(){
-    if(selCount()<1)return;
-    stage.classList.add("building");
-    document.querySelector('.step[id="stepBuild"]').classList.add("act");document.querySelectorAll(".step")[0].classList.remove("act");
-    document.getElementById("stSrc").textContent=selCount();
-    // every chosen source is already connected — kick a real sync of them all
-    try{await api("/api/sync/now",{method:"POST"});}catch(e){}
+  function enterBuildUI(){
+    stage.classList.remove("brainready");stage.classList.add("on","building");connectView=true;
+    document.querySelector('.step[id="stepBuild"]').classList.add("act");
+    document.querySelectorAll(".step")[0].classList.remove("act");document.querySelectorAll(".step")[2].classList.remove("act");}
+
+  function runBuildProgress(startPct){
     var fill=document.getElementById("bFill"),pct=document.getElementById("bPct"),det=document.getElementById("bDet"),
-        itemsEl=document.getElementById("stItems"),entEl=document.getElementById("stEnt"),prog=0,shown=-1;
+        itemsEl=document.getElementById("stItems"),entEl=document.getElementById("stEnt"),prog=startPct||0,shown=-1;
     // A first Gmail/Drive sync can ingest thousands of items over many minutes, so
     // we DON'T block on the whole sync finishing. We move on once the brain has
     // taken shape — sync keeps enriching it in the background, live in the app.
     var t0=Date.now(),MAXWAIT=20000,SETTLE=18000,lastTotal=0,stable=0,finishing=false;
+    if(buildIv){clearInterval(buildIv);}
     buildIv=setInterval(async function(){
       var syncing=false,total=0,ents=0;
       try{syncing=(await api("/api/sync/status")).syncing;}catch(e){}
@@ -501,8 +501,18 @@
           populateDigest();},900);}
     },700);
   }
+
+  async function startBuild(){
+    if(selCount()<1)return;
+    enterBuildUI();
+    document.getElementById("stSrc").textContent=selCount();
+    // every chosen source is already connected — kick a real sync of them all
+    try{await api("/api/sync/now",{method:"POST"});}catch(e){}
+    runBuildProgress(0);
+  }
   cont.addEventListener("click",startBuild);
-  document.getElementById("cancel").addEventListener("click",backToConnect);
+  document.getElementById("cancel").addEventListener("click",function(){
+    api("/api/sync/cancel",{method:"POST"}).catch(function(){});backToConnect();});
 
   // ── digest: fill the cards from the real brain ───────────────────────────
   var CAT={gmail:"comm",apple_mail:"comm",imessage:"comm",slack:"comm",
@@ -530,6 +540,19 @@
   document.getElementById("toBrain").addEventListener("click",function(){this.textContent="Entering…";setTimeout(enterApp,400);});
   var dedit=document.querySelector(".dedit");if(dedit)dedit.addEventListener("click",enterApp);
   var skipTop=document.getElementById("skipTop");if(skipTop)skipTop.addEventListener("click",enterApp);
+
+  // ── resume on reload (Cmd+R): if a sync is mid-flight, drop back into the
+  //     live Build screen instead of restarting from the hero. ──────────────
+  (async function resume(){
+    if(localStorage.getItem("lodestone_onboarded"))return;   // returning user → app handles it
+    var syncing=false;try{syncing=(await api("/api/sync/status")).syncing;}catch(e){return;}
+    if(!syncing)return;
+    didReset=true;                 // a build is already underway — don't wipe it
+    await refreshConnectors();
+    document.getElementById("stSrc").textContent=CONNECTORS.filter(function(c){return c.ready;}).length;
+    enterBuildUI();
+    runBuildProgress(0.9);         // pick up near the tail of the bar
+  })();
 })();
 </script>
 

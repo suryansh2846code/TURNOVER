@@ -27,20 +27,32 @@ class Scheduler:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._sync_lock = threading.Lock()
+        self._cancel = threading.Event()
         self.last_run: str | None = None
         self.last_result: dict[str, Any] = {}
         self.running = False
         self.syncing = False
+
+    def cancel_sync(self) -> bool:
+        """Ask an in-flight sync to stop. Cooperative: the sweep checks between
+        sources, so the current source finishes but no further ones start.
+        Returns True if a sync was actually running."""
+        if self.syncing:
+            self._cancel.set()
+            return True
+        return False
 
     # ── one sweep over all ready connectors ──────────────────────────────
     def sync_all(self, interactive: bool = False) -> dict[str, Any]:
         if not self._sync_lock.acquire(blocking=False):
             return {"skipped": "a sync is already running"}
         try:
+            self._cancel.clear()
             self.syncing = True
             return self._sync_all(interactive)
         finally:
             self.syncing = False
+            self._cancel.clear()
             self._sync_lock.release()
 
     def _sync_all(self, interactive: bool) -> dict[str, Any]:
@@ -50,6 +62,9 @@ class Scheduler:
 
         # app-based connectors
         for name in _AUTO:
+            if self._cancel.is_set():
+                summary["_cancelled"] = True
+                break
             cls = REGISTRY.get(name)
             if not cls:
                 continue
@@ -65,6 +80,9 @@ class Scheduler:
 
         # local files: re-index remembered folders
         for path in FilesConnector.synced_paths(store):
+            if self._cancel.is_set():
+                summary["_cancelled"] = True
+                break
             try:
                 res = get_connector("files").sync(path=path)
                 key = f"files:{path.split('/')[-1]}"
