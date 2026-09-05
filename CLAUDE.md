@@ -8,6 +8,11 @@ own model. Everything runs and stays on the user's machine.
 - `lodestone serve` → FastAPI on a browser tab.
 - `lodestone app` → native desktop window (**pywebview / WKWebView**), server on a
   dynamic loopback port. This is the primary way users run it.
+- **Dev / live-editing:** `lodestone app --dev` (or `lodestone serve --dev`) runs the
+  backend with **uvicorn --reload**, so Python edits hot-reload. Cmd+R in the window
+  only reloads the FRONTEND (assets are no-cache) — it can NOT reload Python, so
+  without `--dev` a new/changed endpoint 404s until you relaunch. Frontend-only
+  edits (html/js/css) always show on Cmd+R.
 - Tests: `pytest`. Python venv at `.venv` (use `./.venv/bin/python`).
 
 ## Layout

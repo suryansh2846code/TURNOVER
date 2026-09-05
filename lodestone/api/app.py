@@ -726,9 +726,16 @@ def onboarding():
 app.mount("/static", StaticFiles(directory=str(WEB)), name="static")
 
 
-def run() -> None:
+def run(reload: bool = False) -> None:
     import uvicorn
     s = get_settings()
     print(f"\n  ◆ Lodestone workspace → http://{s.host}:{s.port}")
-    print(f"    model: {s.model_provider}   brain: {s.home}\n")
-    uvicorn.run(app, host=s.host, port=s.port, log_level="info")
+    print(f"    model: {s.model_provider}   brain: {s.home}"
+          + ("   (dev: backend auto-reloads)" if reload else "") + "\n")
+    if reload:
+        # watch the package so edits to any .py hot-reload the server
+        uvicorn.run("lodestone.api.app:app", host=s.host, port=s.port, reload=True,
+                    reload_dirs=[str(Path(__file__).resolve().parent.parent)],
+                    log_level="info")
+    else:
+        uvicorn.run(app, host=s.host, port=s.port, log_level="info")

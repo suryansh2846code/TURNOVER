@@ -10,17 +10,17 @@ console = Console()
 
 
 @app.command()
-def serve():
+def serve(dev: bool = typer.Option(False, "--dev", help="auto-reload the backend when code changes")):
     """Start the workspace server (open in a browser)."""
     from .api.app import run
-    run()
+    run(reload=dev)
 
 
 @app.command("app")
-def desktop_app():
+def desktop_app(dev: bool = typer.Option(False, "--dev", help="auto-reload the backend when code changes")):
     """Launch Lodestone as a native desktop window."""
     from .desktop import run_app
-    run_app()
+    run_app(dev=dev)
 
 
 @app.command()

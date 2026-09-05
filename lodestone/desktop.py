@@ -29,8 +29,7 @@ def _free_port(host: str) -> int:
         return s.getsockname()[1]
 
 
-def run_app() -> None:
-    import uvicorn
+def run_app(dev: bool = False) -> None:
     try:
         import webview
     except ImportError:
@@ -39,28 +38,47 @@ def run_app() -> None:
             "    uv pip install -e '.[desktop]'   (or: pip install pywebview)\n"
             "Or run the browser version instead:  lodestone serve")
 
-    from .api.app import app as fastapi_app
     from .config import get_settings
 
     s = get_settings()
     host = "127.0.0.1"
     port = _free_port(host)      # dynamic free port — no fixed-8787 conflicts
 
-    config = uvicorn.Config(fastapi_app, host=host, port=port, log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
+    server = None
+    proc = None
+    if dev:
+        # Run the backend as a uvicorn subprocess with --reload so Python edits
+        # hot-reload — then Cmd+R in the window picks up frontend + backend both.
+        import subprocess
+        import sys
+        from pathlib import Path
+        pkg = str(Path(__file__).resolve().parent)
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "lodestone.api.app:app",
+             "--host", host, "--port", str(port),
+             "--reload", "--reload-dir", pkg, "--log-level", "warning"])
+    else:
+        import uvicorn
+        from .api.app import app as fastapi_app
+        config = uvicorn.Config(fastapi_app, host=host, port=port, log_level="warning")
+        server = uvicorn.Server(config)
+        threading.Thread(target=server.run, daemon=True).start()
 
-    if not _wait_for_port(host, port):
+    if not _wait_for_port(host, port, timeout=30.0 if dev else 15.0):
         print("Lodestone server failed to start.")
+        if proc:
+            proc.terminate()
         return
 
     webview.create_window(
-        "Lodestone",
+        "Lodestone" + (" (dev)" if dev else ""),
         f"http://{host}:{port}",
         width=1280, height=860, min_size=(920, 620),
     )
     try:
         webview.start()          # blocks until the window is closed
     finally:
-        server.should_exit = True
+        if server is not None:
+            server.should_exit = True
+        if proc is not None:
+            proc.terminate()
