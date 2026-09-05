@@ -120,11 +120,14 @@ class OpenAICompatProvider(LLMProvider):
                 id=tc.get("id", str(uuid.uuid4())),
                 name=tc["function"]["name"], arguments=args,
             ))
+        usage = data.get("usage") or {}
         return ChatResult(
             text=choice.get("content") or "",
             tool_calls=calls,
             raw=data,
             finish_reason=data["choices"][0].get("finish_reason", "stop"),
+            input_tokens=int(usage.get("prompt_tokens") or 0),
+            output_tokens=int(usage.get("completion_tokens") or 0),
         )
 
 

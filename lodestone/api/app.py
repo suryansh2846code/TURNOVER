@@ -365,10 +365,11 @@ def agent_welcome(agent_id: str, body: ChatIn | None = None):
 
 @app.post("/api/brain/enrich")
 def brain_enrich(body: ChatIn | None = None):
-    """Process one batch of un-graphed memories into the knowledge graph, using
-    the caller's model (LLM-first, heuristic fallback). Call repeatedly to drain."""
+    """Process one small batch of un-graphed memories into the knowledge graph,
+    using the caller's model (LLM-first). Small batch = responsive progress + a
+    quick Stop. Returns token usage. Call repeatedly to drain."""
     provider = body.provider if body else None
-    return get_brain().enrich(limit=40, provider_name=provider)
+    return get_brain().enrich(limit=8, provider_name=provider)
 
 
 @app.post("/api/brain/rebuild")

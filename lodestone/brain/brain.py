@@ -70,7 +70,9 @@ class Brain:
         repeatedly (the scheduler does) until `remaining` is 0."""
         mems = self.store.list_ungraphed(limit=limit)
         if not mems:
-            return {"processed": 0, "entities": 0, "facts": 0, "remaining": 0}
+            return {"processed": 0, "entities": 0, "facts": 0, "remaining": 0,
+                    "tokens_in": 0, "tokens_out": 0, "tokens": 0,
+                    "tokens_estimated": False, "provider": None}
         use_llm = False
         if not fast:
             try:
@@ -81,6 +83,9 @@ class Brain:
             except Exception:
                 use_llm = False
         ents = facts = 0
+        tok_in = tok_out = 0
+        est = False
+        prov = None
         done: list[str] = []
 
         if use_llm:
@@ -89,12 +94,16 @@ class Brain:
             blen = 0
 
             def flush():
-                nonlocal ents, facts, blen
+                nonlocal ents, facts, blen, tok_in, tok_out, est, prov
                 if not batch:
                     return
                 combined = "\n\n---\n\n".join(batch)
                 data = extractor.extract_llm(combined, provider_name) \
                     or extractor.extract_heuristic(combined)
+                u = data.get("_usage")
+                if u:
+                    tok_in += u["in"]; tok_out += u["out"]
+                    est = est or u["est"]; prov = u["provider"]
                 e, f = self._apply_graph(data, batch_ids[0])
                 ents += e
                 facts += f
@@ -125,7 +134,9 @@ class Brain:
 
         self.store.mark_graphed(done)
         return {"processed": len(done), "entities": ents, "facts": facts,
-                "remaining": self.store.count_ungraphed()}
+                "remaining": self.store.count_ungraphed(),
+                "tokens_in": tok_in, "tokens_out": tok_out,
+                "tokens": tok_in + tok_out, "tokens_estimated": est, "provider": prov}
 
     def _graph_from(self, text: str, mem_id: str, fast: bool = False) -> tuple[int, int]:
         data = (extractor.extract_heuristic(text) if fast
@@ -417,11 +428,12 @@ class Brain:
         """Drain the enrichment queue (bounded). Safe to run in a background thread.
         `fast=True` uses the free offline heuristic (auto/background); the default
         uses the connected LLM for a rich, precise graph (on-demand)."""
-        total = {"processed": 0, "entities": 0, "facts": 0, "remaining": 0}
+        total = {"processed": 0, "entities": 0, "facts": 0, "remaining": 0,
+                 "tokens_in": 0, "tokens_out": 0, "tokens": 0}
         for _ in range(max_batches):
             r = self.enrich(limit=40, provider_name=provider_name, fast=fast)
-            for k in ("processed", "entities", "facts"):
-                total[k] += r[k]
+            for k in ("processed", "entities", "facts", "tokens_in", "tokens_out", "tokens"):
+                total[k] += r.get(k, 0)
             total["remaining"] = r["remaining"]
             if r["processed"] == 0 or r["remaining"] == 0:
                 break

@@ -90,9 +90,12 @@ class AnthropicProvider(LLMProvider):
                     name=block["name"],
                     arguments=block.get("input", {}),
                 ))
+        usage = data.get("usage") or {}
         return ChatResult(
             text="".join(text_parts),
             tool_calls=calls,
             raw=data,
             finish_reason=data.get("stop_reason", "stop"),
+            input_tokens=int(usage.get("input_tokens") or 0),
+            output_tokens=int(usage.get("output_tokens") or 0),
         )

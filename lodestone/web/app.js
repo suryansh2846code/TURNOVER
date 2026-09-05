@@ -1180,37 +1180,48 @@ $("#bsClose").onclick = closeBrainScreen;
 // Enrich with AI — loop the LLM enricher (uses the connected model) until the
 // queue drains, showing live progress. General across any connector's content.
 let _enriching = false;
+function fmtTokens(n) { return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n); }
 { const eb = $("#enrichBtn"); if (eb) eb.onclick = async () => {
   if (_enriching) {                       // second click → stop after this batch
     _enriching = false; eb.textContent = "Stopping…"; return;
   }
+  // start: show the running state immediately (before the first slow batch)
   _enriching = true; eb.classList.add("running");
+  eb.style.setProperty("--p", "4%"); eb.textContent = "Starting…";
   const st = $("#enrichStatus");
-  let total = 0, gainEnt = 0, gainFact = 0;
-  const setP = (pct) => eb.style.setProperty("--p", pct + "%");
+  const LOCAL = { ollama: 1, "claude-code": 1, subscription: 1, mock: 1 };
+  let total = 0, gEnt = 0, gFact = 0, tin = 0, tout = 0, est = false, prov = "";
+  const setP = (p) => eb.style.setProperty("--p", p + "%");
+  const summary = () => {
+    const tok = tin + tout;
+    const cost = (prov && LOCAL[prov]) ? " · local · free"
+      : (tok ? ` · ${fmtTokens(tin)} in / ${fmtTokens(tout)} out${est ? " (est)" : ""}` : "");
+    return `+${gEnt} entities · +${gFact} facts${cost}`;
+  };
   try {
     while (_enriching) {
-      eb.textContent = "Stop";
-      const r = await api("/api/brain/enrich", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "enrich", provider: $("#provider").value,
-          model: $("#modelName").value.trim() || null }) });
-      if (total === 0) total = r.remaining + r.processed;   // approx work at start
-      gainEnt += r.entities; gainFact += r.facts;
+      let r;
+      try {
+        r = await api("/api/brain/enrich", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: "enrich", provider: $("#provider").value,
+            model: $("#modelName").value.trim() || null }) });
+      } catch (e) { if (st) st.textContent = "△ " + e + " — check your model in Model."; break; }
+      if (total === 0) total = Math.max(1, r.remaining + r.processed);
+      gEnt += r.entities; gFact += r.facts; tin += r.tokens_in || 0; tout += r.tokens_out || 0;
+      est = est || r.tokens_estimated; prov = r.provider || prov;
       const done = Math.max(0, total - r.remaining);
-      const pct = total ? Math.min(100, Math.round(done / total * 100)) : 0;
+      const pct = Math.min(100, Math.round(done / total * 100));
       setP(pct);
       if (_enriching) eb.textContent = `Stop · ${pct}%`;
-      if (st) st.textContent = `+${gainEnt} entities · +${gainFact} facts · ${done.toLocaleString()}/${total.toLocaleString()} memories`;
+      if (st) st.textContent = `${pct}% · ${summary()} · ${r.remaining.toLocaleString()} left`;
       loadBrain(); _bsRefresh();
       if (r.remaining === 0 || r.processed === 0) {
-        if (st) st.textContent = `Done · +${gainEnt} entities · +${gainFact} facts`;
-        break;
+        setP(100); if (st) st.textContent = `Done · ${summary()}`; break;
       }
     }
-    if (!_enriching && st) st.textContent = `Stopped · +${gainEnt} entities · +${gainFact} facts`;
-  } catch (e) { if (st) st.textContent = String(e); }
-  finally { _enriching = false; eb.classList.remove("running"); setP(0); eb.textContent = "Enrich with AI"; }
+    if (!_enriching && st) st.textContent = `Stopped · ${summary()}`;
+  } finally { _enriching = false; eb.classList.remove("running"); setP(0); eb.textContent = "Enrich with AI"; }
 }; }
 $("#bsSync").onclick = async () => {
   try { const r = await api("/api/sync/now", { method: "POST" });

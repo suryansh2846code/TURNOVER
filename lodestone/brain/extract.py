@@ -233,12 +233,21 @@ def extract_llm(text: str, provider_name: str | None = None) -> dict | None:
     ready, _ = provider.is_ready()
     if not ready:
         return None
+    prompt = text[:4000]
     try:
         res = provider.chat(
             [Message(role="system", content=_SYS),
-             Message(role="user", content=text[:4000])],
+             Message(role="user", content=prompt)],
             temperature=0, max_tokens=800,
         )
+        # token usage: use the provider's numbers when reported, else estimate
+        # from length (~4 chars/token) and flag it as approximate.
+        tin, tout = res.input_tokens, res.output_tokens
+        est = tin == 0 and tout == 0
+        if est:
+            tin = (len(_SYS) + len(prompt)) // 4
+            tout = len(res.text) // 4
+        usage = {"in": int(tin), "out": int(tout), "est": est, "provider": provider.name}
         raw = res.text.strip()
         raw = raw[raw.find("{"): raw.rfind("}") + 1]
         data = json.loads(raw)
@@ -248,6 +257,7 @@ def extract_llm(text: str, provider_name: str | None = None) -> dict | None:
                 e for e in data["entities"]
                 if e.get("name") and is_good_entity(e["name"])
             ]
+            data["_usage"] = usage
             return data
     except Exception:
         return None

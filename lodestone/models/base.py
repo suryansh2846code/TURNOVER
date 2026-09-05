@@ -68,6 +68,8 @@ class ChatResult:
     tool_calls: list[ToolCall] = field(default_factory=list)
     raw: dict[str, Any] | None = None
     finish_reason: str = "stop"
+    input_tokens: int = 0        # prompt tokens (0 if the provider doesn't report)
+    output_tokens: int = 0       # completion tokens
 
     @property
     def wants_tools(self) -> bool:
