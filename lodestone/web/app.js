@@ -1102,14 +1102,27 @@ $("#bsSync").onclick = async () => {
 };
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#brainScreen").hidden) closeBrainScreen(); });
 
-// sidebar nav + context tabs + user chip
-document.querySelectorAll(".ctx-tab").forEach((t) => t.onclick = () => switchTab(t.dataset.tab));
+// ── slide-over drawers opened from the left nav ─────────────────────────────
+const DRAWER_TITLES = { brain: "Brain", sources: "Sources", tasks: "Tasks", model: "AI model" };
+function openDrawer(name) {
+  const bg = $("#drawerBg"); if (!bg) return;
+  $("#drawerTitle").textContent = DRAWER_TITLES[name] || name;
+  document.querySelectorAll(".dpanel").forEach((p) => p.hidden = p.dataset.d !== name);
+  bg.hidden = false;
+  if (name === "brain" || name === "sources") loadBrain();
+  if (name === "tasks") { loadTasks(); loadReminders(); loadRoutines(); }
+  if (name === "model") loadProviders();
+}
+function closeDrawer() { const bg = $("#drawerBg"); if (bg) bg.hidden = true; }
 document.querySelectorAll(".snav").forEach((b) => b.onclick = () => {
-  if (b.dataset.nav === "brain") return openBrainScreen();
-  switchTab("tools");
-  if (b.id === "helpBtn") toast("Connect sources and choose your model here.");
+  if (b.id === "helpBtn") return openDrawer("sources");
+  openDrawer(b.dataset.nav);
 });
+$("#drawerClose").onclick = closeDrawer;
+$("#drawerBg").onclick = (e) => { if (e.target.id === "drawerBg") closeDrawer(); };
+{ const v = $("#viewBrainBtn"); if (v) v.onclick = () => { closeDrawer(); openBrainScreen(); }; }
 { const nr = $("#newAgentRow"); if (nr) nr.onclick = () => $("#newAgentBtn").click(); }
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#drawerBg") && !$("#drawerBg").hidden) closeDrawer(); });
 
 // composer slash-style hint chips
 {

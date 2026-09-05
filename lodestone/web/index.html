@@ -21,6 +21,7 @@
         <button class="snav" data-nav="brain"><span class="snav-ic">◇</span> Brain</button>
         <button class="snav" data-nav="sources"><span class="snav-ic">▤</span> Sources</button>
         <button class="snav" data-nav="tasks"><span class="snav-ic">☑</span> Tasks</button>
+        <button class="snav" data-nav="model"><span class="snav-ic">◐</span> Model</button>
         <button class="snav" id="helpBtn"><span class="snav-ic">?</span> Getting started</button>
       </div>
 
@@ -58,80 +59,75 @@
       <div class="cmp-hints" id="cmpHints"></div>
     </main>
 
-    <!-- ── Right: context / tools ───────────────────────────────────── -->
-    <aside class="ctx">
-      <div class="ctx-tabs">
-        <button class="ctx-tab active" data-tab="context">Context</button>
-        <button class="ctx-tab" data-tab="tools">Tools</button>
-      </div>
+  </div>
 
-      <!-- Context tab -->
-      <div class="ctx-pane" data-pane="context">
-        <div class="ctx-agent">
-          <span class="orb orb-lg" id="ctxOrb"></span>
-          <div class="ctx-agent-meta">
-            <div class="ctx-agent-nm" id="ctxAgentName">—</div>
-            <div class="ctx-agent-role" id="ctxAgentRole"></div>
+  <!-- ── slide-over drawers (opened from the left nav) ─────────────────── -->
+  <div id="drawerBg" class="drawer-bg" hidden>
+    <aside class="drawer" id="drawer">
+      <div class="drawer-head"><b id="drawerTitle">Brain</b><button id="drawerClose" class="ghost tiny">✕</button></div>
+      <div class="drawer-body">
+
+        <!-- Brain -->
+        <div class="dpanel" data-d="brain">
+          <input id="brainSearch" class="ctx-input" autocomplete="off" placeholder="🔍 Search your brain…" />
+          <div id="brainStats" class="brain-stats"></div>
+          <button id="viewBrainBtn" class="tiny ghost" style="width:100%;margin-top:2px">◇ Open brain visualization →</button>
+          <div class="ctx-label">Knowledge graph</div>
+          <div id="entities" class="entities"></div>
+          <div class="ctx-label">Teach the brain</div>
+          <div class="addbox">
+            <textarea id="ingestText" rows="2" placeholder="Tell it a fact…"></textarea>
+            <button id="ingestBtn" class="tiny">Add to brain</button>
           </div>
-          <p class="ctx-agent-desc" id="ctxAgentDesc"></p>
+          <div class="ctx-label">Backup
+            <span class="brain-io">
+              <button id="brainExport" class="tiny ghost" title="Backup your brain">⤓ Export</button>
+              <button id="brainImport" class="tiny ghost" title="Restore a backup">⤒ Import</button>
+              <input id="brainImportFile" type="file" accept="application/json,.json" hidden />
+            </span></div>
         </div>
 
-        <div class="ctx-rows">
-          <div class="ctx-row"><span class="cr-ic">◇</span> Memory <b id="ctxMem" class="cr-val">On</b></div>
-          <div class="ctx-row"><span class="cr-ic">▤</span> Sources <b id="ctxSources" class="cr-val">0</b></div>
-          <div class="ctx-row"><span class="cr-ic">◈</span> Entities <b id="ctxEntities" class="cr-val">0</b></div>
+        <!-- Sources -->
+        <div class="dpanel" data-d="sources" hidden>
+          <div class="ctx-label">Connected sources <button id="syncAll" class="tiny ghost">sync all</button></div>
+          <div id="syncStatus" class="sync-status"></div>
+          <div id="googleCard" class="google-card" hidden></div>
+          <div id="connectors" class="connectors"></div>
+          <button id="addCustomApp" class="tiny ghost" style="margin-top:10px;width:100%">+ Connect a custom app</button>
         </div>
 
-        <div class="ctx-label">Your brain</div>
-        <input id="brainSearch" class="ctx-input" autocomplete="off" placeholder="🔍 Search your brain…" />
-        <div id="brainStats" class="brain-stats"></div>
-        <div id="entities" class="entities"></div>
-        <div class="ctx-quote">“A more focused you.”<span>—</span></div>
-      </div>
-
-      <!-- Tools tab -->
-      <div class="ctx-pane" data-pane="tools" hidden>
-        <div class="ctx-label">Model</div>
-        <select id="provider"></select>
-        <input id="modelName" class="ctx-input" autocomplete="off" placeholder="model name (optional)" />
-        <div id="modelHint" class="model-hint"></div>
-        <div id="privacyBadge" class="privacy-badge" hidden></div>
-
-        <div class="ctx-label">Tasks <span id="taskCount" class="muted"></span></div>
-        <div class="addtask">
-          <input id="taskInput" autocomplete="off" placeholder="Add a task…" />
-          <button id="taskAdd" class="tiny">Add</button>
-        </div>
-        <div id="taskList" class="tasks"></div>
-
-        <div id="reminderWrap" hidden>
-          <div class="ctx-label">⏰ Reminders</div>
-          <div id="reminderList" class="tasks"></div>
+        <!-- Tasks -->
+        <div class="dpanel" data-d="tasks" hidden>
+          <div class="ctx-label">Tasks <span id="taskCount" class="muted"></span></div>
+          <div class="addtask">
+            <input id="taskInput" autocomplete="off" placeholder="Add a task…" />
+            <button id="taskAdd" class="tiny">Add</button>
+          </div>
+          <div id="taskList" class="tasks"></div>
+          <div id="reminderWrap" hidden>
+            <div class="ctx-label">⏰ Reminders</div>
+            <div id="reminderList" class="tasks"></div>
+          </div>
+          <div class="ctx-label">⚡ Automations <button id="newRoutineBtn" class="tiny ghost">+ New</button></div>
+          <div id="routineList" class="tasks"></div>
         </div>
 
-        <div class="ctx-label">⚡ Automations <button id="newRoutineBtn" class="tiny ghost">+ New</button></div>
-        <div id="routineList" class="tasks"></div>
-
-        <div class="ctx-label">Teach the brain</div>
-        <div class="addbox">
-          <textarea id="ingestText" rows="2" placeholder="Tell it a fact…"></textarea>
-          <button id="ingestBtn" class="tiny">Add to brain</button>
+        <!-- Model -->
+        <div class="dpanel" data-d="model" hidden>
+          <div class="ctx-label">AI model</div>
+          <select id="provider"></select>
+          <input id="modelName" class="ctx-input" autocomplete="off" placeholder="model name (optional)" style="margin-top:8px" />
+          <div id="modelHint" class="model-hint"></div>
+          <div id="privacyBadge" class="privacy-badge" hidden></div>
         </div>
-        <div class="ctx-label">Data
-          <span class="brain-io">
-            <button id="brainExport" class="tiny ghost" title="Backup your brain">⤓</button>
-            <button id="brainImport" class="tiny ghost" title="Restore a backup">⤒</button>
-            <input id="brainImportFile" type="file" accept="application/json,.json" hidden />
-          </span></div>
 
-        <div class="ctx-label">Sources <button id="syncAll" class="tiny ghost">sync all</button></div>
-        <div id="syncStatus" class="sync-status"></div>
-        <div id="googleCard" class="google-card" hidden></div>
-        <div id="connectors" class="connectors"></div>
-        <button id="addCustomApp" class="tiny ghost" style="margin-top:8px">+ Connect a custom app</button>
       </div>
     </aside>
   </div>
+
+  <!-- hidden context hooks kept so app.js stays wired (right panel removed) -->
+  <span id="ctxOrb" hidden></span><span id="ctxAgentName" hidden></span><span id="ctxAgentRole" hidden></span>
+  <span id="ctxAgentDesc" hidden></span><span id="ctxMem" hidden></span><span id="ctxSources" hidden></span><span id="ctxEntities" hidden></span>
 
   <!-- new automation / routine -->
   <div id="routineModal" class="modal-bg" hidden>

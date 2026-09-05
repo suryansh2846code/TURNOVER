@@ -18,7 +18,7 @@ body {
     radial-gradient(70% 50% at 12% 8%, rgba(40,44,60,.18), transparent 60%),
     var(--bg);
 }
-.app { display: grid; grid-template-columns: 250px 1fr 320px; height: 100vh; }
+.app { display: grid; grid-template-columns: 250px 1fr; height: 100vh; }
 .muted { color: var(--muted); }
 .t { color: var(--muted); }
 
@@ -195,8 +195,21 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .ac-confirm { background: var(--accent-2); color: #08140d; border-radius: 8px; padding: 8px 14px; font-weight: 600; }
 .ac-result { margin-top: 8px; font-size: 13px; } .ac-ok { color: var(--accent-2); } .ac-err { color: var(--danger); }
 
-/* ── context / tools panel ────────────────────────────────────────────── */
-.ctx { border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+/* ── slide-over drawers (nav → panel) ─────────────────────────────────── */
+.drawer-bg { position: fixed; inset: 0; z-index: 55; background: rgba(4,6,10,.5); }
+.drawer-bg[hidden] { display: none; }
+.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(380px, 92vw);
+  background: var(--panel); border-left: 1px solid var(--border2); display: flex; flex-direction: column;
+  box-shadow: -20px 0 60px rgba(0,0,0,.5); animation: drawer-in .22s ease; }
+@keyframes drawer-in { from { transform: translateX(24px); opacity: .4; } to { transform: none; opacity: 1; } }
+.drawer-head { display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px; border-bottom: 1px solid var(--border); font-size: 16px; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 16px 22px 24px; display: flex; flex-direction: column; gap: 10px; }
+.dpanel { display: flex; flex-direction: column; gap: 10px; }
+.dpanel[hidden] { display: none; }
+
+/* ── context / tools panel (legacy styles reused inside drawers) ───────── */
+.ctx { display: none; }
 .ctx-tabs { display: flex; gap: 22px; padding: 18px 22px 0; }
 .ctx-tab { background: transparent; color: var(--muted); font-size: 14px; padding: 0 0 12px;
   border-bottom: 2px solid transparent; }
