@@ -201,7 +201,7 @@
       <div class="bs-side-label">Search</div>
       <input id="brainSearch" class="ctx-input" autocomplete="off" placeholder="Search your brain…" />
       <div id="brainStats" hidden></div>
-      <div class="bs-side-label">Knowledge graph</div>
+      <div class="bs-side-label">Knowledge graph <button id="rebuildBtn" class="tiny ghost">Clean up</button></div>
       <div id="entities" class="entities"></div>
       <div class="bs-side-label">Teach the brain</div>
       <div class="addbox">
@@ -219,9 +219,12 @@
     <div class="bs-hud">
       <div class="bs-state" id="bsState">Building your brain…</div>
       <div class="bs-metrics">
-        <div class="bs-m"><b id="bsMem">0</b><span>Memories</span></div>
-        <div class="bs-m"><b id="bsEnt">0</b><span>Entities</span></div>
-        <div class="bs-m"><b id="bsRel">0</b><span>Facts</span></div>
+        <div class="bs-m" title="Every item synced or added — emails, docs, notes, events — stored as searchable text.">
+          <b id="bsMem">0</b><span>Memories</span></div>
+        <div class="bs-m" title="People, projects, tools and orgs pulled out of your notes & prose. Emails/files stay searchable but don't clutter the graph.">
+          <b id="bsEnt">0</b><span>Entities</span></div>
+        <div class="bs-m" title="Connections between things — the sentences and relationships that link your entities.">
+          <b id="bsRel">0</b><span>Facts</span></div>
       </div>
       <button id="bsSync" class="tiny">Sync now</button>
       <p class="bs-note">Your brain keeps learning in the background — everything stays on your device.</p>

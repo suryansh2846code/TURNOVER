@@ -17,7 +17,7 @@ from ..models import Message, get_provider
 
 # Bump when extraction logic changes → auto-migration rebuilds the graph for all
 # users on next startup (no manual rebuild-graph).
-EXTRACTOR_VERSION = "3"
+EXTRACTOR_VERSION = "4"
 
 # capitalized word / multi-word phrase (allows internal caps like WhatsApp)
 _CAP = re.compile(r"\b([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+){0,3})\b")
@@ -67,6 +67,16 @@ _NOISE = {
     # weekdays / http verbs / misc
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
     "patch", "head", "options", "trace", "connect",
+    # instructional / exam / document verbs & headings (from docs & PDFs)
+    "explain", "write", "answer", "answers", "discuss", "define", "describe",
+    "list", "state", "prove", "derive", "calculate", "find", "show", "solve",
+    "solved", "attempt", "marks", "mark", "unit", "ans", "question", "questions",
+    "chapter", "topic", "topics", "paper", "exam", "assignment", "syllabus",
+    "human", "body", "right", "left", "self", "thus", "hence", "given", "let",
+    "consider", "assume", "suppose", "hello", "hi", "thanks", "thank", "regards",
+    "dear", "best", "great", "good", "welcome", "please", "kindly", "yours",
+    "figure", "table", "diagram", "example", "solution", "problem", "theorem",
+    "definition", "introduction", "conclusion", "abstract", "values", "value",
     # email / html boilerplate
     "subject", "doctype", "arial", "helvetica", "verdana", "sans", "serif",
     "mailto", "unsubscribe", "viewport", "charset", "span", "div", "href",
@@ -75,12 +85,27 @@ _NOISE = {
 }
 
 
+def _looks_like_token(w: str) -> bool:
+    """Reject random ids / base64 / hashes (e.g. ACUX6DMKR70acllgpm5Sd0…): long
+    strings with few vowels or many digits are not real entity names."""
+    if len(w) < 16:
+        return False
+    letters = sum(c.isalpha() for c in w)
+    vowels = sum(c in "aeiouAEIOU" for c in w)
+    digits = sum(c.isdigit() for c in w)
+    if digits >= 4:
+        return True
+    return bool(letters) and (vowels / letters) < 0.30
+
+
 def is_good_entity(name: str) -> bool:
     """Precision-first filter: does this look like a real named entity?"""
-    name = _ARTICLE.sub("", name).strip()
-    if not name:
+    name = _clean_name(name)
+    if not name or len(name) > 45:
         return False
     words = name.split()
+    if len(words) == 1 and _looks_like_token(words[0]):
+        return False
     # multi-word Title-case phrases are almost always real (Cloudflare Workers)
     if len(words) >= 2:
         # but reject if every word is noise
@@ -102,7 +127,16 @@ def is_good_entity(name: str) -> bool:
 
 def _clean_name(name: str) -> str:
     name = re.sub(r"\s+", " ", name).strip()   # collapse line breaks/spaces
-    return _ARTICLE.sub("", name).strip()
+    name = _ARTICLE.sub("", name).strip()
+    # drop trailing/leading connector words the capture regex swept in, so
+    # "Product Management Meetup When" → "Product Management Meetup",
+    # "IDfy Mumbai With" → "IDfy Mumbai".
+    words = name.split()
+    while words and words[-1].lower() in _NOISE:
+        words.pop()
+    while words and words[0].lower() in _NOISE:
+        words.pop(0)
+    return " ".join(words)
 
 
 # Curated hints so the offline heuristic can type entities instead of "thing".
@@ -120,6 +154,18 @@ _ORG_HINTS = {"inc", "llc", "ltd", "corp", "labs", "technologies", "agency",
               "meta", "google", "microsoft", "amazon", "apple", "openai",
               "anthropic", "cloudflare", "algorand"}
 _PERSON_HINT = re.compile(r"^[A-Z][a-z]+ [A-Z][a-z]+$")   # First Last
+# common Title-cased words that look like "First Last" but aren't people
+# (so "Building High", "Data Platform", "Product Meeting" aren't tagged person)
+_NOT_NAME = {
+    "building", "high", "low", "data", "platform", "platforms", "performance",
+    "management", "product", "meetup", "meeting", "project", "team", "report",
+    "plan", "review", "update", "design", "system", "service", "feature",
+    "release", "launch", "growth", "sales", "market", "budget", "revenue",
+    "customer", "client", "partner", "vendor", "invoice", "payment", "order",
+    "ticket", "issue", "task", "note", "email", "message", "call", "event",
+    "deadline", "goal", "target", "metric", "quarter", "sprint", "backlog",
+    "morning", "evening", "night", "happy", "good", "great", "best", "new",
+}
 
 
 def guess_type(name: str) -> str:
@@ -129,7 +175,7 @@ def guess_type(name: str) -> str:
         return "tool"
     if any(w in _ORG_HINTS for w in words):
         return "org"
-    if _PERSON_HINT.match(name):
+    if _PERSON_HINT.match(name) and not any(w in _NOT_NAME for w in words):
         return "person"
     if len(words) >= 2 and name[0].isupper():
         return "project"      # multi-word proper noun, not a known tool/org

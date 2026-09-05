@@ -311,10 +311,14 @@ class Brain:
     _PROSE_EXT = (".md", ".markdown", ".txt", ".rst", ".org")
 
     def _is_prose(self, mem) -> bool:
-        # The knowledge graph is the user's CURATED knowledge — notes, facts,
-        # and prose docs. Bulk email (HTML boilerplate) and Drive files are noisy,
-        # so they stay fully searchable as memories but do NOT build the graph.
-        if mem.source in {"notes", "agent", "manual", "notion"}:
+        # Sources that build the knowledge graph. Must mirror what ingest() graphs
+        # at sync time (gcal/gdrive/notion/notes go through brain.ingest), so a
+        # rebuild doesn't silently drop them. Raw Gmail (HTML boilerplate) is added
+        # via store.add without graphing, so it's intentionally excluded here.
+        # High-signal, short, structured/curated sources only. Bulk Gmail (HTML)
+        # and Drive docs (long, heading-heavy PDFs) stay searchable as memories
+        # but are too noisy for the graph, so they're excluded.
+        if mem.source in {"notes", "agent", "manual", "notion", "gcal"}:
             return True
         if mem.uri and mem.uri.lower().endswith(self._PROSE_EXT):
             return True

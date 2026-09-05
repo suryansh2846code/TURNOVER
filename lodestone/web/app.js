@@ -1167,6 +1167,14 @@ function closeBrainScreen() {
   clearInterval(_bsPoll); _bsPoll = null; cancelAnimationFrame(_bsRaf); _bsRaf = null;
 }
 $("#bsClose").onclick = closeBrainScreen;
+{ const rb = $("#rebuildBtn"); if (rb) rb.onclick = async () => {
+  rb.disabled = true; rb.textContent = "Cleaning…";
+  try { const r = await api("/api/brain/rebuild", { method: "POST" });
+    toast(`Graph rebuilt · ${r.entities} entities · ${r.facts} facts`);
+    loadBrain(); _bsRefresh();
+  } catch (e) { toast(String(e)); }
+  finally { rb.disabled = false; rb.textContent = "Clean up"; }
+}; }
 $("#bsSync").onclick = async () => {
   try { const r = await api("/api/sync/now", { method: "POST" });
     toast(r.started ? "syncing your sources…" : (r.reason || "already syncing"));

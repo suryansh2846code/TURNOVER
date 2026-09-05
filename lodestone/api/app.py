@@ -363,6 +363,13 @@ def agent_welcome(agent_id: str, body: ChatIn | None = None):
         return {"reply": _fallback_welcome(agent.name)}
 
 
+@app.post("/api/brain/rebuild")
+def brain_rebuild():
+    """Re-extract the knowledge graph from prose memories with the current
+    (stricter) extractor — cleans out junk entities/facts. Memories are untouched."""
+    return get_brain().rebuild_graph()
+
+
 @app.get("/api/brain/entities")
 def entities(limit: int = 30):
     return {"entities": get_brain().graph.top_entities(limit=limit)}
