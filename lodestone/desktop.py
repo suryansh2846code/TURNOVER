@@ -29,6 +29,26 @@ def _free_port(host: str) -> int:
         return s.getsockname()[1]
 
 
+def _stable_port(host: str) -> int:
+    """Reuse the same loopback port across launches so the webview keeps a stable
+    origin — otherwise localStorage (onboarding flag, chosen model, lead agent…)
+    resets on every launch. Falls back to a fresh free port if it's taken."""
+    from .config import get_settings
+    pf = get_settings().home / ".port"
+    try:
+        p = int(pf.read_text().strip())
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((host, p))        # still free → reuse it
+    except Exception:
+        p = _free_port(host)
+    try:
+        pf.parent.mkdir(parents=True, exist_ok=True)
+        pf.write_text(str(p))
+    except Exception:
+        pass
+    return p
+
+
 def run_app(dev: bool = False) -> None:
     try:
         import webview
@@ -42,7 +62,7 @@ def run_app(dev: bool = False) -> None:
 
     s = get_settings()
     host = "127.0.0.1"
-    port = _free_port(host)      # dynamic free port — no fixed-8787 conflicts
+    port = _stable_port(host)    # reuse a port across launches → stable webview origin
 
     server = None
     proc = None

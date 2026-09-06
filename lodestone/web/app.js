@@ -971,15 +971,15 @@ $("#brainImportFile").onchange = async (e) => {
 };
 
 async function maybeOnboard() {
-  // Only a genuine first run (never onboarded in this browser) goes to the
-  // onboarding flow. Once onboarded, reloading always stays in the workspace —
-  // even if the brain is still empty/building. (A reset clears this flag, so the
-  // reset flow still sends you back through onboarding.)
-  if (!localStorage.getItem("lodestone_onboarded")) {
-    window.location.href = "/onboarding";
-    return true;
-  }
-  return false;
+  // Onboarded state lives on the SERVER (survives the desktop app's per-launch
+  // port, which resets localStorage). Only a genuine first run goes to onboarding.
+  try {
+    const s = await api("/api/onboarded");
+    if (s.onboarded) return false;
+  } catch (_) {}
+  if (localStorage.getItem("lodestone_onboarded")) return false;   // legacy fallback
+  window.location.href = "/onboarding";
+  return true;
 }
 
 // ── first entry: meet + name your lead agent, who then teaches the app ──────
@@ -1279,7 +1279,7 @@ function openDrawer(name) {
 }
 function closeDrawer() { const bg = $("#drawerBg"); if (bg) bg.hidden = true; }
 document.querySelectorAll(".snav").forEach((b) => b.onclick = () => {
-  if (b.id === "helpBtn") return openDrawer("sources");
+  if (b.id === "helpBtn") { window.location.href = "/onboarding?replay=1"; return; }  // re-experience onboarding (won't wipe)
   if (b.dataset.nav === "brain") return openBrainScreen();   // Brain → full-screen viz + tools
   openDrawer(b.dataset.nav);
 });

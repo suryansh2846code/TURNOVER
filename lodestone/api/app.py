@@ -152,6 +152,23 @@ def brain_stats():
     return get_brain().stats()
 
 
+class FlagIn(BaseModel):
+    value: bool = True
+
+
+@app.get("/api/onboarded")
+def get_onboarded():
+    """Server-side onboarding flag — survives the desktop app's per-launch port
+    (localStorage is per-origin, so it would reset every launch)."""
+    return {"onboarded": get_brain().store.get_meta("onboarded") == "1"}
+
+
+@app.post("/api/onboarded")
+def set_onboarded(body: FlagIn | None = None):
+    get_brain().store.set_meta("onboarded", "1" if (body is None or body.value) else "0")
+    return {"onboarded": body is None or body.value}
+
+
 class ResetIn(BaseModel):
     memories: bool = True   # wipe all memories + graph + connector state
     secrets: bool = True    # forget saved connector tokens (Notion/GitHub/Linear…)

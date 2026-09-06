@@ -509,12 +509,15 @@
     var hs=document.getElementById("heroSources");if(hs)hs.textContent=CONNECTORS.filter(function(c){return c.ready;}).length;}
 
   // ── start from zero: wipe brain + forget every credential, then reconnect ──
+  var REPLAY=/[?&]replay=1/.test(location.search);   // just re-experience it — don't wipe
   var didReset=false;
   async function startFromZero(){
     if(didReset)return;didReset=true;
+    if(REPLAY){await refreshConnectors();return;}   // replay: keep the brain & creds
     // truly new-user: wipe brain + credentials server-side AND clear local prefs
     try{["lodestone_onboarded","lodestone_lead_agent","lodestone_provider","lodestone_model"]
       .forEach(function(k){localStorage.removeItem(k);});}catch(e){}
+    try{await api("/api/onboarded",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:false})});}catch(e){}
     try{await api("/api/brain/reset",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({memories:true,secrets:true,google:true})});}catch(e){}
     selected={};await refreshConnectors();}
@@ -635,7 +638,10 @@
   }
 
   // ── navigation / completion ──────────────────────────────────────────────
-  function enterApp(){try{localStorage.setItem("lodestone_onboarded","1");}catch(e){}window.location.href="/";}
+  function enterApp(){try{localStorage.setItem("lodestone_onboarded","1");}catch(e){}
+    // mark onboarded on the server so it never shows again on launch, then enter
+    api("/api/onboarded",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:true})})
+      .catch(function(){}).then(function(){window.location.href="/";});}
   document.getElementById("toBrain").addEventListener("click",function(){this.textContent="Entering…";setTimeout(enterApp,400);});
   var dedit=document.querySelector(".dedit");if(dedit)dedit.addEventListener("click",enterApp);
   var skipTop=document.getElementById("skipTop");if(skipTop)skipTop.addEventListener("click",enterApp);
