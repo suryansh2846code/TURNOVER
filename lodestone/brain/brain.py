@@ -22,6 +22,12 @@ class Brain:
     def __init__(self, store: MemoryStore | None = None) -> None:
         self.store = store or get_store()
         self.graph = GraphStore(self.store)
+        import threading
+        self._enrich_lock = threading.Lock()
+        self._enrich_state = {
+            "running": False, "stop": False, "processed": 0, "entities": 0,
+            "facts": 0, "tokens_in": 0, "tokens_out": 0, "estimated": False,
+            "provider": None, "found": [], "started": None, "remaining": 0}
 
     # ── ingestion ────────────────────────────────────────────────────────
     def ingest(self, text: str, *, source: str = "manual", kind: str = "note",
@@ -462,6 +468,58 @@ class Brain:
             if r["processed"] == 0 or r["remaining"] == 0:
                 break
         return total
+
+    # ── server-side enrichment job (survives frontend refresh) ──────────────
+    def start_enrich(self, provider_name: str | None = None) -> dict[str, Any]:
+        import threading
+        with self._enrich_lock:
+            if self._enrich_state["running"]:
+                return self.enrich_status()
+            import time
+            self._enrich_state.update({
+                "running": True, "stop": False, "processed": 0, "entities": 0,
+                "facts": 0, "tokens_in": 0, "tokens_out": 0, "estimated": False,
+                "provider": None, "found": [], "started": time.time(),
+                "remaining": self.store.count_ungraphed()})
+        threading.Thread(target=self._enrich_loop, args=(provider_name,), daemon=True).start()
+        return self.enrich_status()
+
+    def _enrich_loop(self, provider_name: str | None) -> None:
+        try:
+            while not self._enrich_state["stop"]:
+                r = self.enrich(limit=8, provider_name=provider_name)
+                with self._enrich_lock:
+                    s = self._enrich_state
+                    s["processed"] += r["processed"]; s["entities"] += r["entities"]
+                    s["facts"] += r["facts"]; s["tokens_in"] += r["tokens_in"]
+                    s["tokens_out"] += r["tokens_out"]; s["remaining"] = r["remaining"]
+                    s["estimated"] = s["estimated"] or r["tokens_estimated"]
+                    if r.get("provider"):
+                        s["provider"] = r["provider"]
+                    if r.get("found"):
+                        s["found"] = r["found"]
+                if r["processed"] == 0 or r["remaining"] == 0:
+                    break
+        finally:
+            with self._enrich_lock:
+                self._enrich_state["running"] = False
+                self._enrich_state["stop"] = False
+
+    def stop_enrich(self) -> dict[str, Any]:
+        with self._enrich_lock:
+            if self._enrich_state["running"]:
+                self._enrich_state["stop"] = True
+        return self.enrich_status()
+
+    def enrich_status(self) -> dict[str, Any]:
+        import time
+        with self._enrich_lock:
+            s = dict(self._enrich_state)
+        s["remaining"] = self.store.count_ungraphed()
+        s["tokens"] = s["tokens_in"] + s["tokens_out"]
+        s["elapsed"] = (time.time() - s["started"]) if s["started"] else 0
+        s.pop("stop", None)
+        return s
 
     def reset(self) -> dict[str, Any]:
         """Wipe ALL brain data — every memory, entity, relation and the remembered

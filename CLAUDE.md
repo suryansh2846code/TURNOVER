@@ -29,10 +29,16 @@ own model. Everything runs and stays on the user's machine.
   encoded blobs) → `is_graphable()` gate → **LLM extraction** (rich, precise, uses
   the caller's model) or the offline heuristic fallback, batched to cut calls.
   Automatic background pass after each sync is **heuristic (free)**; the richer
-  **LLM pass is opt-in** ("Enrich with AI" button → `POST /api/brain/enrich`,
-  looped). `rebuild_graph()` clears the graph + re-queues everything (`POST
-  /api/brain/rebuild`). Never gate the graph on a hard-coded source allowlist —
-  it's content-based and general.
+  **LLM pass is opt-in**. The LLM enrich runs as a **server-side job** (`Brain.
+  start_enrich/stop_enrich/enrich_status`, `POST /api/brain/enrich/start|stop`,
+  `GET /api/brain/enrich/status`) so a frontend refresh reconnects instead of
+  killing it. `rebuild_graph()` clears the graph + re-queues everything. Never
+  gate the graph on a hard-coded source allowlist — it's content-based & general.
+- **Token usage** (`lodestone/usage.py`): every model call via `get_provider()` is
+  wrapped to record input/output tokens (estimated from length when the provider
+  doesn't report), persisted in the `meta` table so it survives restarts/port
+  changes. `GET /api/usage` (+ context-window "limit" from `registry.context_window`)
+  → shown in the Model drawer; `POST /api/usage/reset`.
 - `lodestone/connectors/` — one class per source (`gmail`, `gcal`, `gdrive`, `notion`,
   `github`, `linear`, `files`, `notes`, apple_*, `imessage`, custom). Registered in
   `connectors/__init__.py::REGISTRY`.

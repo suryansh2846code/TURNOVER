@@ -1191,62 +1191,92 @@ const ENRICH_TIPS = [
   "It runs batch by batch — you can Stop anytime and resume later.",
   "Everything runs on your device — nothing leaves your Mac.",
 ];
-{ const eb = $("#enrichBtn"); if (eb) eb.onclick = async () => {
-  if (_enriching) { _enriching = false; eb.textContent = "Stopping…"; return; }
-  _enriching = true; eb.classList.add("running"); eb.textContent = "Starting…"; eb.style.setProperty("--p", "3%");
-  const panel = $("#enrichPanel"), bar = panel && panel.querySelector(".ep-bar");
+// ── model token usage (persisted server-side) ──────────────────────────────
+async function updateUsage() {
+  const box = $("#usageBox"); if (!box) return;
+  let u; try { u = await api("/api/usage"); } catch (e) { return; }
+  const a = u.active || {}, tin = a.in || 0, tout = a.out || 0, calls = a.calls || 0;
+  const local = u.locality === "local";
+  const limit = local ? "local · no API limit"
+    : (u.context_window ? `~${Math.round(u.context_window / 1000)}K context/call` : "—");
+  box.innerHTML = `
+    <div class="usage-row"><span>Active model</span><b>${esc(u.active_provider || "—")}${a.model ? " · " + esc(a.model) : ""}</b></div>
+    <div class="usage-row"><span>Tokens used</span><b>${(tin + tout).toLocaleString()}</b></div>
+    <div class="usage-row"><span>In / Out</span><b>${tin.toLocaleString()} / ${tout.toLocaleString()}</b></div>
+    <div class="usage-row"><span>Calls</span><b>${calls.toLocaleString()}</b></div>
+    <div class="usage-row"><span>Limit</span><b>${limit}</b></div>`;
+}
+{ const rb = $("#usageReset"); if (rb) rb.onclick = async () => {
+  try { await api("/api/usage/reset", { method: "POST" }); updateUsage(); } catch (e) {}
+}; }
+
+// Enrichment runs SERVER-SIDE (a background job) — the UI just starts/stops it and
+// polls status, so a refresh reconnects to the running job instead of killing it.
+let _enrichPoll = null, _enrichTip = 0;
+function renderEnrich(s) {
+  const eb = $("#enrichBtn"), panel = $("#enrichPanel"), bar = panel && panel.querySelector(".ep-bar");
   const fill = $("#epFill"), state = $("#epState"), pctEl = $("#epPct"),
         meta = $("#epMeta"), foundEl = $("#epFound"), tipEl = $("#epTip");
   if (panel) panel.hidden = false;
   const LOCAL = { ollama: 1, "claude-code": 1, subscription: 1, mock: 1 };
-  const t0 = Date.now();
-  let processed = 0, remaining = 0, gEnt = 0, gFact = 0, tin = 0, tout = 0, est = false, prov = "", tip = 0;
-  const rotateTip = () => { if (tipEl) tipEl.textContent = "Tip — " + ENRICH_TIPS[tip++ % ENRICH_TIPS.length]; };
-  rotateTip();
-  try {
-    while (_enriching) {
-      if (state) { state.textContent = `Reading your memories${prov ? " with " + prov : ""}…`; state.classList.remove("done"); }
-      if (bar) bar.classList.add("working");
-      let r;
-      try {
-        r = await api("/api/brain/enrich", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: "enrich", provider: $("#provider").value,
-            model: $("#modelName").value.trim() || null }) });
-      } catch (e) {
-        if (bar) bar.classList.remove("working");
-        if (state) { state.textContent = "Couldn't reach the model — check Model."; state.classList.add("done"); }
-        break;
-      }
-      if (bar) bar.classList.remove("working");
-      processed += r.processed; remaining = r.remaining;
-      gEnt += r.entities; gFact += r.facts; tin += r.tokens_in || 0; tout += r.tokens_out || 0;
-      est = est || r.tokens_estimated; prov = r.provider || prov;
-      const totalKnown = processed + remaining;
-      const pct = totalKnown ? Math.min(100, Math.round(processed / totalKnown * 100)) : 0;
-      if (fill) fill.style.width = pct + "%"; if (pctEl) pctEl.textContent = pct + "%";
-      eb.style.setProperty("--p", pct + "%"); eb.textContent = _enriching ? `Stop · ${pct}%` : "Stopping…";
-      const sec = (Date.now() - t0) / 1000, rate = processed / Math.max(1, sec);
-      const eta = remaining > 0 && rate > 0 ? ` · ~${fmtEta(remaining / rate)} left` : "";
-      const tok = LOCAL[prov] ? "local · free"
-        : `${fmtTokens(tin)}↑ ${fmtTokens(tout)}↓ tokens${est ? " (est)" : ""}`;
-      const src = r.sources && Object.keys(r.sources).length ? " · from " + Object.keys(r.sources).join(", ") : "";
-      if (state) state.textContent = `Enriching with ${prov || "AI"}`;
-      if (meta) meta.innerHTML =
-        `${processed.toLocaleString()} of ${totalKnown.toLocaleString()} memories · +${gEnt} entities · +${gFact} facts${eta}<br>${tok}${src}`;
-      if (foundEl && r.found && r.found.length)
-        foundEl.innerHTML = r.found.map((f) => `<span class="ep-chip ${f.type}">${esc(f.name)}</span>`).join("");
-      rotateTip();
-      loadBrain(); _bsRefresh();
-      if (r.remaining === 0 || r.processed === 0) {
-        if (fill) fill.style.width = "100%"; if (pctEl) pctEl.textContent = "100%";
-        if (state) { state.textContent = `Fully enriched · +${gEnt} entities`; state.classList.add("done"); }
-        break;
-      }
+  const total = (s.processed || 0) + (s.remaining || 0);
+  const pct = total ? Math.min(100, Math.round(s.processed / total * 100)) : (s.running ? 0 : 100);
+  if (fill) fill.style.width = pct + "%"; if (pctEl) pctEl.textContent = pct + "%";
+  if (eb) eb.style.setProperty("--p", pct + "%");
+  if (s.running) {
+    if (eb) { eb.classList.add("running"); eb.textContent = `Stop · ${pct}%`; }
+    if (bar) bar.classList.add("working");
+    if (state) { state.textContent = `Enriching with ${s.provider || "AI"}`; state.classList.remove("done"); }
+    if (tipEl) tipEl.textContent = "Tip — " + ENRICH_TIPS[_enrichTip++ % ENRICH_TIPS.length];
+  } else {
+    if (eb) { eb.classList.remove("running"); eb.style.setProperty("--p", "0%"); eb.textContent = "Enrich with AI"; }
+    if (bar) bar.classList.remove("working");
+    if (state) {
+      state.textContent = (s.remaining === 0 && s.processed > 0) ? `Fully enriched · +${s.entities} entities`
+        : s.processed > 0 ? `Stopped · +${s.entities} entities · +${s.facts} facts` : "Ready to enrich";
+      state.classList.add("done");
     }
-    if (!_enriching && state) { state.textContent = `Stopped · +${gEnt} entities · +${gFact} facts`; state.classList.add("done"); }
-  } finally { _enriching = false; eb.classList.remove("running"); eb.style.setProperty("--p", "0%"); eb.textContent = "Enrich with AI"; }
+  }
+  const rate = s.elapsed > 0 ? s.processed / s.elapsed : 0;
+  const eta = s.running && s.remaining > 0 && rate > 0 ? ` · ~${fmtEta(s.remaining / rate)} left` : "";
+  const tok = LOCAL[s.provider] ? "local · free"
+    : (s.tokens ? `${fmtTokens(s.tokens_in)}↑ ${fmtTokens(s.tokens_out)}↓ tokens${s.estimated ? " (est)" : ""}` : "");
+  if (meta) meta.innerHTML =
+    `${(s.processed || 0).toLocaleString()} of ${total.toLocaleString()} memories · +${s.entities || 0} entities · +${s.facts || 0} facts${eta}` + (tok ? `<br>${tok}` : "");
+  if (foundEl && s.found && s.found.length)
+    foundEl.innerHTML = s.found.map((f) => `<span class="ep-chip ${f.type}">${esc(f.name)}</span>`).join("");
+}
+function pollEnrich() {
+  clearInterval(_enrichPoll);
+  const tick = async () => {
+    let s; try { s = await api("/api/brain/enrich/status"); } catch (e) { return; }
+    renderEnrich(s); loadBrain(); _bsRefresh(); updateUsage();
+    if (!s.running) { clearInterval(_enrichPoll); _enrichPoll = null; }
+  };
+  tick(); _enrichPoll = setInterval(tick, 2000);
+}
+{ const eb = $("#enrichBtn"); if (eb) eb.onclick = async () => {
+  if (eb.classList.contains("running")) {
+    eb.textContent = "Stopping…";
+    try { await api("/api/brain/enrich/stop", { method: "POST" }); } catch (e) {}
+    return;
+  }
+  eb.classList.add("running"); eb.textContent = "Starting…"; eb.style.setProperty("--p", "3%");
+  if ($("#enrichPanel")) $("#enrichPanel").hidden = false;
+  if ($("#epTip")) $("#epTip").textContent = "Tip — " + ENRICH_TIPS[0];
+  try {
+    await api("/api/brain/enrich/start", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "enrich", provider: $("#provider").value,
+        model: $("#modelName").value.trim() || null }) });
+  } catch (e) {
+    const st = $("#epState"); if (st) { st.textContent = "Couldn't start — check Model."; st.classList.add("done"); }
+    eb.classList.remove("running"); eb.textContent = "Enrich with AI"; return;
+  }
+  pollEnrich();
 }; }
+// resume on load: if the server job is running, reconnect the UI
+(async () => { try { const s = await api("/api/brain/enrich/status"); if (s.running) { pollEnrich(); } } catch (_) {} })();
 $("#bsSync").onclick = async () => {
   try { const r = await api("/api/sync/now", { method: "POST" });
     toast(r.started ? "syncing your sources…" : (r.reason || "already syncing"));
@@ -1274,7 +1304,7 @@ function openDrawer(name) {
   bg.hidden = false;
   if (name === "sources") loadBrain();
   if (name === "tasks") { loadTasks(); loadReminders(); loadRoutines(); }
-  if (name === "model") loadProviders();
+  if (name === "model") { loadProviders(); updateUsage(); }
   if (name === "tools") loadTools();
 }
 function closeDrawer() { const bg = $("#drawerBg"); if (bg) bg.hidden = true; }

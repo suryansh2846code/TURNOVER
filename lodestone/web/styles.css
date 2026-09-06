@@ -382,6 +382,12 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .cmp-ic svg, .cmp-send svg { width: 17px; height: 17px; }
 .pb-ic svg { width: 12px; height: 12px; }
 
+/* model usage box */
+.usage-box { display: flex; flex-direction: column; gap: 1px; background: var(--panel-2); border-radius: 10px; padding: 6px 12px; }
+.usage-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; font-size: 12.5px; border-bottom: 1px solid rgba(255,255,255,.05); }
+.usage-row:last-child { border-bottom: 0; }
+.usage-row span { color: var(--muted); } .usage-row b { color: var(--text); font-variant-numeric: tabular-nums; }
+
 /* live enrichment panel */
 .enrich-panel { display: flex; flex-direction: column; gap: 7px; padding: 12px;
   background: var(--panel-2); border-radius: 12px; margin: 2px 0 4px; }

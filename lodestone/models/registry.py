@@ -92,6 +92,25 @@ _LOCALITY = {
     "subscription": ("cloud", "Sent via your gateway to the model provider."),
 }
 
+# approximate context windows (tokens) by model-name substring — the only "limit"
+# we can know without a provider account API; matched loosely, shown as approximate.
+_CONTEXT_WINDOW = {
+    "opus": 200_000, "sonnet": 200_000, "haiku": 200_000, "claude": 200_000,
+    "gpt-5": 400_000, "gpt-4o": 128_000, "gpt-4.1": 1_000_000, "gpt-4": 128_000,
+    "o1": 200_000, "o3": 200_000, "o4": 200_000, "gemini": 1_000_000,
+    "llama": 128_000, "qwen": 32_000, "mistral": 32_000, "deepseek": 64_000,
+}
+
+
+def context_window(model: str | None) -> int | None:
+    if not model:
+        return None
+    m = model.lower()
+    for k, v in _CONTEXT_WINDOW.items():
+        if k in m:
+            return v
+    return None
+
 
 def list_providers() -> list[dict]:
     out = []
@@ -110,4 +129,28 @@ def list_providers() -> list[dict]:
 def get_provider(name: str | None = None, model: str | None = None) -> LLMProvider:
     name = (name or get_settings().model_provider or "mock").lower()
     cls = _REGISTRY.get(name, MockProvider)
-    return cls(model=model) if name != "mock" else cls()
+    p = cls(model=model) if name != "mock" else cls()
+    _wrap_usage(p)
+    return p
+
+
+def _wrap_usage(p: LLMProvider) -> None:
+    """Wrap chat() so every model call records token usage centrally (choke point
+    for enrichment, chat, digest, welcome…). Estimates from length when the
+    provider doesn't report usage (Claude CLI, subscription, mock)."""
+    orig = p.chat
+
+    def chat(messages, **kw):
+        r = orig(messages, **kw)
+        try:
+            from ..usage import record
+            tin, tout = getattr(r, "input_tokens", 0), getattr(r, "output_tokens", 0)
+            if tin == 0 and tout == 0:
+                tin = sum(len(getattr(m, "content", "") or "") for m in messages) // 4
+                tout = len(getattr(r, "text", "") or "") // 4
+            record(p.name, getattr(p, "model", None), tin, tout)
+        except Exception:
+            pass
+        return r
+
+    p.chat = chat

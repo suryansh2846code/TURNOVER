@@ -382,11 +382,50 @@ def agent_welcome(agent_id: str, body: ChatIn | None = None):
 
 @app.post("/api/brain/enrich")
 def brain_enrich(body: ChatIn | None = None):
-    """Process one small batch of un-graphed memories into the knowledge graph,
-    using the caller's model (LLM-first). Small batch = responsive progress + a
-    quick Stop. Returns token usage. Call repeatedly to drain."""
+    """One small batch (kept for compatibility / manual stepping)."""
     provider = body.provider if body else None
     return get_brain().enrich(limit=8, provider_name=provider)
+
+
+@app.post("/api/brain/enrich/start")
+def brain_enrich_start(body: ChatIn | None = None):
+    """Start (or return) a SERVER-SIDE enrichment job that drains the queue in the
+    background — so a frontend refresh reconnects to it instead of stopping it."""
+    provider = body.provider if body else None
+    return get_brain().start_enrich(provider_name=provider)
+
+
+@app.post("/api/brain/enrich/stop")
+def brain_enrich_stop():
+    return get_brain().stop_enrich()
+
+
+@app.get("/api/brain/enrich/status")
+def brain_enrich_status():
+    return get_brain().enrich_status()
+
+
+@app.get("/api/usage")
+def usage_get():
+    """Cumulative LLM token usage (persisted). Includes a context-window 'limit'
+    for the active model when known."""
+    from .. import usage as _usage
+    from ..models.registry import context_window, _LOCALITY
+    s = get_settings()
+    data = _usage.get()
+    active = data["by_provider"].get(s.model_provider, {})
+    ctx = context_window(active.get("model") or s.model_name)
+    locality = _LOCALITY.get(s.model_provider, ("cloud", ""))[0]
+    return {"total": data["total"], "by_provider": data["by_provider"],
+            "active_provider": s.model_provider, "active": active,
+            "context_window": ctx, "locality": locality, "updated": data["updated"]}
+
+
+@app.post("/api/usage/reset")
+def usage_reset():
+    from .. import usage as _usage
+    _usage.reset()
+    return {"reset": True}
 
 
 @app.post("/api/brain/rebuild")
