@@ -97,6 +97,65 @@ _NOISE = {
 }
 
 
+# Frequent everyday English words that leak through as junk single-word "entities"
+# (verbs, adjectives, generic nouns the LLM capitalised at the start of a sentence).
+# Real single-word entities are proper nouns (Groq, Notion, Figma) — uncommon words —
+# so we reject any single word that's just common English. General & language-level,
+# NOT tied to any one user's data. Multi-word Title phrases are unaffected.
+_COMMON = {
+    # pronouns / determiners / conjunctions already partly in _NOISE, plus fillers
+    "about", "above", "after", "again", "against", "along", "among", "around",
+    "because", "before", "being", "below", "beyond", "cannot", "does", "doing",
+    "done", "down", "during", "else", "enough", "even", "ever", "few", "further",
+    "however", "indeed", "instead", "less", "many", "much", "must", "myself",
+    "never", "once", "only", "onto", "over", "quite", "rather", "really", "since",
+    "still", "their", "theirs", "therefore", "though", "through", "under", "until",
+    "upon", "very", "whether", "within", "without", "yet",
+    # frequent verbs (base + inflections)
+    "give", "gives", "given", "giving", "take", "takes", "taken", "taking",
+    "make", "makes", "made", "making", "want", "wants", "wanted", "need", "needs",
+    "needed", "keep", "keeps", "kept", "know", "knows", "known", "knowing",
+    "think", "thinks", "thought", "feel", "feels", "felt", "call", "calls",
+    "called", "come", "comes", "came", "coming", "goes", "going", "gone", "help",
+    "helps", "helped", "work", "works", "worked", "working", "use", "uses", "used",
+    "using", "look", "looks", "looked", "seem", "seems", "seemed", "tell", "tells",
+    "told", "ask", "asks", "asked", "give", "found", "become", "becomes", "leave",
+    "leaves", "left", "bring", "brings", "brought", "hold", "holds", "held",
+    "mean", "means", "meant", "move", "moves", "moved", "turn", "turns", "turned",
+    "begin", "begins", "began", "grow", "grows", "grew", "grown", "learn",
+    "learns", "learned", "learning", "understand", "believe", "remember",
+    "remain", "remains", "consider", "provide", "provides", "provided",
+    "include", "includes", "included", "allow", "allows", "allowed", "enable",
+    "enables", "require", "requires", "required", "expect", "expects", "expected",
+    # frequent adjectives / adverbs
+    "long", "longer", "short", "shorter", "large", "larger", "small", "smaller",
+    "big", "bigger", "little", "great", "greater", "better", "worse", "worst",
+    "early", "earlier", "late", "later", "hard", "harder", "easy", "easier",
+    "true", "false", "real", "same", "different", "important", "possible",
+    "available", "simple", "complex", "clear", "sure", "certain", "common",
+    "special", "general", "specific", "similar", "various", "several", "single",
+    "double", "full", "empty", "open", "closed", "free", "busy", "ready", "final",
+    "recent", "current", "future", "past", "present", "whole", "entire", "total",
+    "actual", "usual", "normal", "basic", "main", "major", "minor", "extra",
+    "quick", "slow", "fast", "strong", "weak", "deep", "wide", "narrow", "heavy",
+    "light", "warm", "cold", "high", "higher", "lower", "nice", "fine",
+    # frequent generic nouns
+    "language", "material", "materials", "animal", "animals", "person", "people",
+    "world", "life", "part", "parts", "place", "places", "kind", "kinds", "sort",
+    "form", "forms", "level", "levels", "amount", "number", "numbers", "example",
+    "examples", "matter", "subject", "subjects", "content", "story", "stories",
+    "history", "process", "processes", "system", "systems", "method", "methods",
+    "manner", "nature", "order", "orders", "effect", "effects", "result",
+    "results", "reason", "reasons", "purpose", "meaning", "sense", "action",
+    "actions", "activity", "practice", "concept", "concepts", "idea", "ideas",
+    "fact", "facts", "term", "terms", "word", "words", "moment", "period",
+    "chance", "choice", "change", "changes", "growth", "study", "studies",
+    "course", "courses", "class", "classes", "field", "fields", "area", "areas",
+    "power", "energy", "force", "force", "body", "bodies", "mind", "heart",
+    "hand", "head", "side", "sides", "line", "lines", "point", "points",
+}
+
+
 def _looks_like_token(w: str) -> bool:
     """Reject random ids / base64 / hashes (e.g. ACUX6DMKR70acllgpm5Sd0…): long
     strings with few vowels or many digits are not real entity names."""
@@ -120,8 +179,8 @@ def is_good_entity(name: str) -> bool:
         return False
     # multi-word Title-case phrases are almost always real (Cloudflare Workers)
     if len(words) >= 2:
-        # but reject if every word is noise
-        return not all(w.lower() in _NOISE for w in words)
+        # but reject if every word is noise/common ("Four Orders", "The Given Value")
+        return not all(w.lower() in _NOISE or w.lower() in _COMMON for w in words)
     # single word: must be distinctive and not generic
     w = words[0]
     if w.lower() in _NOISE:
@@ -134,7 +193,11 @@ def is_good_entity(name: str) -> bool:
         return len(w) >= 4              # GPT4, H100 — but not L6/v2 (caught above)
     if w.isupper():
         return len(w) >= 3 and w.lower() not in _NOISE  # real acronyms: NASA, SIH
-    return len(w) >= 4                   # plain Title word, e.g. Groq, Notion
+    # plain single Title word (Groq, Notion) — but reject everyday English words
+    # (Give, Long, Language, Material) which are common nouns/verbs, not entities.
+    if w.lower() in _COMMON:
+        return False
+    return len(w) >= 4
 
 
 def _clean_name(name: str) -> str:

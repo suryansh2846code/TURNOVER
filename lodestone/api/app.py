@@ -466,6 +466,13 @@ def brain_rebuild():
     return out
 
 
+@app.post("/api/brain/prune")
+def brain_prune():
+    """Sweep out junk entities that fail the current quality filter (and their
+    facts), keeping all good graph work. Cheap — no rebuild, no model tokens."""
+    return get_brain().prune()
+
+
 @app.get("/api/brain/entities")
 def entities(limit: int = 30):
     return {"entities": get_brain().graph.top_entities(limit=limit)}

@@ -501,6 +501,12 @@ class Brain:
         return {"reset": True, "remaining": self._queue_count(),
                 "entities": 0, "facts": 0}
 
+    def prune(self) -> dict[str, Any]:
+        """Delete graph entities that fail the current quality filter (and their
+        facts). Keeps all good LLM/heuristic work — just sweeps out junk like common
+        words captured as entities. Cheap; safe to run after every enrichment."""
+        return self.graph.prune_noise()
+
     def enrich_until_done(self, provider_name: str | None = None,
                           max_batches: int = 200, fast: bool = False,
                           model_name: str | None = None) -> dict[str, Any]:
@@ -555,6 +561,11 @@ class Brain:
                 if r["processed"] == 0 or r["remaining"] == 0:
                     break
         finally:
+            # sweep any junk entities the pass may have added before finishing
+            try:
+                self.prune()
+            except Exception:
+                pass
             with self._enrich_lock:
                 self._enrich_state["running"] = False
                 self._enrich_state["stop"] = False
