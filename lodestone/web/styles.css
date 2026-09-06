@@ -164,6 +164,18 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .he-card b { display: block; margin: 14px 0 4px; font-size: 14.5px; }
 .he-card span { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
 @media (max-width: 1200px) { .he-cards { grid-template-columns: repeat(2, 1fr); } }
+.he-tip { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 12px 14px;
+  border-radius: 14px; background: color-mix(in srgb, var(--north) 9%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--north) 26%, transparent); }
+.he-tip .het-ic { font-size: 16px; color: var(--north); flex: none; }
+.he-tip .het-tx { flex: 1; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.he-tip .het-tx b { color: var(--text); font-weight: 600; }
+.he-tip .het-go { flex: none; background: var(--north); color: #1a1300; border: none;
+  border-radius: 9px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; }
+.he-tip .het-go:hover { filter: brightness(1.06); }
+.he-tip .het-x { flex: none; background: transparent; color: var(--faint); border: none;
+  font-size: 13px; padding: 4px 6px; }
+.he-tip .het-x:hover { color: var(--muted); }
 
 /* attachment / doc card produced by agents */
 .doc-card { display: flex; align-items: center; gap: 13px; background: var(--panel);

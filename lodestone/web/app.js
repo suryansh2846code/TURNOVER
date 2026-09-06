@@ -263,7 +263,27 @@ function heroEmpty() {
     if (c.dataset.fill) { $("#input").value = c.dataset.fill; $("#input").focus(); autoGrow(); }
     else send(c.dataset.q);
   });
+  maybeEnrichTip(div);
   return div;
+}
+
+// Gentle, dismissible nudge: if memories are waiting to be enriched, tell the user
+// enrichment sharpens answers and let them start it in one click. Hidden once the
+// queue is drained or the user dismisses it.
+async function maybeEnrichTip(div) {
+  if (localStorage.getItem("lodestone_enrich_tip_off")) return;
+  let cfg; try { cfg = await api("/api/brain/enrich/config"); } catch (_) { return; }
+  const rem = cfg.remaining || 0;
+  if (rem < 20) return;
+  const tip = document.createElement("div");
+  tip.className = "he-tip";
+  tip.innerHTML = `<span class="het-ic">${IC.spark}</span>
+    <span class="het-tx"><b>Sharpen your brain.</b> Enrich <b>${rem.toLocaleString()}</b> memories
+    into people, projects &amp; facts for more precise answers — runs locally &amp; free.</span>
+    <button class="het-go">Enrich</button><button class="het-x" title="Dismiss">✕</button>`;
+  tip.querySelector(".het-go").onclick = () => { openBrainScreen(); setTimeout(() => { const b = $("#enrichBtn"); if (b && !b.classList.contains("running")) b.click(); }, 300); };
+  tip.querySelector(".het-x").onclick = () => { localStorage.setItem("lodestone_enrich_tip_off", "1"); tip.remove(); };
+  div.appendChild(tip);
 }
 
 function renderHistory(history) {
@@ -1103,6 +1123,7 @@ async function updateBrainStatus() {
 
 // ── full-screen "Your Brain" view: live neural viz + real building status ────
 let _bsPoll = null, _bsRaf = null, _bsNodes = null, _bsRot = 0, _bsDensity = 0.15;
+let _bsVisible = 520, _bsVisTarget = 520;   // how many nodes light up — grows with entities
 // mouse interaction state for the brain viz
 let _bsMX = 0, _bsMY = 0, _bsTMX = 0, _bsTMY = 0;       // eased vs target parallax
 let _bsHoverX = -9999, _bsHoverY = -9999;               // cursor in canvas px
@@ -1123,8 +1144,10 @@ function _bsWire() {
   cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
 }
 function _bsBuildNodes() {
-  // ~520 points on a jittered sphere → reads as a neural cluster
-  const N = 520, pts = [];
+  // a pool of points on a jittered sphere → reads as a neural cluster. We render a
+  // growing slice of it (_bsVisible) so the cloud visibly fills in as the knowledge
+  // graph grows (more entities → more nodes light up during enrichment).
+  const N = 1100, pts = [];
   for (let i = 0; i < N; i++) {
     const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), th = i * 2.399963;
     const jit = 0.12;
@@ -1146,8 +1169,10 @@ function _bsDraw() {
   const ay = _bsRot + _bsDragRot + _bsMX * 0.5, tilt = -_bsMY * 0.4;
   const sy = Math.sin(ay), cyr = Math.cos(ay), st = Math.sin(tilt), ct = Math.cos(tilt), t = Date.now() / 1000;
   const bright = 0.5 + 0.5 * _bsDensity;   // fuller/brighter as the brain grows
+  _bsVisible += (_bsVisTarget - _bsVisible) * 0.05;   // ease node count toward target
+  const vis = Math.max(60, Math.min(_bsNodes.length, Math.round(_bsVisible)));
   const HOV = 130, proj = [];
-  for (let i = 0; i < _bsNodes.length; i++) {   // always render the whole brain
+  for (let i = 0; i < vis; i++) {   // render a growing slice as the graph fills in
     const n = _bsNodes[i];
     const x1 = n.x * cyr + n.z * sy, z1 = -n.x * sy + n.z * cyr, y1 = n.y;
     const y2 = y1 * ct - z1 * st, z2 = y1 * st + z1 * ct;
@@ -1194,7 +1219,10 @@ async function _bsRefresh() {
     $("#bsMem").textContent = mem.toLocaleString();
     $("#bsEnt").textContent = ent.toLocaleString();
     $("#bsRel").textContent = rel.toLocaleString();
-    _bsDensity = Math.min(1, 0.15 + mem / 4000);
+    _bsDensity = Math.min(1, 0.15 + mem / 4000 + ent / 2500);
+    // node count grows with the knowledge graph so the cloud visibly fills in while
+    // enrichment runs (memories are static; entities are what climb).
+    _bsVisTarget = Math.round(260 + Math.min(1, ent / 1600) * 840);
     const state = $("#bsState");
     if (s.syncing) { state.textContent = "Building your brain…"; state.classList.remove("done"); }
     else { state.textContent = "Brain ready"; state.classList.add("done"); }
