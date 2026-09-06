@@ -68,7 +68,7 @@ class Brain:
 
     # ── background enrichment: turn raw memories into a rich graph ───────────
     def enrich(self, limit: int = 40, provider_name: str | None = None,
-               fast: bool = False) -> dict[str, Any]:
+               fast: bool = False, model_name: str | None = None) -> dict[str, Any]:
         """Process up to `limit` un-graphed memories into the knowledge graph.
         Uses the connected LLM when available (precise, works for ANY source —
         Gmail, Drive, Notion, custom apps…), batching short memories into one call
@@ -79,7 +79,7 @@ class Brain:
             try:
                 from ..models.registry import get_provider
                 from ..config import get_settings
-                p = get_provider(provider_name or get_settings().model_provider)
+                p = get_provider(provider_name or get_settings().model_provider, model_name)
                 use_llm = p.name != "mock" and p.is_ready()[0]
             except Exception:
                 use_llm = False
@@ -87,10 +87,14 @@ class Brain:
         # pass works the whole queue (graphed<2) so it can upgrade heuristic results.
         level = 2 if use_llm else 1
         below = 2 if use_llm else 1
-        mems = self.store.list_ungraphed(limit=limit, below=below)
+        # Cap bulk sources to recent-N only for the (costly) LLM pass; the free
+        # heuristic pass still drains everything so nothing is silently orphaned.
+        cap = self.enrich_cap() if use_llm else 0
+        mems = self.store.list_ungraphed(limit=limit, below=below,
+                                         cap=cap, full=self._FULL_SOURCES)
         if not mems:
             return {"processed": 0, "entities": 0, "facts": 0,
-                    "remaining": self.store.count_ungraphed(below=2),
+                    "remaining": self._queue_count(),
                     "tokens_in": 0, "tokens_out": 0, "tokens": 0,
                     "tokens_estimated": False, "provider": None,
                     "found": [], "sources": {}}
@@ -121,7 +125,7 @@ class Brain:
                 if not batch:
                     return
                 combined = "\n\n---\n\n".join(batch)
-                data = extractor.extract_llm(combined, provider_name) \
+                data = extractor.extract_llm(combined, provider_name, model_name) \
                     or extractor.extract_heuristic(combined)
                 u = data.get("_usage")
                 if u:
@@ -173,7 +177,7 @@ class Brain:
             if len(uniq) >= 12:
                 break
         return {"processed": len(done), "entities": ents, "facts": facts,
-                "remaining": self.store.count_ungraphed(below=2),
+                "remaining": self._queue_count(),
                 "tokens_in": tok_in, "tokens_out": tok_out,
                 "tokens": tok_in + tok_out, "tokens_estimated": est, "provider": prov,
                 "found": uniq, "sources": sources}
@@ -186,6 +190,31 @@ class Brain:
         if mem.uri and mem.uri.lower().endswith(self._PROSE_EXT):
             return True
         return mem.kind in {"note", "fact"}
+
+    # High-signal sources are small/curated → always enriched in full. Bulk sources
+    # (Gmail, Drive, iMessage, Slack…) are capped to their most-recent N per source so
+    # a first-time user isn't billed to LLM-enrich thousands of old items. General:
+    # any source not in this set is treated as bulk and capped. Cap is user-tunable.
+    _FULL_SOURCES = ("notes", "agent", "manual", "notion", "gcal")
+    ENRICH_CAP_DEFAULT = 100
+
+    def enrich_cap(self) -> int:
+        """Most-recent items per BULK source to LLM-enrich (0 = unlimited)."""
+        try:
+            v = self.store.get_meta("enrich_cap")
+            return max(0, int(v)) if v is not None else self.ENRICH_CAP_DEFAULT
+        except Exception:
+            return self.ENRICH_CAP_DEFAULT
+
+    def set_enrich_cap(self, n: int) -> dict[str, Any]:
+        n = max(0, int(n))
+        self.store.set_meta("enrich_cap", str(n))
+        return {"cap": n, "remaining": self._queue_count()}
+
+    def _queue_count(self) -> int:
+        """Size of the LLM-enrich queue with the recent-N-per-bulk-source cap applied."""
+        return self.store.count_ungraphed(
+            below=2, cap=self.enrich_cap(), full=self._FULL_SOURCES)
 
     def _graph_from(self, text: str, mem_id: str, fast: bool = False) -> tuple[int, int]:
         data = (extractor.extract_heuristic(text) if fast
@@ -469,18 +498,20 @@ class Brain:
             self.store._conn.execute("DELETE FROM entities")
             self.store._conn.commit()
         self.store.reset_graphed()
-        return {"reset": True, "remaining": self.store.count_ungraphed(),
+        return {"reset": True, "remaining": self._queue_count(),
                 "entities": 0, "facts": 0}
 
     def enrich_until_done(self, provider_name: str | None = None,
-                          max_batches: int = 200, fast: bool = False) -> dict[str, Any]:
+                          max_batches: int = 200, fast: bool = False,
+                          model_name: str | None = None) -> dict[str, Any]:
         """Drain the enrichment queue (bounded). Safe to run in a background thread.
         `fast=True` uses the free offline heuristic (auto/background); the default
         uses the connected LLM for a rich, precise graph (on-demand)."""
         total = {"processed": 0, "entities": 0, "facts": 0, "remaining": 0,
                  "tokens_in": 0, "tokens_out": 0, "tokens": 0}
         for _ in range(max_batches):
-            r = self.enrich(limit=40, provider_name=provider_name, fast=fast)
+            r = self.enrich(limit=40, provider_name=provider_name, fast=fast,
+                            model_name=model_name)
             for k in ("processed", "entities", "facts", "tokens_in", "tokens_out", "tokens"):
                 total[k] += r.get(k, 0)
             total["remaining"] = r["remaining"]
@@ -489,7 +520,8 @@ class Brain:
         return total
 
     # ── server-side enrichment job (survives frontend refresh) ──────────────
-    def start_enrich(self, provider_name: str | None = None) -> dict[str, Any]:
+    def start_enrich(self, provider_name: str | None = None,
+                     model_name: str | None = None) -> dict[str, Any]:
         import threading
         with self._enrich_lock:
             if self._enrich_state["running"]:
@@ -499,14 +531,17 @@ class Brain:
                 "running": True, "stop": False, "processed": 0, "entities": 0,
                 "facts": 0, "tokens_in": 0, "tokens_out": 0, "estimated": False,
                 "provider": None, "found": [], "started": time.time(),
-                "remaining": self.store.count_ungraphed()})
-        threading.Thread(target=self._enrich_loop, args=(provider_name,), daemon=True).start()
+                "remaining": self._queue_count()})
+        threading.Thread(target=self._enrich_loop,
+                         args=(provider_name, model_name), daemon=True).start()
         return self.enrich_status()
 
-    def _enrich_loop(self, provider_name: str | None) -> None:
+    def _enrich_loop(self, provider_name: str | None,
+                     model_name: str | None = None) -> None:
         try:
             while not self._enrich_state["stop"]:
-                r = self.enrich(limit=8, provider_name=provider_name)
+                r = self.enrich(limit=8, provider_name=provider_name,
+                                model_name=model_name)
                 with self._enrich_lock:
                     s = self._enrich_state
                     s["processed"] += r["processed"]; s["entities"] += r["entities"]
@@ -534,7 +569,8 @@ class Brain:
         import time
         with self._enrich_lock:
             s = dict(self._enrich_state)
-        s["remaining"] = self.store.count_ungraphed()
+        s["remaining"] = self._queue_count()
+        s["cap"] = self.enrich_cap()
         s["tokens"] = s["tokens_in"] + s["tokens_out"]
         s["elapsed"] = (time.time() - s["started"]) if s["started"] else 0
         s.pop("stop", None)

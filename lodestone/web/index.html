@@ -107,6 +107,20 @@
           <input id="modelName" class="ctx-input" autocomplete="off" placeholder="model name (optional)" style="margin-top:8px" />
           <div id="modelHint" class="model-hint"></div>
           <div id="privacyBadge" class="privacy-badge" hidden></div>
+
+          <div class="ctx-label" style="margin-top:16px">Enrichment model</div>
+          <select id="enrichProvider"></select>
+          <input id="enrichModelName" class="ctx-input" autocomplete="off" placeholder="same as agent model" style="margin-top:8px" />
+          <p class="model-hint">Used only to build your brain's knowledge graph — separate from your agents. Point it at a cheap or local model (Ollama, a small model) to keep enrichment cost low while agents run a stronger one.</p>
+
+          <div class="ctx-label" style="margin-top:14px">Enrich recent items per bulk source</div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
+            <input id="enrichCap" type="number" min="0" class="ctx-input" style="max-width:96px" />
+            <button id="enrichCapSave" class="tiny">Save</button>
+            <span id="enrichCapNote" class="model-hint" style="margin:0"></span>
+          </div>
+          <p class="model-hint">Bulk sources (Gmail, Drive…) enrich only their most-recent N items — recent context matters most and keeps token cost bounded. 0 = all of them. Calendar &amp; notes always enrich in full.</p>
+
           <div class="ctx-label">Usage this brain <button id="usageReset" class="tiny ghost">reset</button></div>
           <div id="usageBox" class="usage-box"></div>
           <p class="model-hint">Counts every model call (enrichment, chat, digests). Cloud models show exact tokens; local ones are free. Account/plan quotas aren't available via the API.</p>

@@ -226,8 +226,9 @@ _SYS = (
 )
 
 
-def extract_llm(text: str, provider_name: str | None = None) -> dict | None:
-    provider = get_provider(provider_name)
+def extract_llm(text: str, provider_name: str | None = None,
+                model_name: str | None = None) -> dict | None:
+    provider = get_provider(provider_name, model_name)
     if provider.name == "mock":
         return None
     ready, _ = provider.is_ready()

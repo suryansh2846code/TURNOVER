@@ -171,6 +171,53 @@ async function loadProviders() {
   applyModelHint();
   $("#provider").onchange = () => { localStorage.setItem("lodestone_provider", $("#provider").value); applyModelHint(); };
   $("#modelName").onchange = () => localStorage.setItem("lodestone_model", $("#modelName").value.trim());
+
+  // Enrichment model — independent of the agent model. Empty = "same as agent".
+  const ep = $("#enrichProvider");
+  if (ep) {
+    const savedE = localStorage.getItem("lodestone_enrich_provider") || "";
+    ep.innerHTML = `<option value="">same as agent model</option>` + d.providers.map((p) =>
+      `<option value="${p.name}" ${p.name === savedE ? "selected" : ""}>${p.name}${p.ready ? "" : " (not ready)"}</option>`).join("");
+    $("#enrichModelName").value = localStorage.getItem("lodestone_enrich_model") || "";
+    ep.onchange = () => localStorage.setItem("lodestone_enrich_provider", ep.value);
+    $("#enrichModelName").onchange = () => localStorage.setItem("lodestone_enrich_model", $("#enrichModelName").value.trim());
+  }
+  loadEnrichCap();
+}
+
+// Which provider/model to use for enrichment: the dedicated one if set, else the
+// agent model (so nothing breaks for users who never touch this).
+function enrichModel() {
+  const p = (localStorage.getItem("lodestone_enrich_provider") || "").trim();
+  if (p) return { provider: p, model: (localStorage.getItem("lodestone_enrich_model") || "").trim() || null };
+  return { provider: $("#provider").value, model: $("#modelName").value.trim() || null };
+}
+
+async function loadEnrichCap() {
+  const inp = $("#enrichCap"); if (!inp) return;
+  try {
+    const c = await api("/api/brain/enrich/config");
+    inp.value = c.cap;
+    const note = $("#enrichCapNote");
+    if (note) note.textContent = `${c.remaining} queued`;
+  } catch (_) {}
+  const btn = $("#enrichCapSave");
+  if (btn && !btn._wired) {
+    btn._wired = 1;
+    btn.onclick = async () => {
+      const cap = Math.max(0, parseInt(inp.value, 10) || 0);
+      btn.disabled = true;
+      try {
+        const r = await api("/api/brain/enrich/config", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cap }) });
+        const note = $("#enrichCapNote");
+        if (note) note.textContent = `${r.remaining} queued`;
+        toast(cap ? `Enriching recent ${cap} per bulk source` : "Enriching all items");
+      } catch (e) { toast("couldn't save"); }
+      btn.disabled = false;
+    };
+  }
 }
 
 async function selectAgent(id) {
@@ -1243,8 +1290,9 @@ function renderEnrich(s) {
   const eta = s.running && s.remaining > 0 && rate > 0 ? ` · ~${fmtEta(s.remaining / rate)} left` : "";
   const tok = LOCAL[s.provider] ? "local · free"
     : (s.tokens ? `${fmtTokens(s.tokens_in)}↑ ${fmtTokens(s.tokens_out)}↓ tokens${s.estimated ? " (est)" : ""}` : "");
+  const capNote = s.cap ? ` · recent ${s.cap}/bulk source` : "";
   if (meta) meta.innerHTML =
-    `${(s.processed || 0).toLocaleString()} of ${total.toLocaleString()} memories · +${s.entities || 0} entities · +${s.facts || 0} facts${eta}` + (tok ? `<br>${tok}` : "");
+    `${(s.processed || 0).toLocaleString()} of ${total.toLocaleString()} memories${capNote} · +${s.entities || 0} entities · +${s.facts || 0} facts${eta}` + (tok ? `<br>${tok}` : "");
   if (foundEl && s.found && s.found.length)
     foundEl.innerHTML = s.found.map((f) => `<span class="ep-chip ${f.type}">${esc(f.name)}</span>`).join("");
 }
@@ -1264,7 +1312,8 @@ function pollEnrich() {
     return;
   }
   // Warn before spending real tokens on a big queue with a metered cloud model.
-  const prov = $("#provider").value;
+  const em = enrichModel();
+  const prov = em.provider;
   if (!FREE_PROVIDERS[prov]) {
     let remaining = 0;
     try { remaining = (await api("/api/brain/enrich/status")).remaining || 0; } catch (_) {}
@@ -1286,8 +1335,7 @@ function pollEnrich() {
   try {
     await api("/api/brain/enrich/start", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "enrich", provider: $("#provider").value,
-        model: $("#modelName").value.trim() || null }) });
+      body: JSON.stringify({ provider: em.provider, model: em.model }) });
   } catch (e) {
     const st = $("#epState"); if (st) { st.textContent = "Couldn't start — check Model."; st.classList.add("done"); }
     eb.classList.remove("running"); eb.textContent = "Enrich with AI"; return;

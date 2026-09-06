@@ -380,19 +380,28 @@ def agent_welcome(agent_id: str, body: ChatIn | None = None):
         return {"reply": _fallback_welcome(agent.name)}
 
 
+class EnrichIn(BaseModel):
+    # A dedicated ENRICHMENT model, independent of the chat/agent model — the UI can
+    # point enrichment at a cheap/local model while agents use a stronger one.
+    provider: str | None = None
+    model: str | None = None
+
+
 @app.post("/api/brain/enrich")
-def brain_enrich(body: ChatIn | None = None):
+def brain_enrich(body: EnrichIn | None = None):
     """One small batch (kept for compatibility / manual stepping)."""
-    provider = body.provider if body else None
-    return get_brain().enrich(limit=8, provider_name=provider)
+    p = body.provider if body else None
+    m = body.model if body else None
+    return get_brain().enrich(limit=8, provider_name=p, model_name=m)
 
 
 @app.post("/api/brain/enrich/start")
-def brain_enrich_start(body: ChatIn | None = None):
+def brain_enrich_start(body: EnrichIn | None = None):
     """Start (or return) a SERVER-SIDE enrichment job that drains the queue in the
     background — so a frontend refresh reconnects to it instead of stopping it."""
-    provider = body.provider if body else None
-    return get_brain().start_enrich(provider_name=provider)
+    p = body.provider if body else None
+    m = body.model if body else None
+    return get_brain().start_enrich(provider_name=p, model_name=m)
 
 
 @app.post("/api/brain/enrich/stop")
@@ -403,6 +412,24 @@ def brain_enrich_stop():
 @app.get("/api/brain/enrich/status")
 def brain_enrich_status():
     return get_brain().enrich_status()
+
+
+class EnrichCapIn(BaseModel):
+    cap: int = Field(ge=0, le=100000)
+
+
+@app.get("/api/brain/enrich/config")
+def brain_enrich_config():
+    b = get_brain()
+    return {"cap": b.enrich_cap(), "remaining": b._queue_count(),
+            "full_sources": list(b._FULL_SOURCES)}
+
+
+@app.post("/api/brain/enrich/config")
+def brain_set_enrich_config(body: EnrichCapIn):
+    """Cap how many of the most-recent items PER BULK SOURCE (Gmail, Drive, …) get
+    LLM-enriched. 0 = unlimited. High-signal sources are always enriched in full."""
+    return get_brain().set_enrich_cap(body.cap)
 
 
 @app.get("/api/usage")

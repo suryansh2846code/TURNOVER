@@ -34,6 +34,20 @@ own model. Everything runs and stays on the user's machine.
   `GET /api/brain/enrich/status`) so a frontend refresh reconnects instead of
   killing it. `rebuild_graph()` clears the graph + re-queues everything. Never
   gate the graph on a hard-coded source allowlist — it's content-based & general.
+  - **Recent-N cap (bulk sources):** the LLM enrich queue caps each BULK source
+    (anything not in `Brain._FULL_SOURCES` = notes/agent/manual/notion/gcal) to its
+    most-recent N items (`Brain.enrich_cap()`, default 100, stored in `meta.enrich_cap`,
+    0 = unlimited) via a window-function query in `store.list_ungraphed/count_ungraphed`
+    (`cap`/`full` args). High-signal sources always enrich in full. This is the
+    dominant cost/time control — a first sync won't LLM-enrich thousands of old emails.
+    `GET/POST /api/brain/enrich/config {cap}`; UI control in the Model drawer. The free
+    heuristic pass is NOT capped (it drains everything so nothing is orphaned).
+  - **Separate enrichment model:** enrichment can use a different provider/model from
+    chat/agents — threaded as `model_name` through `enrich`/`start_enrich`/`extract_llm`.
+    Client stores `lodestone_enrich_provider`/`lodestone_enrich_model` in localStorage
+    (empty = "same as agent model", see `enrichModel()` in app.js); sent in the
+    `/api/brain/enrich/start` body (`EnrichIn`). Lets users point enrichment at a
+    cheap/local model while agents run a stronger one.
 - **Token usage** (`lodestone/usage.py`): every model call via `get_provider()` is
   wrapped to record input/output tokens (estimated from length when the provider
   doesn't report), persisted in the `meta` table so it survives restarts/port

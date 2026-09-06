@@ -187,13 +187,31 @@ class MemoryStore:
     # graphed levels: 0 = untouched · 1 = heuristic pass done (auto, free) ·
     #                 2 = LLM-enriched (rich). Heuristic queue = graphed<1,
     #                 LLM queue = graphed<2 (so the LLM can upgrade heuristic work).
-    def list_ungraphed(self, limit: int = 40, below: int = 2) -> list[Memory]:
-        rows = self._conn.execute(
-            "SELECT * FROM memories WHERE graphed<? ORDER BY created_at DESC LIMIT ?",
-            (below, limit)).fetchall()
+    def _cap_cte(self, below: int, cap: int, full: tuple) -> tuple[str, list]:
+        """Subquery that caps bulk sources to their most-recent `cap` memories,
+        while `full` sources (calendar/notes…) are always included in full."""
+        ph = ",".join("?" for _ in full) or "''"
+        sql = (f"SELECT * FROM (SELECT *, CASE WHEN source IN ({ph}) THEN 0 ELSE "
+               "ROW_NUMBER() OVER (PARTITION BY source ORDER BY created_at DESC) END AS rn "
+               "FROM memories WHERE graphed<?) WHERE rn<=?")
+        return sql, [*full, below, cap]
+
+    def list_ungraphed(self, limit: int = 40, below: int = 2,
+                       cap: int = 0, full: tuple = ()) -> list[Memory]:
+        if cap and cap > 0:
+            sub, args = self._cap_cte(below, cap, full)
+            rows = self._conn.execute(
+                f"{sub} ORDER BY created_at DESC LIMIT ?", (*args, limit)).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM memories WHERE graphed<? ORDER BY created_at DESC LIMIT ?",
+                (below, limit)).fetchall()
         return [_row_to_memory(r) for r in rows]
 
-    def count_ungraphed(self, below: int = 2) -> int:
+    def count_ungraphed(self, below: int = 2, cap: int = 0, full: tuple = ()) -> int:
+        if cap and cap > 0:
+            sub, args = self._cap_cte(below, cap, full)
+            return self._conn.execute(f"SELECT COUNT(*) AS c FROM ({sub})", args).fetchone()["c"]
         return self._conn.execute(
             "SELECT COUNT(*) AS c FROM memories WHERE graphed<?", (below,)).fetchone()["c"]
 
