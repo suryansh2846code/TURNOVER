@@ -74,12 +74,6 @@ class Brain:
         Gmail, Drive, Notion, custom apps…), batching short memories into one call
         to keep it cheap; falls back to the offline heuristic. Incremental: call
         repeatedly (the scheduler does) until `remaining` is 0."""
-        mems = self.store.list_ungraphed(limit=limit)
-        if not mems:
-            return {"processed": 0, "entities": 0, "facts": 0, "remaining": 0,
-                    "tokens_in": 0, "tokens_out": 0, "tokens": 0,
-                    "tokens_estimated": False, "provider": None,
-                    "found": [], "sources": {}}
         use_llm = False
         if not fast:
             try:
@@ -89,6 +83,17 @@ class Brain:
                 use_llm = p.name != "mock" and p.is_ready()[0]
             except Exception:
                 use_llm = False
+        # heuristic (auto/free) only touches untouched memories → graphed=1; the LLM
+        # pass works the whole queue (graphed<2) so it can upgrade heuristic results.
+        level = 2 if use_llm else 1
+        below = 2 if use_llm else 1
+        mems = self.store.list_ungraphed(limit=limit, below=below)
+        if not mems:
+            return {"processed": 0, "entities": 0, "facts": 0,
+                    "remaining": self.store.count_ungraphed(below=2),
+                    "tokens_in": 0, "tokens_out": 0, "tokens": 0,
+                    "tokens_estimated": False, "provider": None,
+                    "found": [], "sources": {}}
         ents = facts = 0
         tok_in = tok_out = 0
         est = False
@@ -143,17 +148,22 @@ class Brain:
                 blen += len(ct)
             flush()
         else:
+            # Heuristic auto pass: only extract from HIGH-SIGNAL sources (calendar,
+            # notes, notion, agent, prose files). Bulk Gmail/Drive is left for the
+            # LLM (extracting it heuristically just makes doc-heading junk). Non-
+            # high-signal memories are still marked done so they don't re-queue here.
             for m in mems:
-                ct = extractor.clean_for_extraction(m.text)
-                if extractor.is_graphable(ct):
-                    data = extractor.extract_heuristic(ct)
-                    _collect(data, m)
-                    e, f = self._apply_graph(data, m.id)
-                    ents += e
-                    facts += f
+                if self._auto_graphable(m):
+                    ct = extractor.clean_for_extraction(m.text)
+                    if extractor.is_graphable(ct):
+                        data = extractor.extract_heuristic(ct)
+                        _collect(data, m)
+                        e, f = self._apply_graph(data, m.id)
+                        ents += e
+                        facts += f
                 done.append(m.id)
 
-        self.store.mark_graphed(done)
+        self.store.mark_graphed(done, level=level)
         # de-dup found names, keep the most recent handful for the live feed
         seen, uniq = set(), []
         for f in reversed(found):
@@ -163,10 +173,19 @@ class Brain:
             if len(uniq) >= 12:
                 break
         return {"processed": len(done), "entities": ents, "facts": facts,
-                "remaining": self.store.count_ungraphed(),
+                "remaining": self.store.count_ungraphed(below=2),
                 "tokens_in": tok_in, "tokens_out": tok_out,
                 "tokens": tok_in + tok_out, "tokens_estimated": est, "provider": prov,
                 "found": uniq, "sources": sources}
+
+    def _auto_graphable(self, mem) -> bool:
+        """High-signal sources the free heuristic may graph (short/structured/curated).
+        Bulk Gmail (HTML) and Drive docs are excluded — only the LLM graphs those."""
+        if mem.source in {"notes", "agent", "manual", "notion", "gcal"}:
+            return True
+        if mem.uri and mem.uri.lower().endswith(self._PROSE_EXT):
+            return True
+        return mem.kind in {"note", "fact"}
 
     def _graph_from(self, text: str, mem_id: str, fast: bool = False) -> tuple[int, int]:
         data = (extractor.extract_heuristic(text) if fast

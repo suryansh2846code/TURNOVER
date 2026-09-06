@@ -184,23 +184,26 @@ class MemoryStore:
         return self._conn.execute("SELECT COUNT(*) AS c FROM memories").fetchone()["c"]
 
     # ── knowledge-graph enrichment queue ─────────────────────────────────
-    def list_ungraphed(self, limit: int = 40) -> list[Memory]:
-        """Memories not yet processed by the graph enricher, newest first."""
+    # graphed levels: 0 = untouched · 1 = heuristic pass done (auto, free) ·
+    #                 2 = LLM-enriched (rich). Heuristic queue = graphed<1,
+    #                 LLM queue = graphed<2 (so the LLM can upgrade heuristic work).
+    def list_ungraphed(self, limit: int = 40, below: int = 2) -> list[Memory]:
         rows = self._conn.execute(
-            "SELECT * FROM memories WHERE graphed=0 ORDER BY created_at DESC LIMIT ?",
-            (limit,)).fetchall()
+            "SELECT * FROM memories WHERE graphed<? ORDER BY created_at DESC LIMIT ?",
+            (below, limit)).fetchall()
         return [_row_to_memory(r) for r in rows]
 
-    def count_ungraphed(self) -> int:
+    def count_ungraphed(self, below: int = 2) -> int:
         return self._conn.execute(
-            "SELECT COUNT(*) AS c FROM memories WHERE graphed=0").fetchone()["c"]
+            "SELECT COUNT(*) AS c FROM memories WHERE graphed<?", (below,)).fetchone()["c"]
 
-    def mark_graphed(self, ids: list[str]) -> None:
+    def mark_graphed(self, ids: list[str], level: int = 1) -> None:
         if not ids:
             return
         with self._lock:
             self._conn.executemany(
-                "UPDATE memories SET graphed=1 WHERE id=?", [(i,) for i in ids])
+                "UPDATE memories SET graphed=? WHERE id=? AND graphed<?",
+                [(level, i, level) for i in ids])
             self._conn.commit()
 
     def reset_graphed(self) -> None:
