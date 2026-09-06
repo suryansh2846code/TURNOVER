@@ -72,7 +72,8 @@ class Brain:
         if not mems:
             return {"processed": 0, "entities": 0, "facts": 0, "remaining": 0,
                     "tokens_in": 0, "tokens_out": 0, "tokens": 0,
-                    "tokens_estimated": False, "provider": None}
+                    "tokens_estimated": False, "provider": None,
+                    "found": [], "sources": {}}
         use_llm = False
         if not fast:
             try:
@@ -87,10 +88,21 @@ class Brain:
         est = False
         prov = None
         done: list[str] = []
+        found: list[dict] = []          # names/types found this call (for live UI)
+        sources: dict = {}
+
+        def _collect(data, mem):
+            for e in data.get("entities", []):
+                if e.get("name") and extractor.is_good_entity(e["name"]):
+                    found.append({"name": extractor._clean_name(e["name"]),
+                                  "type": e.get("type", "thing")})
+            if mem is not None:
+                sources[mem.source] = sources.get(mem.source, 0) + 1
 
         if use_llm:
             batch: list[str] = []
             batch_ids: list[str] = []
+            batch_mems: list = []
             blen = 0
 
             def flush():
@@ -104,12 +116,14 @@ class Brain:
                 if u:
                     tok_in += u["in"]; tok_out += u["out"]
                     est = est or u["est"]; prov = u["provider"]
+                _collect(data, None)
+                for bm in batch_mems:
+                    sources[bm.source] = sources.get(bm.source, 0) + 1
                 e, f = self._apply_graph(data, batch_ids[0])
                 ents += e
                 facts += f
                 done.extend(batch_ids)
-                batch.clear()
-                batch_ids.clear()
+                batch.clear(); batch_ids.clear(); batch_mems.clear()
                 blen = 0
 
             for m in mems:
@@ -119,24 +133,34 @@ class Brain:
                     continue
                 if batch and blen + len(ct) > 3500:
                     flush()
-                batch.append(ct)
-                batch_ids.append(m.id)
+                batch.append(ct); batch_ids.append(m.id); batch_mems.append(m)
                 blen += len(ct)
             flush()
         else:
             for m in mems:
                 ct = extractor.clean_for_extraction(m.text)
                 if extractor.is_graphable(ct):
-                    e, f = self._graph_from(ct, m.id, fast=True)
+                    data = extractor.extract_heuristic(ct)
+                    _collect(data, m)
+                    e, f = self._apply_graph(data, m.id)
                     ents += e
                     facts += f
                 done.append(m.id)
 
         self.store.mark_graphed(done)
+        # de-dup found names, keep the most recent handful for the live feed
+        seen, uniq = set(), []
+        for f in reversed(found):
+            k = f["name"].lower()
+            if k and k not in seen:
+                seen.add(k); uniq.append(f)
+            if len(uniq) >= 12:
+                break
         return {"processed": len(done), "entities": ents, "facts": facts,
                 "remaining": self.store.count_ungraphed(),
                 "tokens_in": tok_in, "tokens_out": tok_out,
-                "tokens": tok_in + tok_out, "tokens_estimated": est, "provider": prov}
+                "tokens": tok_in + tok_out, "tokens_estimated": est, "provider": prov,
+                "found": uniq, "sources": sources}
 
     def _graph_from(self, text: str, mem_id: str, fast: bool = False) -> tuple[int, int]:
         data = (extractor.extract_heuristic(text) if fast

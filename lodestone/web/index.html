@@ -206,7 +206,13 @@
           <button id="enrichBtn" class="tiny" title="Use your connected AI model to re-read your memories and pull out clean, precise people / orgs / projects and real facts. Runs in batches with progress; uses model tokens.">Enrich with AI</button>
           <button id="rebuildBtn" class="tiny ghost" title="Wipe the graph (your memories are kept) and re-extract it with the free offline extractor — clears old junk, no AI tokens.">Clean up</button>
         </span></div>
-      <div id="enrichStatus" class="model-hint"></div>
+      <div id="enrichPanel" class="enrich-panel" hidden>
+        <div class="ep-bar"><div class="ep-fill" id="epFill"></div></div>
+        <div class="ep-line"><span id="epState">Analyzing your memories…</span><b id="epPct">0%</b></div>
+        <div class="ep-meta" id="epMeta"></div>
+        <div class="ep-found" id="epFound"></div>
+        <div class="ep-tip" id="epTip"></div>
+      </div>
       <div id="entities" class="entities"></div>
       <div class="bs-side-label">Teach the brain</div>
       <div class="addbox">

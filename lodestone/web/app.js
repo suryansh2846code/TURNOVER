@@ -1181,47 +1181,71 @@ $("#bsClose").onclick = closeBrainScreen;
 // queue drains, showing live progress. General across any connector's content.
 let _enriching = false;
 function fmtTokens(n) { return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n); }
+function fmtEta(sec) { sec = Math.round(sec); if (sec < 60) return sec + "s"; const m = Math.round(sec / 60); return m < 60 ? m + "m" : Math.round(m / 60) + "h"; }
+const ENRICH_TIPS = [
+  "Entities are pulled from your emails, docs, notes & calendar.",
+  "Click any entity in the list to see the facts behind it.",
+  "Bounce emails, boilerplate & encoded junk are filtered out.",
+  "The model types every entity — person, org, project or tool.",
+  "‘Clean up’ resets the graph; ‘Enrich with AI’ makes it precise.",
+  "It runs batch by batch — you can Stop anytime and resume later.",
+  "Everything runs on your device — nothing leaves your Mac.",
+];
 { const eb = $("#enrichBtn"); if (eb) eb.onclick = async () => {
-  if (_enriching) {                       // second click → stop after this batch
-    _enriching = false; eb.textContent = "Stopping…"; return;
-  }
-  // start: show the running state immediately (before the first slow batch)
-  _enriching = true; eb.classList.add("running");
-  eb.style.setProperty("--p", "4%"); eb.textContent = "Starting…";
-  const st = $("#enrichStatus");
+  if (_enriching) { _enriching = false; eb.textContent = "Stopping…"; return; }
+  _enriching = true; eb.classList.add("running"); eb.textContent = "Starting…"; eb.style.setProperty("--p", "3%");
+  const panel = $("#enrichPanel"), bar = panel && panel.querySelector(".ep-bar");
+  const fill = $("#epFill"), state = $("#epState"), pctEl = $("#epPct"),
+        meta = $("#epMeta"), foundEl = $("#epFound"), tipEl = $("#epTip");
+  if (panel) panel.hidden = false;
   const LOCAL = { ollama: 1, "claude-code": 1, subscription: 1, mock: 1 };
-  let total = 0, gEnt = 0, gFact = 0, tin = 0, tout = 0, est = false, prov = "";
-  const setP = (p) => eb.style.setProperty("--p", p + "%");
-  const summary = () => {
-    const tok = tin + tout;
-    const cost = (prov && LOCAL[prov]) ? " · local · free"
-      : (tok ? ` · ${fmtTokens(tin)} in / ${fmtTokens(tout)} out${est ? " (est)" : ""}` : "");
-    return `+${gEnt} entities · +${gFact} facts${cost}`;
-  };
+  const t0 = Date.now();
+  let processed = 0, remaining = 0, gEnt = 0, gFact = 0, tin = 0, tout = 0, est = false, prov = "", tip = 0;
+  const rotateTip = () => { if (tipEl) tipEl.textContent = "Tip — " + ENRICH_TIPS[tip++ % ENRICH_TIPS.length]; };
+  rotateTip();
   try {
     while (_enriching) {
+      if (state) { state.textContent = `Reading your memories${prov ? " with " + prov : ""}…`; state.classList.remove("done"); }
+      if (bar) bar.classList.add("working");
       let r;
       try {
         r = await api("/api/brain/enrich", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: "enrich", provider: $("#provider").value,
             model: $("#modelName").value.trim() || null }) });
-      } catch (e) { if (st) st.textContent = "△ " + e + " — check your model in Model."; break; }
-      if (total === 0) total = Math.max(1, r.remaining + r.processed);
+      } catch (e) {
+        if (bar) bar.classList.remove("working");
+        if (state) { state.textContent = "Couldn't reach the model — check Model."; state.classList.add("done"); }
+        break;
+      }
+      if (bar) bar.classList.remove("working");
+      processed += r.processed; remaining = r.remaining;
       gEnt += r.entities; gFact += r.facts; tin += r.tokens_in || 0; tout += r.tokens_out || 0;
       est = est || r.tokens_estimated; prov = r.provider || prov;
-      const done = Math.max(0, total - r.remaining);
-      const pct = Math.min(100, Math.round(done / total * 100));
-      setP(pct);
-      if (_enriching) eb.textContent = `Stop · ${pct}%`;
-      if (st) st.textContent = `${pct}% · ${summary()} · ${r.remaining.toLocaleString()} left`;
+      const totalKnown = processed + remaining;
+      const pct = totalKnown ? Math.min(100, Math.round(processed / totalKnown * 100)) : 0;
+      if (fill) fill.style.width = pct + "%"; if (pctEl) pctEl.textContent = pct + "%";
+      eb.style.setProperty("--p", pct + "%"); eb.textContent = _enriching ? `Stop · ${pct}%` : "Stopping…";
+      const sec = (Date.now() - t0) / 1000, rate = processed / Math.max(1, sec);
+      const eta = remaining > 0 && rate > 0 ? ` · ~${fmtEta(remaining / rate)} left` : "";
+      const tok = LOCAL[prov] ? "local · free"
+        : `${fmtTokens(tin)}↑ ${fmtTokens(tout)}↓ tokens${est ? " (est)" : ""}`;
+      const src = r.sources && Object.keys(r.sources).length ? " · from " + Object.keys(r.sources).join(", ") : "";
+      if (state) state.textContent = `Enriching with ${prov || "AI"}`;
+      if (meta) meta.innerHTML =
+        `${processed.toLocaleString()} of ${totalKnown.toLocaleString()} memories · +${gEnt} entities · +${gFact} facts${eta}<br>${tok}${src}`;
+      if (foundEl && r.found && r.found.length)
+        foundEl.innerHTML = r.found.map((f) => `<span class="ep-chip ${f.type}">${esc(f.name)}</span>`).join("");
+      rotateTip();
       loadBrain(); _bsRefresh();
       if (r.remaining === 0 || r.processed === 0) {
-        setP(100); if (st) st.textContent = `Done · ${summary()}`; break;
+        if (fill) fill.style.width = "100%"; if (pctEl) pctEl.textContent = "100%";
+        if (state) { state.textContent = `Fully enriched · +${gEnt} entities`; state.classList.add("done"); }
+        break;
       }
     }
-    if (!_enriching && st) st.textContent = `Stopped · ${summary()}`;
-  } finally { _enriching = false; eb.classList.remove("running"); setP(0); eb.textContent = "Enrich with AI"; }
+    if (!_enriching && state) { state.textContent = `Stopped · +${gEnt} entities · +${gFact} facts`; state.classList.add("done"); }
+  } finally { _enriching = false; eb.classList.remove("running"); eb.style.setProperty("--p", "0%"); eb.textContent = "Enrich with AI"; }
 }; }
 $("#bsSync").onclick = async () => {
   try { const r = await api("/api/sync/now", { method: "POST" });
