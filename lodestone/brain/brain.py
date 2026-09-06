@@ -142,7 +142,7 @@ class Brain:
                 if not extractor.is_graphable(ct):
                     done.append(m.id)          # nothing to graph — mark handled
                     continue
-                if batch and blen + len(ct) > 3500:
+                if batch and blen + len(ct) > 7000:   # bigger batches → fewer LLM calls
                     flush()
                 batch.append(ct); batch_ids.append(m.id); batch_mems.append(m)
                 blen += len(ct)

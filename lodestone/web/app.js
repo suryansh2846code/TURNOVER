@@ -1187,10 +1187,12 @@ const ENRICH_TIPS = [
   "Click any entity in the list to see the facts behind it.",
   "Bounce emails, boilerplate & encoded junk are filtered out.",
   "The model types every entity — person, org, project or tool.",
-  "‘Clean up’ resets the graph; ‘Enrich with AI’ makes it precise.",
+  "Extraction is simple — a small model (Haiku, gpt-4o-mini) is plenty.",
+  "Local models (Ollama) or your Claude subscription do this for free.",
   "It runs batch by batch — you can Stop anytime and resume later.",
-  "Everything runs on your device — nothing leaves your Mac.",
 ];
+// providers with no per-token API cost (free to enrich with)
+const FREE_PROVIDERS = { ollama: 1, "claude-code": 1, subscription: 1, mock: 1 };
 // ── model token usage (persisted server-side) ──────────────────────────────
 async function updateUsage() {
   const box = $("#usageBox"); if (!box) return;
@@ -1260,6 +1262,23 @@ function pollEnrich() {
     eb.textContent = "Stopping…";
     try { await api("/api/brain/enrich/stop", { method: "POST" }); } catch (e) {}
     return;
+  }
+  // Warn before spending real tokens on a big queue with a metered cloud model.
+  const prov = $("#provider").value;
+  if (!FREE_PROVIDERS[prov]) {
+    let remaining = 0;
+    try { remaining = (await api("/api/brain/enrich/status")).remaining || 0; } catch (_) {}
+    if (remaining > 150) {
+      const estTok = remaining * 500;   // rough: ~0.5k tokens per memory
+      const ok = confirm(
+        `Enrich ~${remaining.toLocaleString()} memories with “${prov}” (a metered cloud model)?\n\n`
+        + `This can use a LOT of tokens — very roughly ~${fmtTokens(estTok)} — and may cost money.\n\n`
+        + `Extraction is a simple task, so this is a better fit for a FREE model:\n`
+        + `  • a local model (Ollama), or your Claude subscription/CLI — free\n`
+        + `  • or a small cheap model (Haiku, gpt-4o-mini)\n\n`
+        + `You can Stop anytime. Continue with ${prov}?`);
+      if (!ok) return;
+    }
   }
   eb.classList.add("running"); eb.textContent = "Starting…"; eb.style.setProperty("--p", "3%");
   if ($("#enrichPanel")) $("#enrichPanel").hidden = false;
