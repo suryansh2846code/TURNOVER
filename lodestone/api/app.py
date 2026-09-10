@@ -183,6 +183,10 @@ def brain_reset(body: ResetIn | None = None):
     out: dict[str, Any] = {}
     if body.memories:
         out.update(get_brain().reset())
+        try:
+            out["canonical"] = _canon().reset()
+        except Exception:
+            pass
     if body.secrets:
         cleared = []
         for name, cls in REGISTRY.items():
@@ -501,6 +505,66 @@ def ingest(body: IngestIn):
 def recall(body: ChatIn):
     return get_brain().recall(body.message)
 
+# ── Brain v1.5 Open Loops, Inspection, Contradictions, and Evaluation ───────
+class OpenLoopIn(BaseModel):
+    description: str
+    due_at: str | None = None
+    priority: str = "medium"
+    related_project: str | None = None
+    related_entities: list[str] = []
+
+@app.get("/api/brain/open-loops")
+def get_open_loops(status: str | None = "open", project: str | None = None):
+    return {"open_loops": get_brain().get_open_loops(status=status, related_project=project)}
+
+@app.post("/api/brain/open-loops")
+def create_open_loop(body: OpenLoopIn):
+    loop = get_brain().create_open_loop(
+        description=body.description,
+        due_at=body.due_at,
+        priority=body.priority,
+        related_project=body.related_project,
+        related_entities=body.related_entities,
+    )
+    return {"open_loop": loop}
+
+@app.post("/api/brain/open-loops/{loop_id}/complete")
+def complete_open_loop(loop_id: str):
+    done = get_brain().complete_open_loop(loop_id)
+    if not done:
+        raise HTTPException(404, "open loop not found")
+    return {"open_loop": done}
+
+@app.get("/api/brain/memories/{memory_id}")
+def get_memory(memory_id: str):
+    mem = get_brain().inspect_memory(memory_id)
+    if not mem:
+        raise HTTPException(404, "memory not found")
+    return {"memory": mem}
+
+@app.get("/api/brain/memories/{memory_id}/explain")
+def explain_memory(memory_id: str, q: str = ""):
+    exp = get_brain().explain_memory(memory_id, query=q)
+    if "error" in exp:
+        raise HTTPException(404, exp["error"])
+    return exp
+
+@app.get("/api/brain/contradictions")
+def get_contradictions():
+    return {"contradictions": get_brain().detect_contradictions()}
+
+class ResolveConflictIn(BaseModel):
+    conflict: dict[str, Any]
+    auto_supersede: bool = True
+
+@app.post("/api/brain/contradictions/resolve")
+def resolve_contradiction(body: ResolveConflictIn):
+    return get_brain().resolve_contradiction(body.conflict, auto_supersede=body.auto_supersede)
+
+@app.get("/api/brain/evaluate")
+def evaluate_brain():
+    return get_brain().evaluate_quality()
+
 @app.get("/api/brain/export")
 def brain_export():
     """Download the whole brain as a portable JSON backup (you own your data)."""
@@ -521,6 +585,77 @@ class ImportIn(BaseModel):
 def brain_import(body: ImportIn):
     """Restore memories from an exported backup. Idempotent (dedup)."""
     return get_brain().import_data(body.model_dump())
+
+
+# ── canonical Brain (curated, source-backed model of the user) ─────────────
+def _canon():
+    from ..brain.canonical import get_canonical
+    return get_canonical()
+
+
+class RememberIn(BaseModel):
+    text: str
+    provider: str | None = None
+    model: str | None = None
+
+
+@app.get("/api/brain/canonical")
+def canonical_overview():
+    """The four user-visible sections + stats."""
+    cb = _canon()
+    return {
+        "stats": cb.stats(),
+        "about_you": cb.about_you(),
+        "people": cb.people(),
+        "work": cb.work(),
+        "timeline": cb.timeline(limit=100),
+    }
+
+@app.post("/api/brain/canonical/remember")
+def canonical_remember(body: RememberIn):
+    """Explicit 'remember this' → candidate → trust rules → canonical."""
+    return _canon().remember(body.text, provider_name=body.provider,
+                             model_name=body.model)
+
+@app.get("/api/brain/canonical/review")
+def canonical_review():
+    return {"pending": _canon().pending()}
+
+@app.post("/api/brain/canonical/review/{candidate_id}/approve")
+def canonical_approve(candidate_id: str):
+    return _canon().approve(candidate_id)
+
+class RejectIn(BaseModel):
+    reason: str = ""
+
+@app.post("/api/brain/canonical/review/{candidate_id}/reject")
+def canonical_reject(candidate_id: str, body: RejectIn):
+    return _canon().reject(candidate_id, body.reason)
+
+@app.post("/api/brain/canonical/maintain")
+def canonical_maintain():
+    """Freshness maintenance pass (mark aging/stale current claims)."""
+    return _canon().maintain()
+
+@app.post("/api/brain/canonical/export")
+def canonical_export():
+    """Regenerate the Markdown/JSON mirror under ~/Library/Lodestone/brain-export."""
+    return _canon().export()
+
+@app.get("/api/brain/canonical/evaluate")
+def canonical_evaluate(k: int = 5):
+    return _canon().evaluate(k=k)
+
+# NOTE: keep this parametrized GET last — it must not shadow the specific
+# /review and /evaluate GET routes above.
+@app.get("/api/brain/canonical/{section}")
+def canonical_section(section: str):
+    cb = _canon()
+    fn = {"about_you": cb.about_you, "people": cb.people,
+          "work": cb.work, "timeline": cb.timeline}.get(section)
+    if not fn:
+        raise HTTPException(404, f"unknown section '{section}'")
+    return {"section": section, "records": fn()}
 
 
 # ── models & connectors ───────────────────────────────────────────────────

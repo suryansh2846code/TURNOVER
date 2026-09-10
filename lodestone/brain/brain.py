@@ -34,7 +34,20 @@ class Brain:
                title: str | None = None, uri: str | None = None,
                build_graph: bool = True, fast: bool = False,
                event_date: str | None = None, metadata: dict | None = None,
-               tags=None) -> dict[str, Any]:
+               tags=None,
+               # Brain v1.5 parameters
+               memory_type: str | None = None,
+               source_id: str | None = None,
+               event_time: str | None = None,
+               valid_from: str | None = None,
+               valid_until: str | None = None,
+               importance: float | None = None,
+               confidence: float | None = None,
+               reinforcement_count: int = 0,
+               status: str = "active",
+               extraction_method: str = "direct",
+               supersedes_id: str | None = None,
+               evidence: str | None = None) -> dict[str, Any]:
         """Ingest text into both the vector store and the knowledge graph.
 
         `fast=True` uses offline heuristic extraction only (no per-chunk LLM
@@ -45,16 +58,30 @@ class Brain:
         entities = 0
         facts = 0
         graphed_ids: list[str] = []
+        added_ids: list[str] = []
         for i, chunk in enumerate(chunk_text(text)):
             mem = self.store.add(
                 text=chunk, source=source, kind=kind,
                 title=title if i == 0 else f"{title} (part {i+1})" if title else None,
                 uri=uri, tags=tags or [], event_date=event_date,
                 metadata=metadata,
+                memory_type=memory_type,
+                source_id=source_id,
+                event_time=event_time,
+                valid_from=valid_from,
+                valid_until=valid_until,
+                importance=importance,
+                confidence=confidence,
+                reinforcement_count=reinforcement_count,
+                status=status,
+                extraction_method=extraction_method,
+                supersedes_id=supersedes_id,
+                evidence=evidence,
             )
             if not mem:
                 continue
             added_mem += 1
+            added_ids.append(mem.id)
             if build_graph:
                 # immediate heuristic graph for curated/interactive content; mark
                 # done so the background LLM enricher doesn't double-count it.
@@ -64,7 +91,7 @@ class Brain:
                 graphed_ids.append(mem.id)
         if graphed_ids:
             self.store.mark_graphed(graphed_ids)
-        return {"memories": added_mem, "entities": entities, "facts": facts}
+        return {"memories": added_mem, "entities": entities, "facts": facts, "memory_ids": added_ids}
 
     # ── background enrichment: turn raw memories into a rich graph ───────────
     def enrich(self, limit: int = 40, provider_name: str | None = None,
@@ -374,8 +401,10 @@ class Brain:
         return ""
 
     def recall(self, query: str, *, limit: int = 8, max_tokens: int = 1400,
-               source: str | None = None, prefer: list[str] | None = None) -> dict[str, Any]:
-        """Fuse graph + vector recall into an injectable context block.
+               source: str | None = None, prefer: list[str] | None = None,
+               include_superseded: bool | None = None,
+               include_open_loops: bool = True) -> dict[str, Any]:
+        """Fuse graph + vector recall + open loops + canonical into an injectable context block.
 
         If the query references a date/range ("emails on July 14", "last week"),
         recall is filtered to items whose real event_date falls in that range.
@@ -401,7 +430,8 @@ class Brain:
         eff_limit = 25 if dr else limit
         hits = self.store.search(
             query, limit=eff_limit, source=source, prefer=prefer,
-            date_start=date_start, date_end=date_end)
+            date_start=date_start, date_end=date_end,
+            include_superseded=include_superseded)
         ents = self.graph.match_entities(query, limit=4)
 
         graph_lines: list[str] = []
@@ -412,6 +442,32 @@ class Brain:
                 head += f": {e['summary']}"
             graph_lines.append(head)
             graph_lines += [f"    - {f}" for f in facts]
+
+        # Open loops: include active open commitments relevant to query or active projects
+        matching_loops = []
+        open_loop_lines: list[str] = []
+        if include_open_loops:
+            ql = query.lower()
+            if any(w in ql for w in ("completed", "finished")):
+                target_status = "completed"
+            elif any(w in ql for w in ("cancelled", "canceled", "abandoned")):
+                target_status = "cancelled"
+            elif any(w in ql for w in ("stale", "dormant")):
+                target_status = "stale"
+            else:
+                target_status = "active"
+
+            open_loops = self.store.list_open_loops(status=target_status, limit=15)
+            q_words = [w.lower() for w in query.split() if len(w) > 3]
+            is_task_query = any(k in ql for k in ("task", "pending", "loop", "todo", "waiting", "blocked", "open", "commit", "next", "what to do", "completed", "cancelled", "stale"))
+            for loop in open_loops:
+                desc_l = loop.description.lower()
+                proj_l = (loop.related_project or "").lower()
+                if is_task_query or any(w in desc_l or w in proj_l for w in q_words) or loop.priority in ("urgent", "high"):
+                    matching_loops.append(loop)
+            if not matching_loops and open_loops and target_status == "active":
+                matching_loops = open_loops[:3]
+            open_loop_lines = [l.as_context() for l in matching_loops[:5]]
 
         # For a dated query the user usually wants an OVERVIEW of that period, so
         # render each item compactly (so all of the day's emails fit) and widen
@@ -436,8 +492,20 @@ class Brain:
             kept.append(h)
 
         parts = []
-        if overview_block:                       # source listing first
+        # Canonical, evidence-backed facts lead the context — they win over raw
+        # memories. Never let a curation failure break plain retrieval.
+        canon = None
+        try:
+            from .canonical import get_canonical
+            canon = get_canonical().recall_block(query)
+        except Exception:
+            canon = None
+        if canon and canon.get("block"):
+            parts.append(canon["block"])
+        if overview_block:                       # source listing next
             parts.append(overview_block)
+        if open_loop_lines and not compact:
+            parts.append("ACTIVE OPEN LOOPS & COMMITMENTS:\n" + "\n".join(open_loop_lines))
         if graph_lines and not compact:
             parts.append("KNOWN ENTITIES & FACTS:\n" + "\n".join(graph_lines))
         if blocks:
@@ -467,10 +535,191 @@ class Brain:
             )
         return {
             "context": context,
-            "memory_hits": [{"score": h.score, **h.memory.model_dump()} for h in kept],
+            "memory_hits": [
+                {
+                    "score": h.score,
+                    "explanation": h.explanation.model_dump() if h.explanation else None,
+                    **h.memory.model_dump(),
+                }
+                for h in kept
+            ],
             "entities": ents,
+            "open_loops": [l.model_dump() for l in matching_loops],
             "date_range": dr,
             "fetched": fetched,
+            "canonical": canon,
+        }
+
+    # ── Brain v1.5 API Primitives ─────────────────────────────────────────
+    def remember(self, text: str, *, title: str | None = None,
+                 memory_type: str = "semantic", importance: float = 0.8,
+                 confidence: float = 0.95, valid_from: str | None = None,
+                 evidence: str | None = None, **kw) -> dict[str, Any]:
+        """Explicit entry point to store high-confidence user knowledge."""
+        source = kw.pop("source", "manual")
+        res = self.ingest(
+            text, source=source, kind="fact", title=title,
+            memory_type=memory_type, importance=importance, confidence=confidence,
+            valid_from=valid_from, extraction_method="user_statement",
+            evidence=evidence or "explicitly stated by user", **kw
+        )
+        if res.get("memory_ids"):
+            res["id"] = res["memory_ids"][0]
+        try:
+            from .canonical import get_canonical
+            cres = get_canonical().remember(text)
+            res["canonical"] = cres
+        except Exception:
+            pass
+        return res
+
+    def forget(self, memory_id: str, *, soft: bool = True) -> bool:
+        """Forget memory. soft=True marks as 'retracted' to preserve provenance."""
+        return self.store.delete(memory_id, soft=soft)
+
+    def update(self, memory_id: str, **fields: Any) -> Any:
+        return self.store.update(memory_id, **fields)
+
+    def reinforce(self, memory_id: str, count: int = 1) -> bool:
+        return self.store.reinforce(memory_id, count=count)
+
+    def supersede(self, old_id: str, new_text_or_id: str, **kwargs) -> dict[str, Any]:
+        """Supersede older knowledge with newer knowledge, keeping historical record."""
+        old_mem = self.store.get(old_id)
+        if not old_mem:
+            return {"ok": False, "error": "old memory not found"}
+
+        if self.store.get(new_text_or_id):
+            self.store.supersede(old_id, new_text_or_id)
+            return {"ok": True, "old_id": old_id, "new_id": new_text_or_id}
+
+        ing = self.ingest(
+            new_text_or_id,
+            source=kwargs.get("source", old_mem.source),
+            kind=kwargs.get("kind", old_mem.kind),
+            memory_type=kwargs.get("memory_type", old_mem.memory_type),
+            supersedes_id=old_id,
+            confidence=kwargs.get("confidence", 0.9),
+            importance=kwargs.get("importance", old_mem.importance),
+        )
+        new_hits = self.store.search(new_text_or_id[:60], limit=1)
+        new_id = new_hits[0].memory.id if new_hits else None
+        if new_id:
+            self.store.supersede(old_id, new_id)
+            return {"ok": True, "old_id": old_id, "new_id": new_id, "ingested": ing}
+        return {"ok": False, "error": "failed to ingest replacement"}
+
+    def get_entity(self, entity_id: str) -> dict | None:
+        return self.graph.get_entity(entity_id)
+
+    def list_entities(self, limit: int = 30) -> list[dict]:
+        return self.graph.top_entities(limit=limit)
+
+    def get_related(self, entity_id: str, limit: int = 10) -> list[dict]:
+        return self.graph.get_related(entity_id, limit=limit)
+
+    def create_open_loop(self, description: str, *, status: str = "open",
+                         priority: str = "medium", due_at: str | None = None,
+                         related_project: str | None = None,
+                         related_entities: list[str] | None = None,
+                         confidence: float = 0.8, source: str = "manual",
+                         metadata: dict | None = None) -> dict[str, Any]:
+        loop = self.store.add_open_loop(
+            description, status=status, priority=priority, due_at=due_at,
+            related_project=related_project, related_entities=related_entities,
+            confidence=confidence, source=source, metadata=metadata,
+        )
+        return loop.model_dump() if loop else {}
+
+    def get_open_loops(self, *, status: str | None = "open",
+                       related_project: str | None = None,
+                       limit: int = 50) -> list[dict[str, Any]]:
+        loops = self.store.list_open_loops(status=status, related_project=related_project, limit=limit)
+        return [l.model_dump() for l in loops]
+
+    def complete_open_loop(self, loop_id: str) -> dict[str, Any] | None:
+        done = self.store.complete_open_loop(loop_id)
+        return done.model_dump() if done else None
+
+    def update_open_loop(self, loop_id: str, **fields) -> dict[str, Any] | None:
+        updated = self.store.update_open_loop(loop_id, **fields)
+        return updated.model_dump() if updated else None
+
+    def inspect_memory(self, memory_id: str) -> dict[str, Any] | None:
+        mem = self.store.get(memory_id)
+        if not mem:
+            return None
+        d = mem.model_dump()
+        d["activation_score"] = mem.compute_activation()
+        d["has_embedding"] = bool(self.store._conn.execute(
+            "SELECT 1 FROM memories WHERE id=? AND embedding IS NOT NULL", (memory_id,)).fetchone())
+        return d
+
+    def explain_memory(self, memory_id: str, query: str = "") -> dict[str, Any]:
+        mem = self.store.get(memory_id)
+        if not mem:
+            return {"error": "memory not found"}
+        hits = self.store.search(query or mem.text[:40], limit=20, include_superseded=True)
+        match = next((h for h in hits if h.memory.id == memory_id), None)
+        if match and match.explanation:
+            return {
+                "memory_id": memory_id,
+                "score": match.score,
+                "explanation": match.explanation.model_dump(),
+                "activation": mem.compute_activation(),
+            }
+        return {
+            "memory_id": memory_id,
+            "status": mem.status,
+            "activation": mem.compute_activation(),
+            "importance": mem.importance,
+            "confidence": mem.confidence,
+            "reinforcement_count": mem.reinforcement_count,
+        }
+
+    def detect_contradictions(self) -> list[dict[str, Any]]:
+        from .contradiction import detect_conflicts
+        mems = self.store.list(status="active", limit=500)
+        return detect_conflicts(mems)
+
+    def resolve_contradiction(self, conflict: dict[str, Any] | None = None, *,
+                              active_id: str | None = None, superseded_id: str | None = None,
+                              reason: str = "manual_resolution", auto_supersede: bool = True) -> dict[str, Any]:
+        if active_id and superseded_id:
+            self.store.supersede(old_memory_id=superseded_id, new_memory_id=active_id)
+            return {"status": "resolved", "action": "superseded", "active_id": active_id, "superseded_id": superseded_id, "reason": reason}
+        if conflict:
+            from .contradiction import resolve_conflict
+            return resolve_conflict(self.store, conflict, auto_supersede=auto_supersede)
+        return {"status": "noop"}
+
+    def evaluate_quality(self, cases: list[dict] | None = None) -> dict[str, Any]:
+        """Measure recall precision, provenance, and temporal correctness."""
+        if not cases:
+            cases = [
+                {"query": "what do I prefer?", "expected_words": ["prefer", "like", "use"]},
+                {"query": "what project am I building?", "expected_words": ["project", "build", "worker"]},
+            ]
+        total = len(cases)
+        matched = 0
+        provenance_present = 0
+        total_hits = 0
+        for c in cases:
+            rec = self.recall(c["query"], limit=5)
+            hits = rec.get("memory_hits", [])
+            total_hits += len(hits)
+            for h in hits:
+                if h.get("source") or h.get("evidence"):
+                    provenance_present += 1
+            text_block = rec["context"].lower()
+            if any(w in text_block for w in c.get("expected_words", [])):
+                matched += 1
+
+        return {
+            "cases_evaluated": total,
+            "recall_precision": round(matched / total, 2) if total else 1.0,
+            "provenance_coverage": round(provenance_present / total_hits, 2) if total_hits else 1.0,
+            "total_hits_inspected": total_hits,
         }
 
     _PROSE_EXT = (".md", ".markdown", ".txt", ".rst", ".org")

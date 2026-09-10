@@ -22,6 +22,29 @@ own model. Everything runs and stays on the user's machine.
   - `index.html` + `app.js` + `styles.css` — the workspace.
   - `onboarding.html` — the self-contained cinematic onboarding (Connect → Build →
     Your Brain), inline `<style>`/`<script>` + an encoded brain point-cloud (`DATA`).
+- `lodestone/brain/canonical/` — **the canonical Brain** (curated, source-backed
+  model of the user) layered ABOVE the raw index + graph, in its own SQLite file
+  `~/Library/Lodestone/brain.db` (raw index stays in `lodestone.db` — thousands of
+  emails must never become "memory"). Modules: `db.py` (schema: entities /
+  entity_identifiers / claims / events / evidence / tasks / candidates /
+  evaluation_cases), `store.py` (CRUD + current-view), `redact.py` (secrets masked
+  BEFORE extraction), `extract.py` (LLM + heuristic → *candidates only*),
+  `curate.py` (**the trust core**), `freshness.py`, `recall.py`, `export.py`,
+  `evaluation.py`, `service.py` (`get_canonical()` facade).
+  **Trust rules (enforced in `curate.py`, never left to the model):** confirmed
+  can supersede inferred, inferred NEVER supersedes confirmed; replacing a
+  time-sensitive current claim requires a NEWER `source_timestamp`; tentative
+  language → an `open` claim, never current; every accepted claim retains
+  evidence; connector-sourced inferred facts go to the **review queue**, only
+  `manual`/`chat` are high-trust. Claims are **append-only** — a change supersedes
+  (never UPDATEs) the prior version and writes a Timeline event.
+  Freshness only ages *time-sensitive* current claims; confidence is never
+  lowered by age. Recall order is strict: **CANONICAL FACTS → graph → source
+  excerpts** (`Brain.recall()` prepends the canonical block; failures are
+  swallowed so curation can never break plain retrieval). Chat turns feed it via
+  `learn_from_conversation` in `agents/runtime.py`, so the Brain keeps up with
+  the conversation over time. Markdown/JSON mirror in `brain-export/` is a
+  **generated projection, never a second source of truth**.
 - `lodestone/brain/` — `brain.py` (store + graph facade + **enrichment**), `graph.py`,
   `extract.py`. **Knowledge graph = general enrichment pipeline** (works for ANY
   connector, incl. custom): memories carry a `graphed` flag; `Brain.enrich()` drains
@@ -34,6 +57,13 @@ own model. Everything runs and stays on the user's machine.
   `GET /api/brain/enrich/status`) so a frontend refresh reconnects instead of
   killing it. `rebuild_graph()` clears the graph + re-queues everything. Never
   gate the graph on a hard-coded source allowlist — it's content-based & general.
+    - **Brain v1.5 Foundation (Upgraded):**
+      - **Schema & Persistence:** Memories carry `memory_type`, `source_id`, `event_time`, `valid_from`, `valid_until`, `importance`, `confidence`, `reinforcement_count`, `last_reinforced_at`, `last_accessed_at`, `access_count`, `status`, `extraction_method`, `supersedes_id`, `evidence`.
+      - **Open Loops:** Dedicated `open_loops` table tracking commitments, follow-ups, and pending decisions with priority, due date, project/entity links, and lifecycle statuses (`open`, `waiting`, `blocked`, `completed`, `cancelled`, `stale`). Integrated into prompt auto-recall.
+      - **Temporal Reasoning & Contradictions:** `detect_conflicts()` and non-destructive `resolve_conflict()` (`supersede()`) preserving full history when user changes preferences.
+      - **Multi-Signal Hybrid Retrieval:** Semantic vector similarity + lexical match + importance + confidence + recency + temporal validity match + reinforcement log boost - status penalties. Returns `RecallExplanation` for transparent explainability.
+      - **Security Guardrail:** Credentials and secrets are automatically redacted (`[REDACTED_KEY]`, `[REDACTED_PASSWORD]`, `[REDACTED_SECRET]`) on all memory ingest paths.
+      - **Documentation:** See `docs/BRAIN-V1.5.md` for full specification.
   - **Recent-N cap (bulk sources):** the LLM enrich queue caps each BULK source
     (anything not in `Brain._FULL_SOURCES` = notes/agent/manual/notion/gcal) to its
     most-recent N items (`Brain.enrich_cap()`, default 100, stored in `meta.enrich_cap`,

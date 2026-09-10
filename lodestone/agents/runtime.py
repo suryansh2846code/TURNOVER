@@ -231,10 +231,23 @@ def run_turn(agent_id: str, user_text: str, *,
 
     # Auto-learn: quietly capture durable facts the user revealed this turn, so
     # simply talking to an agent grows the brain — no manual "add fact" step.
+    # (1) raw-memory capture (searchable evidence), (2) canonical curation so
+    # the durable, versioned model of the user keeps up with the conversation.
     learned = _auto_learn(user_text, provider)
     if learned:
         trace.append(TraceStep(kind="tool_result", name="auto_learn",
                                result=f"learned {learned} new fact(s)"))
+    try:
+        from ..brain.canonical import get_canonical
+        cres = get_canonical().learn_from_conversation(user_text, reply,
+                                                        provider=provider)
+        if cres.get("added") or cres.get("queued"):
+            trace.append(TraceStep(
+                kind="tool_result", name="brain_curate",
+                result=f"{cres.get('added',0)} canonical, "
+                       f"{cres.get('queued',0)} queued for review"))
+    except Exception:
+        pass  # curation must never break a chat turn
     return TurnResult(
         agent_id=agent.id, reply=reply, trace=trace,
         provider=provider.name, model=provider.model,

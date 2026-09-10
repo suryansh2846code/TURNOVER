@@ -471,3 +471,56 @@ data; files outside Turnstone stay where they are").
 
 **Skip / note (not us):** Jarvis mode (against North Star), Coding Mode default,
 phone calls, phone remote, embedded browser. Delight (piano/chime) optional.
+
+---
+
+## First-hand issues to fix (running list)
+
+Observed while using the real Turnstone app. Append new findings here as they
+appear. Last updated: 2026-09-08.
+
+1. **LinkedIn Agent model switch is blocked by Llama**
+   - Symptom: cannot switch away from Llama on the LinkedIn Agent from the normal
+     model control.
+   - Workaround: open Models settings, disable Llama, then pick another model.
+   - Expected: switching models from the Agent composer should work without
+     disabling a provider first.
+
+2. **Conversation context drops after a model change**
+   - Symptom: after changing the model mid-chat, the Agent does not reliably
+     follow recent conversation context — even the latest messages.
+   - Expected: model changes should keep the visible chat history as continuing
+     context for the next turn.
+
+3. **Opaque “couldn't identify this action” approval (Social Media Manager)**
+   - Symptom: during a multi-step request (connect LinkedIn, pull GitHub /
+     workspace, package projects, grow LinkedIn + X), Turnstone shows:
+     *“Turnstone couldn't identify this action — allow it only if you expected
+     it.”* with Deny / Allow once / Always allow.
+   - Friction: the card does not explain what action is being requested unless
+     the user opens “View details,” so the approval decision is hard to make
+     safely.
+   - Expected: every approval prompt should name the concrete action in plain
+     language before Deny / Allow.
+
+4. **No clear working-versus-waiting state when an Agent needs permission**
+   - Symptom: when an Agent reaches a permission boundary, it is unclear whether
+     it is still working, waiting for user approval, or has stopped progressing.
+   - Friction: the user cannot tell when they need to take action, which makes
+     longer multi-step tasks feel stalled or abandoned.
+   - Expected: show a persistent, plain-language status at every permission
+     boundary — for example, “Waiting for your approval to read Gmail” — and
+     distinguish it clearly from active work and completed work.
+
+5. **Schedule cadence cannot be changed to specific days**
+   - Symptom: in the schedule card's recurrence control, the “specific days”
+     option/field does not select, preventing the user from configuring a
+     schedule for chosen days of the week.
+   - Friction: the schedule is constrained to preset cadences such as “Every
+     weekday,” rather than the user's intended weekly pattern.
+   - Expected: the recurrence selector should reliably open and allow selected
+     weekdays to be chosen, saved, and reflected in the schedule summary.
+
+Source notes: user reports (items 1–2); screenshot from Social Media Manager
+chat showing the unidentified-action banner (item 3); user reports (items 4–5),
+with schedule screenshot supporting item 5.

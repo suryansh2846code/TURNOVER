@@ -95,6 +95,39 @@ def _gmail_search(query: str = "newer_than:30d", max_results: int = 10) -> str:
     return _search_brain(query)  # freshly ingested, now recall it
 
 
+def _create_open_loop(description: str, due_at: str | None = None, related_project: str | None = None, priority: str = "medium") -> str:
+    loop = get_brain().create_open_loop(description=description, due_at=due_at, related_project=related_project, priority=priority)
+    due = f" (due {loop['due_at']})" if loop.get("due_at") else ""
+    proj = f" [{loop['related_project']}]" if loop.get("related_project") else ""
+    return f"Created open loop: {loop.get('description')}{proj}{due}"
+
+
+def _list_open_loops(project: str | None = None) -> str:
+    loops = get_brain().get_open_loops(status="open", related_project=project)
+    if not loops:
+        return "No open loops."
+    lines = []
+    for l in loops:
+        due = f"  ·  due {l['due_at']}" if l.get("due_at") else ""
+        proj = f"  [{l['related_project']}]" if l.get("related_project") else ""
+        lines.append(f"- {l['description']}{proj}{due}  (id {l['id'][:6]})")
+    return "\n".join(lines)
+
+
+def _complete_open_loop(loop: str) -> str:
+    b = get_brain()
+    all_loops = b.get_open_loops(status="open")
+    target = None
+    for l in all_loops:
+        if l["id"].startswith(loop) or loop.lower() in l["description"].lower():
+            target = l
+            break
+    if not target:
+        return f"No open loop matched '{loop}'."
+    done = b.complete_open_loop(target["id"])
+    return f"Completed open loop: {done.get('description')}" if done else f"Could not complete '{loop}'."
+
+
 TOOL_IMPLS = {
     "search_brain": _search_brain,
     "remember": _remember,
@@ -104,6 +137,9 @@ TOOL_IMPLS = {
     "add_task": _add_task,
     "list_tasks": _list_tasks,
     "complete_task": _complete_task,
+    "create_open_loop": _create_open_loop,
+    "list_open_loops": _list_open_loops,
+    "complete_open_loop": _complete_open_loop,
 }
 
 TOOL_DEFS: dict[str, Tool] = {
@@ -182,6 +218,41 @@ TOOL_DEFS: dict[str, Tool] = {
         description="Mark a task done, by id prefix or a bit of its title.",
         parameters={"type": "object", "properties": {
             "task": {"type": "string"}}, "required": ["task"]},
+    ),
+    "create_open_loop": Tool(
+        name="create_open_loop",
+        description="Track an unfinished commitment, pending follow-up, or open loop.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "description": {"type": "string", "description": "What needs follow-up or completion"},
+                "due_at": {"type": "string", "description": "Optional deadline"},
+                "related_project": {"type": "string", "description": "Optional project name"},
+                "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"], "default": "medium"},
+            },
+            "required": ["description"],
+        },
+    ),
+    "list_open_loops": Tool(
+        name="list_open_loops",
+        description="List active open loops and commitments.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Filter by project name"},
+            },
+        },
+    ),
+    "complete_open_loop": Tool(
+        name="complete_open_loop",
+        description="Mark an open loop completed by id prefix or text.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "loop": {"type": "string", "description": "Loop id or description text"},
+            },
+            "required": ["loop"],
+        },
     ),
 }
 
