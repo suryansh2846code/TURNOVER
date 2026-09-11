@@ -93,3 +93,47 @@ def test_models_api_endpoint():
     data = resp.json()
     assert "models" in data
     assert len(data["models"]) > 0
+
+
+def test_chatgpt_subscription_locks_unsupported_models():
+    """Verify models not supported on user plan are flagged as locked with plan_required."""
+    from lodestone.models.discovery import _chatgpt_subscription_models
+
+    models = _chatgpt_subscription_models()
+    model_map = {m.id: m for m in models}
+
+    # Terra and Luna are available on free plan
+    assert "gpt-5.6-terra" in model_map
+    assert model_map["gpt-5.6-terra"].locked is False
+
+    # Astra and Sol require Pro
+    if "gpt-6-astra" in model_map:
+        assert model_map["gpt-6-astra"].locked is True
+        assert model_map["gpt-6-astra"].plan_required == "Pro"
+
+    if "gpt-5.6-sol" in model_map:
+        assert model_map["gpt-5.6-sol"].locked is True
+        assert model_map["gpt-5.6-sol"].plan_required == "Pro"
+
+
+def test_chatgpt_subscription_rejects_unsupported_model():
+    """Verify chat_with_chatgpt_subscription informs user of unsupported model instead of silent fallback."""
+    from lodestone.models.base import Message
+    from lodestone.models.chatgpt_auth import chat_with_chatgpt_subscription
+
+    with patch("lodestone.models.chatgpt_auth.get_chatgpt_access_token", return_value="mock_token"):
+        res = chat_with_chatgpt_subscription(
+            [Message(role="user", content="hello")],
+            model="gpt-6-astra",
+        )
+        # Must return warning explaining the plan requirement, not silent success
+        assert "not supported on your" in res.text
+        assert "Pro" in res.text
+
+
+def test_set_agent_model_api_rejects_locked_model():
+    """Verify API prevents binding an agent to a locked model."""
+    client = TestClient(app)
+    resp = client.post("/api/agents/inbox/model", json={"provider": "openai", "model": "gpt-6-astra"})
+    assert resp.status_code == 400
+    assert "locked" in resp.json()["detail"].lower() or "requires" in resp.json()["detail"].lower()

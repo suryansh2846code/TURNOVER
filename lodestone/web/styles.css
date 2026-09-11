@@ -517,6 +517,32 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   font-weight: bold;
   font-size: 13px;
 }
+.cmp-flyout-item.is-locked {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+.cmp-flyout-item.is-locked:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.cmp-flyout-item-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cmp-lock-badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #9ca3af;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
 
 /* Status / plan items section */
 .cmp-menu-divider {

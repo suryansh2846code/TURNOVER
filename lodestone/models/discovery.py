@@ -6,9 +6,11 @@ Eliminates stale hardcoded model IDs and guarantees live catalog truth.
 """
 from __future__ import annotations
 
+import json
 import os
 import time
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -31,6 +33,8 @@ class DiscoveredModel:
     vision: bool = False
     reasoning: bool = False
     status: str = "available"
+    locked: bool = False
+    plan_required: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -82,44 +86,106 @@ def _detect_capabilities(model_id: str, desc: str = "") -> dict[str, Any]:
 
 
 def _chatgpt_subscription_models() -> list[DiscoveredModel]:
-    """Retrieve models available through ChatGPT Subscription / Codex."""
-    models: list[DiscoveredModel] = []
-    cache_path = Path.home() / "Library/Application Support/Turnstone/provider-auth/codex/models_cache.json"
-    if cache_path.exists():
-        try:
-            cached_data = json.loads(cache_path.read_text())
-            for m in cached_data.get("models", []):
-                slug = m.get("slug")
-                if not slug:
-                    continue
-                display_name = m.get("display_name") or slug.replace("-", " ").title()
-                desc = m.get("description") or "Codex agentic coding model"
-                models.append(DiscoveredModel(
-                    id=slug,
-                    name=display_name,
-                    desc=desc,
-                    reasoning=True,
-                    vision=True,
-                    tool_calling=True,
-                    context_window=m.get("context_window", 272_000),
-                    structured_output=True,
-                    streaming=True,
-                    status="available",
-                ))
-        except Exception:
-            pass
+    """Retrieve models available through ChatGPT Subscription / Codex, locking unsupported models."""
+    supported_slugs: set[str] = set()
+    custom_descs: dict[str, tuple[str, str, int]] = {}
 
-    if models:
-        return models
-
-    return [
-        DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-5.6-sol", "GPT-5.6-Sol", "Flagship agentic coding model for complex tasks", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-6-astra", "GPT-6-Astra", "Our most capable model for complex, demanding work", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-reserve", "GPT-Reserve", "Fast and affordable backup agentic coding model", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("o3-mini", "o3-mini", "High-speed STEM and code reasoning", 200_000, reasoning=True),
+    cache_candidates = [
+        Path.home() / "Library/Application Support/Turnstone/provider-auth/codex/models_cache.json",
+        Path.home() / ".codex/models_cache.json",
+        Path.home() / ".lodestone/models_cache.json",
     ]
+    for cache_path in cache_candidates:
+        if cache_path.exists():
+            try:
+                cached_data = json.loads(cache_path.read_text())
+                for m in cached_data.get("models", []):
+                    slug = m.get("slug")
+                    if slug:
+                        supported_slugs.add(slug)
+                        d_name = m.get("display_name") or slug.replace("-", " ").title()
+                        desc = m.get("description") or "Codex agentic coding model"
+                        ctx = m.get("context_window", 272_000)
+                        custom_descs[slug] = (d_name, desc, ctx)
+                if supported_slugs:
+                    break
+            except Exception:
+                pass
+
+    user_plan = ""
+    try:
+        from .chatgpt_auth import detect_chatgpt_local_session
+        sess = detect_chatgpt_local_session(fetch_usage=False)
+        user_plan = (sess and sess.get("plan", "")) or ""
+    except Exception:
+        pass
+
+    if not supported_slugs:
+        if "free" in user_plan.lower():
+            supported_slugs = {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "codex-auto-review"}
+        elif "plus" in user_plan.lower():
+            supported_slugs = {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "o3-mini", "codex-auto-review"}
+        elif any(k in user_plan.lower() for k in ("pro", "team", "business", "enterprise")):
+            supported_slugs = {"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "o3-mini", "codex-auto-review"}
+
+    # Full catalog of Codex / ChatGPT models with standard tier requirements
+    catalog_specs = [
+        ("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work", 272_000, True, True, None),
+        ("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model", 272_000, True, True, None),
+        ("gpt-5.6-sol", "GPT-5.6-Sol", "Flagship agentic coding model for complex tasks", 272_000, True, True, "Pro"),
+        ("gpt-6-astra", "GPT-6-Astra", "Our most capable model for complex, demanding work", 272_000, True, True, "Pro"),
+        ("gpt-reserve", "GPT-Reserve", "Fast and affordable backup agentic coding model", 272_000, True, True, None),
+        ("o3-mini", "o3-mini", "High-speed STEM and code reasoning", 200_000, False, True, "Plus"),
+        ("gpt-5.5", "GPT-5.5", "Proven previous-generation coding and general model", 272_000, True, True, None),
+    ]
+
+    models: list[DiscoveredModel] = []
+    seen: set[str] = set()
+
+    for slug, d_name, d_desc, ctx, vision, reasoning, default_req in catalog_specs:
+        seen.add(slug)
+        if slug in custom_descs:
+            c_name, c_desc, c_ctx = custom_descs[slug]
+            d_name = c_name or d_name
+            d_desc = c_desc or d_desc
+            ctx = c_ctx or ctx
+
+        if supported_slugs:
+            is_supported = slug in supported_slugs
+        else:
+            is_supported = (default_req is None)
+
+        locked = not is_supported
+        plan_req = None if is_supported else (default_req or "Pro")
+        models.append(DiscoveredModel(
+            id=slug,
+            name=d_name,
+            desc=d_desc,
+            context_window=ctx,
+            vision=vision,
+            reasoning=reasoning,
+            locked=locked,
+            plan_required=plan_req,
+            status="available" if is_supported else "locked",
+        ))
+
+    # Add any extra models found in cache not in standard catalog
+    for slug in supported_slugs:
+        if slug not in seen and not slug.startswith("codex-auto"):
+            c_name, c_desc, c_ctx = custom_descs.get(slug, (slug.replace("-", " ").title(), "Agentic coding model", 272_000))
+            models.append(DiscoveredModel(
+                id=slug,
+                name=c_name,
+                desc=c_desc,
+                context_window=c_ctx,
+                vision=True,
+                reasoning=True,
+                locked=False,
+                plan_required=None,
+                status="available",
+            ))
+
+    return models
 
 
 def discover_openai_models(api_key: str | None = None) -> tuple[list[DiscoveredModel], dict[str, Any]]:
@@ -386,13 +452,24 @@ def discover_ollama_models(host: str | None = None) -> list[DiscoveredModel]:
 # ── Fallback static definitions when offline or unconfigured ─────────────────
 
 def _fallback_openai() -> list[DiscoveredModel]:
+    is_free = True
+    try:
+        from .chatgpt_auth import detect_chatgpt_local_session
+        sess = detect_chatgpt_local_session(fetch_usage=False)
+        plan = (sess and sess.get("plan", "")) or ""
+        if any(k in plan.lower() for k in ("pro", "team", "business", "enterprise")):
+            is_free = False
+    except Exception:
+        pass
+
     return [
         DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-5.6-sol", "GPT-5.6-Sol", "Flagship agentic coding model for complex tasks", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-6-astra", "GPT-6-Astra", "Our most capable model for complex, demanding work", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-5.6-sol", "GPT-5.6-Sol", "Flagship agentic coding model for complex tasks", 272_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro"),
+        DiscoveredModel("gpt-6-astra", "GPT-6-Astra", "Our most capable model for complex, demanding work", 272_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro"),
         DiscoveredModel("gpt-reserve", "GPT-Reserve", "Fast and affordable backup agentic coding model", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("o3-mini", "o3-mini", "High-speed STEM and code reasoning", 200_000, reasoning=True),
+        DiscoveredModel("o3-mini", "o3-mini", "High-speed STEM and code reasoning", 200_000, reasoning=True, locked=is_free, plan_required="Plus"),
+        DiscoveredModel("gpt-5.5", "GPT-5.5", "Proven previous-generation coding model", 272_000, vision=True, reasoning=True),
     ]
 
 

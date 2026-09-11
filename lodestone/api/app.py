@@ -151,6 +151,18 @@ def set_agent_model_endpoint(agent_id: str, body: AgentModelIn):
         get_agent(agent_id)
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'")
+
+    if body.model:
+        from ..models.discovery import get_discovered_models
+        discovered, _ = get_discovered_models(body.provider)
+        for m in discovered:
+            if m.get("id") == body.model and m.get("locked"):
+                req_plan = m.get("plan_required") or "a higher"
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Model '{body.model}' requires {req_plan} plan and is locked on your current plan."
+                )
+
     return set_agent_model(agent_id, body.provider, body.model)
 
 

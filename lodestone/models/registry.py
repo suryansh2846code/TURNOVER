@@ -206,10 +206,11 @@ MODEL_CATALOG = {
         "models": [
             {"id": "gpt-5.6-terra", "name": "GPT-5.6-Terra", "desc": "Balanced agentic coding model for everyday work"},
             {"id": "gpt-5.6-luna", "name": "GPT-5.6-Luna", "desc": "Fast and affordable agentic coding model"},
-            {"id": "gpt-5.6-sol", "name": "GPT-5.6-Sol", "desc": "Flagship agentic coding model for complex tasks"},
-            {"id": "gpt-6-astra", "name": "GPT-6-Astra", "desc": "Our most capable model for complex, demanding work"},
+            {"id": "gpt-5.6-sol", "name": "GPT-5.6-Sol", "desc": "Flagship agentic coding model for complex tasks", "locked": True, "plan_required": "Pro"},
+            {"id": "gpt-6-astra", "name": "GPT-6-Astra", "desc": "Our most capable model for complex, demanding work", "locked": True, "plan_required": "Pro"},
             {"id": "gpt-reserve", "name": "GPT-Reserve", "desc": "Fast and affordable backup agentic coding model"},
-            {"id": "o3-mini", "name": "o3-mini", "desc": "Fast STEM & code reasoning"},
+            {"id": "o3-mini", "name": "o3-mini", "desc": "Fast STEM & code reasoning", "locked": True, "plan_required": "Plus"},
+            {"id": "gpt-5.5", "name": "GPT-5.5", "desc": "Proven previous-generation coding model"},
         ],
     },
     "deepseek": {

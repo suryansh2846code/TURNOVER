@@ -799,9 +799,60 @@ def chat_with_chatgpt_subscription(
                 "parameters": t.parameters,
             })
 
-    chosen_model = "gpt-5.5"
-    if model in ("gpt-5.5", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "codex-auto-review"):
-        chosen_model = model
+    # 1. Determine models supported by the current user session / plan
+    supported_models: set[str] = set()
+    models_cache_candidates = [
+        _turnstone_auth_path().parent / "models_cache.json",
+        Path.home() / ".codex/models_cache.json",
+        Path.home() / ".lodestone/models_cache.json",
+    ]
+    for cache_p in models_cache_candidates:
+        if cache_p.exists():
+            try:
+                cdata = json.loads(cache_p.read_text())
+                supported_models = {m.get("slug") for m in cdata.get("models", []) if m.get("slug")}
+                if supported_models:
+                    break
+            except Exception:
+                pass
+
+    local_sess = detect_chatgpt_local_session(fetch_usage=False)
+    user_plan = (local_sess and local_sess.get("plan")) or "ChatGPT Free"
+
+    if not supported_models:
+        if "free" in user_plan.lower():
+            supported_models = {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "codex-auto-review"}
+        elif "plus" in user_plan.lower():
+            supported_models = {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "o3-mini", "codex-auto-review"}
+        else:
+            supported_models = {"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "o3-mini", "codex-auto-review"}
+
+    # 2. Select and validate model
+    req_model = (model or "").strip()
+    if not req_model or req_model.lower() in ("auto", "default"):
+        # Auto-pick best available model supported by user's plan
+        if "gpt-5.6-terra" in supported_models:
+            chosen_model = "gpt-5.6-terra"
+        elif "gpt-6-astra" in supported_models:
+            chosen_model = "gpt-6-astra"
+        elif "gpt-5.6-luna" in supported_models:
+            chosen_model = "gpt-5.6-luna"
+        elif "gpt-5.5" in supported_models:
+            chosen_model = "gpt-5.5"
+        else:
+            chosen_model = next((m for m in ("gpt-reserve", "gpt-5.5") if m in supported_models), "gpt-5.6-terra")
+    else:
+        # User explicitly requested a model
+        if supported_models and req_model not in supported_models:
+            req_plan = "Pro" if req_model in ("gpt-6-astra", "gpt-5.6-sol") else ("Plus" if req_model == "o3-mini" else "a higher")
+            display_avail = [m for m in sorted(supported_models) if not m.startswith("codex-auto")]
+            avail_str = ", ".join(f"`{m}`" for m in display_avail)
+            return ChatResult(
+                text=f"🔒 Model `{req_model}` is not supported on your **{user_plan}** plan (requires **{req_plan}**).\n\n"
+                     f"Available models on your plan: {avail_str}.\n\n"
+                     f"Please select an available model in the model selector."
+            )
+        chosen_model = req_model
 
     payload = {
         "model": chosen_model,

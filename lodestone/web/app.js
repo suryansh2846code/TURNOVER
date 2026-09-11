@@ -179,7 +179,7 @@ const FALLBACK_CATALOG = [
   { id: "cursor", label: "Cursor", key_env: "CURSOR_API_KEY", key_url: "https://cursor.com", destination: "Connects to your local Cursor bridge or Cursor API.", locality: "local", default_model: "cursor-fast", models: [{ id: "cursor-fast", name: "Cursor Fast", desc: "Low latency reasoning & agent flow" }, { id: "cursor-small", name: "Cursor Small", desc: "Fast local coding & agent flow" }, { id: "claude-3.7-sonnet", name: "Cursor Claude 3.7 Sonnet", desc: "Via Cursor bridge" }, { id: "gpt-5.6-terra", name: "Cursor GPT-5.6-Terra", desc: "Via Cursor bridge" }] },
   { id: "gemini", label: "Google Gemini", key_env: "GEMINI_API_KEY", key_url: "https://aistudio.google.com/apikey", destination: "Sent to Google Gemini API.", locality: "cloud", default_model: "gemini-2.5-flash", models: [{ id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", desc: "Deep reasoning powerhouse" }, { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", desc: "Next-gen speed & reasoning" }, { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", desc: "Ultra-fast generation & tools" }] },
   { id: "xai", label: "xAI (Grok)", key_env: "XAI_API_KEY", key_url: "https://console.x.ai", destination: "Sent to xAI Grok API.", locality: "cloud", default_model: "grok-3", models: [{ id: "grok-3", name: "Grok 3", desc: "Flagship reasoning & deep intelligence" }, { id: "grok-3-mini", name: "Grok 3 Mini", desc: "High-speed reasoning & code generation" }, { id: "grok-2-latest", name: "Grok 2", desc: "Advanced reasoning & tool calling" }, { id: "grok-2-vision-latest", name: "Grok 2 Vision", desc: "Multimodal reasoning & image input" }, { id: "grok-2-1212", name: "Grok 2 (1212)", desc: "Stable production snapshot" }] },
-  { id: "openai", label: "OpenAI", key_env: "OPENAI_API_KEY", key_url: "https://platform.openai.com/api-keys", destination: "Sent to OpenAI's API.", locality: "cloud", default_model: "gpt-5.6-terra", models: [{ id: "gpt-5.6-terra", name: "GPT-5.6-Terra", desc: "Balanced agentic coding model for everyday work" }, { id: "gpt-5.6-luna", name: "GPT-5.6-Luna", desc: "Fast and affordable agentic coding model" }, { id: "gpt-5.6-sol", name: "GPT-5.6-Sol", desc: "Flagship agentic coding model for complex tasks" }, { id: "gpt-6-astra", name: "GPT-6-Astra", desc: "Our most capable model for complex, demanding work" }, { id: "gpt-reserve", name: "GPT-Reserve", desc: "Fast backup agentic coding model" }, { id: "o3-mini", name: "o3-mini", desc: "Fast STEM & code reasoning" }] },
+  { id: "openai", label: "OpenAI", key_env: "OPENAI_API_KEY", key_url: "https://platform.openai.com/api-keys", destination: "Sent to OpenAI's API.", locality: "cloud", default_model: "gpt-5.6-terra", models: [{ id: "gpt-5.6-terra", name: "GPT-5.6-Terra", desc: "Balanced agentic coding model for everyday work" }, { id: "gpt-5.6-luna", name: "GPT-5.6-Luna", desc: "Fast and affordable agentic coding model" }, { id: "gpt-5.6-sol", name: "GPT-5.6-Sol", desc: "Flagship agentic coding model for complex tasks", locked: true, plan_required: "Pro" }, { id: "gpt-6-astra", name: "GPT-6-Astra", desc: "Our most capable model for complex, demanding work", locked: true, plan_required: "Pro" }, { id: "gpt-reserve", name: "GPT-Reserve", desc: "Fast backup agentic coding model" }, { id: "o3-mini", name: "o3-mini", desc: "Fast STEM & code reasoning", locked: true, plan_required: "Plus" }, { id: "gpt-5.5", name: "GPT-5.5", desc: "Proven previous-generation coding model" }] },
   { id: "deepseek", label: "DeepSeek", key_env: "DEEPSEEK_API_KEY", key_url: "https://platform.deepseek.com/api_keys", destination: "Sent to DeepSeek's API.", locality: "cloud", default_model: "deepseek-chat", models: [{ id: "deepseek-chat", name: "DeepSeek V3", desc: "Elite coding & general intelligence" }, { id: "deepseek-reasoner", name: "DeepSeek R1", desc: "Reasoning model with chain of thought" }] },
   { id: "ollama", label: "Ollama (Local)", key_env: "", key_url: "https://ollama.com", destination: "Runs on your Mac — your context stays on-device.", locality: "local", default_model: "llama3.2", models: [{ id: "llama3.3:70b", name: "Llama 3.3 (70B)", desc: "Latest flagship open weights model" }, { id: "llama3.2", name: "Llama 3.2", desc: "Compact offline local model" }, { id: "qwen2.5-coder:7b", name: "Qwen 2.5 Coder (7B)", desc: "Strong multilingual local model" }, { id: "deepseek-r1:8b", name: "DeepSeek R1 (8B)", desc: "Local reasoning model" }] },
   { id: "openrouter", label: "OpenRouter", key_env: "OPENROUTER_API_KEY", key_url: "https://openrouter.ai/keys", destination: "Sent to OpenRouter (and the chosen model's host).", locality: "cloud", default_model: "anthropic/claude-3.7-sonnet", models: [{ id: "anthropic/claude-3.7-sonnet", name: "Claude 3.7 Sonnet", desc: "Via OpenRouter" }, { id: "openai/gpt-5.6-terra", name: "GPT-5.6-Terra", desc: "Via OpenRouter" }, { id: "deepseek/deepseek-r1", name: "DeepSeek R1", desc: "Via OpenRouter" }, { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", desc: "Via OpenRouter" }] },
@@ -879,15 +879,32 @@ function renderModelFlyout() {
   const models = (pEntry && pEntry.models) || [];
 
   const items = [
-    { id: "", name: "Auto", desc: "Recommended model automatically" },
-    ...models.map((m) => ({ id: m.id, name: m.name, desc: m.desc })),
+    { id: "", name: "Auto", desc: "Recommended model automatically", locked: false, plan_required: null },
+    ...models.map((m) => ({
+      id: m.id,
+      name: m.name,
+      desc: m.desc,
+      locked: Boolean(m.locked),
+      plan_required: m.plan_required || null,
+    })),
   ];
 
   list.innerHTML = items.map((m) => {
     const isSel = (!activePickerModel && m.id === "") || (activePickerModel === m.id);
+    const isLocked = Boolean(m.locked);
+    const badgeHtml = isLocked && m.plan_required
+      ? `<span class="cmp-lock-badge" title="Requires ${esc(m.plan_required)} plan">🔒 ${esc(m.plan_required)}</span>`
+      : (isLocked ? `<span class="cmp-lock-badge">🔒 Locked</span>` : "");
     return `
-      <div class="cmp-flyout-item ${isSel ? 'is-selected' : ''}" data-model="${esc(m.id)}">
-        <span>${esc(m.name)}</span>
+      <div class="cmp-flyout-item ${isSel ? 'is-selected' : ''} ${isLocked ? 'is-locked' : ''}"
+           data-model="${esc(m.id)}"
+           data-locked="${isLocked ? 'true' : 'false'}"
+           data-plan-req="${esc(m.plan_required || '')}"
+           title="${isLocked ? `Requires ${esc(m.plan_required || 'higher')} plan` : esc(m.desc || '')}">
+        <div class="cmp-flyout-item-label">
+          <span>${esc(m.name)}</span>
+          ${badgeHtml}
+        </div>
         ${isSel ? '<span class="cmp-flyout-check">✓</span>' : ''}
       </div>
     `;
@@ -900,6 +917,14 @@ function renderModelFlyout() {
   list.querySelectorAll(".cmp-flyout-item").forEach((el) => {
     el.onclick = async (e) => {
       e.stopPropagation();
+      if (el.dataset.locked === "true") {
+        const req = el.dataset.planReq || "a higher";
+        const modelId = el.dataset.model;
+        const targetModel = items.find((x) => x.id === modelId);
+        const name = targetModel ? targetModel.name : modelId;
+        toast(`🔒 ${name} requires ${req} plan. Not supported on your current plan.`);
+        return;
+      }
       let chosen = el.dataset.model;
       if (chosen === "__custom__") {
         const customName = prompt("Enter custom model identifier:", activePickerModel || "");
@@ -929,7 +954,7 @@ function renderModelFlyout() {
           toast(`Selected ${displayLabel} for ${current}`);
           await updateAgentModelChip(current);
         } catch (err) {
-          toast("Could not update model: " + err);
+          toast("Could not update model: " + (err.message || err));
         }
       }
     };
@@ -1213,6 +1238,9 @@ async function updateAgentModelChip(agentId) {
       if (modelName) {
         const mEntry = pEntry && (pEntry.models || []).find((m) => m.id === modelName);
         display = mEntry ? mEntry.name : modelName;
+        if (mEntry && mEntry.locked) {
+          display += ` (🔒 ${mEntry.plan_required || 'Locked'})`;
+        }
       } else {
         display = provLabel;
       }
