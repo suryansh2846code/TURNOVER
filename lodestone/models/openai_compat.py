@@ -37,13 +37,13 @@ class OpenAICompatProvider(LLMProvider):
             if self.name == "openai":
                 try:
                     from .connections import ConnectionStatus, get_connection
-                    from .chatgpt_auth import _token_storage_path
+                    from .chatgpt_auth import get_chatgpt_access_token
                     conn = get_connection("openai")
                     if conn.connection_status == ConnectionStatus.DISCONNECTED:
                         return False, f"Disconnected. Set {self.key_env} or Sign in with ChatGPT"
                     if conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED:
                         return True, ""
-                    if _token_storage_path().exists():
+                    if get_chatgpt_access_token():
                         return True, ""
                 except Exception:
                     pass
@@ -74,6 +74,13 @@ class OpenAICompatProvider(LLMProvider):
         return out
 
     def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
+        if self.name == "openai" and not self.api_key:
+            from .chatgpt_auth import chat_with_chatgpt_subscription, get_chatgpt_access_token
+            if get_chatgpt_access_token():
+                return chat_with_chatgpt_subscription(
+                    messages, model=self.model, tools=tools,
+                )
+
         payload = {
             "model": self.model,
             "messages": self._to_openai(messages),

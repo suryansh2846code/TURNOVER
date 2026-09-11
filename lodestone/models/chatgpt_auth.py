@@ -565,3 +565,159 @@ def get_oauth_flow_status() -> dict[str, Any]:
             "email": _GLOBAL_AUTH_STATE.connected_email,
             "auth_url": _GLOBAL_AUTH_STATE.auth_url,
         }
+
+
+def get_chatgpt_access_token() -> str | None:
+    """Retrieve active ChatGPT access token, refreshing it automatically if expired."""
+    for p in [_token_storage_path(), _turnstone_auth_path(), _codex_auth_path()]:
+        if not p.exists():
+            continue
+        try:
+            data = json.loads(p.read_text())
+            tokens = data.get("tokens", {})
+            tok = tokens.get("access_token")
+            if not tok:
+                continue
+
+            # Check expiration
+            claims = _decode_jwt_payload(tok)
+            exp = claims.get("exp", 0)
+            if exp and time.time() > exp - 180:
+                ref_tok = tokens.get("refresh_token")
+                if ref_tok:
+                    try:
+                        r = httpx.post(
+                            f"{AUTH_BASE_URL}/oauth/token",
+                            data={
+                                "grant_type": "refresh_token",
+                                "refresh_token": ref_tok,
+                                "client_id": CLIENT_ID,
+                            },
+                            headers={"Content-Type": "application/x-www-form-urlencoded"},
+                            timeout=15.0,
+                        )
+                        if r.status_code == 200:
+                            new_toks = r.json()
+                            data["tokens"] = new_toks
+                            data["last_refresh"] = datetime.now(timezone.utc).isoformat()
+                            _token_storage_path().write_text(json.dumps(data, indent=2))
+                            return new_toks.get("access_token")
+                    except Exception as refresh_exc:
+                        logger.warning(f"Failed to refresh ChatGPT token: {refresh_exc}")
+
+            return tok
+        except Exception:
+            pass
+
+    return None
+
+
+def chat_with_chatgpt_subscription(
+    messages: list[Any],
+    *,
+    model: str | None = None,
+    tools: list[Any] | None = None,
+    timeout: float = 120.0,
+) -> Any:
+    """Execute a chat completion request through ChatGPT Subscription backend."""
+    import uuid
+    from .base import ChatResult, ToolCall
+
+    token = get_chatgpt_access_token()
+    if not token:
+        return ChatResult(text="⚠️ ChatGPT account not connected or session expired. Please Sign in with ChatGPT in Models.")
+
+    input_items = []
+    for m in messages:
+        if m.role in ("user", "system"):
+            input_items.append({"role": m.role, "content": m.content})
+        elif m.role == "assistant":
+            if m.content:
+                input_items.append({"role": "assistant", "content": m.content})
+            for tc in m.tool_calls:
+                args_str = json.dumps(tc.arguments) if isinstance(tc.arguments, dict) else str(tc.arguments or "{}")
+                input_items.append({
+                    "type": "function_call",
+                    "call_id": tc.id,
+                    "name": tc.name,
+                    "arguments": args_str,
+                })
+        elif m.role == "tool":
+            input_items.append({
+                "type": "function_call_output",
+                "call_id": m.tool_call_id or "",
+                "output": m.content or "",
+            })
+
+    tools_payload = []
+    if tools:
+        for t in tools:
+            tools_payload.append({
+                "type": "function",
+                "name": t.name,
+                "description": t.description,
+                "parameters": t.parameters,
+            })
+
+    chosen_model = "gpt-5.5"
+    if model in ("gpt-5.5", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "codex-auto-review"):
+        chosen_model = model
+
+    payload = {
+        "model": chosen_model,
+        "store": False,
+        "stream": True,
+        "input": input_items,
+    }
+    if tools_payload:
+        payload["tools"] = tools_payload
+
+    full_text = ""
+    calls = []
+    try:
+        with httpx.stream(
+            "POST",
+            "https://chatgpt.com/backend-api/codex/responses",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=timeout,
+        ) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data_str = line[6:]
+                if data_str == "[DONE]":
+                    break
+                try:
+                    evt = json.loads(data_str)
+                    etype = evt.get("type")
+                    if etype == "response.output_text.delta":
+                        full_text += evt.get("delta", "")
+                    elif etype == "response.output_item.done":
+                        item = evt.get("item", {})
+                        if item.get("type") == "function_call":
+                            cid = item.get("call_id") or item.get("id") or str(uuid.uuid4())
+                            cname = item.get("name", "")
+                            cargs = item.get("arguments", "{}")
+                            try:
+                                parsed_args = json.loads(cargs)
+                            except Exception:
+                                parsed_args = {}
+                            calls.append(ToolCall(id=cid, name=cname, arguments=parsed_args))
+                except Exception:
+                    pass
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        if code in (401, 403):
+            return ChatResult(text="⚠️ ChatGPT subscription session expired or invalid. Please sign in again in Models.")
+        elif code == 429:
+            return ChatResult(text="⚠️ ChatGPT rate limited. Please wait a moment and retry.")
+        return ChatResult(text=f"⚠️ ChatGPT subscription error ({code}): {exc.response.text[:150]}")
+    except Exception as exc:
+        return ChatResult(text=f"⚠️ Error connecting to ChatGPT subscription: {exc}")
+
+    return ChatResult(text=full_text, tool_calls=calls)
