@@ -166,3 +166,19 @@ def test_disconnect_provider():
     assert acct.get("connected") is False
 
 
+def test_open_browser_endpoint(monkeypatch):
+    """Verify POST /api/open-browser accepts valid URL and delegates to webbrowser.open."""
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url) or True)
+
+    resp = client.post("/api/open-browser", json={"url": "https://example.com/test"})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    assert opened == ["https://example.com/test"]
+
+    # Empty URL rejected
+    bad_resp = client.post("/api/open-browser", json={"url": ""})
+    assert bad_resp.status_code == 400
+
+
+

@@ -233,8 +233,12 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
   const codeSubmit = hud.querySelector(".ts-hud-code-submit");
 
   if (openBtn && authUrl) {
-    openBtn.onclick = () => {
-      window.open(authUrl, "_blank");
+    openBtn.onclick = async () => {
+      try {
+        await api("/api/open-browser", { method: "POST", body: { url: authUrl } });
+      } catch (_) {
+        window.open(authUrl, "_blank");
+      }
     };
   }
 
@@ -381,8 +385,9 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
     let badgeClass = "using";
 
     if (providerId === "openai") {
-      cardTitle = detected.plan || "ChatGPT Go";
-      badgeText = "Using this account";
+      cardTitle = isFoundOnComputer ? `${detected.plan || "ChatGPT"} found` : (detected.plan || "ChatGPT Subscription");
+      badgeText = isFoundOnComputer ? "Found on this computer" : "Using this account";
+      badgeClass = isFoundOnComputer ? "found" : "using";
     } else if (providerId === "claude" || providerId === "anthropic") {
       cardTitle = isFoundOnComputer ? `${detected.plan || "Claude Pro"} found` : "Claude connected";
       badgeText = isFoundOnComputer ? "Found on this computer" : "Using this account";
@@ -392,11 +397,13 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
       badgeText = isFoundOnComputer ? "Found on this computer" : "Connected";
       badgeClass = isFoundOnComputer ? "found" : "using";
     } else if (providerId === "xai") {
-      cardTitle = "Grok connected";
-      badgeText = "Connected";
+      cardTitle = isFoundOnComputer ? `${detected.plan || "Grok"} found` : "Grok connected";
+      badgeText = isFoundOnComputer ? "Found on this computer" : "Connected";
+      badgeClass = isFoundOnComputer ? "found" : "using";
     } else if (providerId === "gemini") {
-      cardTitle = "Google connected";
-      badgeText = "Using this account";
+      cardTitle = isFoundOnComputer ? "Google found" : "Google connected";
+      badgeText = isFoundOnComputer ? "Found on this computer" : "Using this account";
+      badgeClass = isFoundOnComputer ? "found" : "using";
     }
 
     const subText = isFoundOnComputer
@@ -431,6 +438,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
       actionBtnHtml = `
         <button type="button" class="tiny primary ts-continue-btn" style="padding:5px 12px">Continue</button>
         <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
+        <button type="button" class="ts-btn-link ts-disconnect-btn" style="color:#ef4444" title="Disconnect provider">✕</button>
       `;
     } else {
       actionBtnHtml = `
@@ -631,7 +639,11 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
 
         // Open browser tab if the backend hasn't already (e.g. no CLI available)
         if (res.auth_url && !res.browser_opened) {
-          window.open(res.auth_url, "_blank");
+          try {
+            await api("/api/open-browser", { method: "POST", body: { url: res.auth_url } });
+          } catch (_) {
+            window.open(res.auth_url, "_blank");
+          }
         }
 
         // Show floating HUD widget

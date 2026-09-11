@@ -840,8 +840,22 @@ def connect_local_provider_endpoint(name: str):
     return {"ok": True, "message": msg, "connection": data}
 
 
+@app.post("/api/open-browser")
+def open_browser_endpoint(payload: dict):
+    import webbrowser
+    url = payload.get("url", "").strip()
+    if not url:
+        raise HTTPException(400, "url is required")
+    try:
+        webbrowser.open(url)
+        return {"ok": True}
+    except Exception as exc:
+        raise HTTPException(500, f"Failed to open browser: {exc}")
+
+
 @app.post("/api/providers/{name}/signin")
 def signin_provider_endpoint(name: str):
+    import webbrowser
     from ..models.accounts import connect_local_account, detect_all_accounts
     from ..models.capabilities import get_capabilities
     from ..models.registry import clear_provider_cache
@@ -857,53 +871,88 @@ def signin_provider_endpoint(name: str):
         from ..models.claude_auth import start_claude_login_flow, find_claude_cli
         ok, auth_url, msg = start_claude_login_flow()
         has_cli = bool(find_claude_cli())
+        browser_opened = False
+        if has_cli and ok:
+            browser_opened = True
+        elif auth_url:
+            try:
+                webbrowser.open(auth_url)
+                browser_opened = True
+            except Exception:
+                pass
         return {
             "started": True,
             "provider_id": "claude",
             "auth_url": auth_url,
             "brand_name": "Claude",
             "requires_code": True,
-            "browser_opened": bool(ok and has_cli),
+            "browser_opened": browser_opened,
             "detail": "Opened Claude authorization in browser — sign in to your account.",
         }
 
     elif pid == "cursor":
         auth_url = "https://cursor.com/login"
+        browser_opened = False
+        try:
+            webbrowser.open(auth_url)
+            browser_opened = True
+        except Exception:
+            pass
         return {
             "started": True,
             "provider_id": "cursor",
             "auth_url": auth_url,
             "brand_name": "Cursor",
-            "browser_opened": False,
+            "browser_opened": browser_opened,
             "detail": "Opened Cursor in browser — sign in to your Cursor account.",
         }
 
     elif pid == "openai":
         from ..models.chatgpt_auth import start_chatgpt_oauth_flow
         ok, auth_url, msg = start_chatgpt_oauth_flow()
+        browser_opened = False
+        if ok and auth_url:
+            try:
+                webbrowser.open(auth_url)
+                browser_opened = True
+            except Exception:
+                pass
         return {
-            "started": True,
+            "started": ok,
             "provider_id": "openai",
             "auth_url": auth_url,
             "brand_name": "ChatGPT",
-            "browser_opened": False,
-            "detail": "Opened ChatGPT sign-in in browser — choose your account to continue to TURNOVER.",
+            "browser_opened": browser_opened,
+            "detail": "Opened ChatGPT sign-in in browser — choose your account to continue to TURNOVER." if browser_opened else msg,
         }
 
     elif pid in ("xai", "grok"):
         from ..models.xai_auth import start_xai_oauth_flow
         ok, auth_url, msg = start_xai_oauth_flow()
+        browser_opened = False
+        if ok and auth_url:
+            try:
+                webbrowser.open(auth_url)
+                browser_opened = True
+            except Exception:
+                pass
         return {
-            "started": True,
+            "started": ok,
             "provider_id": "xai",
             "auth_url": auth_url,
             "brand_name": "Grok",
-            "browser_opened": False,
-            "detail": "Opened Grok sign-in in browser — log in to your account.",
+            "browser_opened": browser_opened,
+            "detail": "Opened Grok sign-in in browser — log in to your account." if browser_opened else msg,
         }
 
     elif url:
-        return {"started": True, "auth_url": url, "browser_opened": False, "detail": f"Opened {caps.display_name if caps else pid} in browser."}
+        browser_opened = False
+        try:
+            webbrowser.open(url)
+            browser_opened = True
+        except Exception:
+            pass
+        return {"started": True, "auth_url": url, "browser_opened": browser_opened, "detail": f"Opened {caps.display_name if caps else pid} in browser."}
 
     return {"started": True, "detail": "Please sign in to your provider."}
 
@@ -970,7 +1019,10 @@ def refresh_provider_endpoint(name: str):
 
     if ready:
         if conn.connection_status in (ConnectionStatus.NOT_CONNECTED, ConnectionStatus.DISCONNECTED, ConnectionStatus.ERROR):
-            conn.connection_status = ConnectionStatus.API_KEY_CONNECTED if (caps and caps.api_key_supported) else ConnectionStatus.CONNECTED
+            if conn.auth_method == "account" or (not getattr(inst, "api_key", None) and (conn.email or account_meta.get("email"))):
+                conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+            else:
+                conn.connection_status = ConnectionStatus.API_KEY_CONNECTED if (caps and caps.api_key_supported) else ConnectionStatus.CONNECTED
         if not conn.connected_at:
             conn.connected_at = now
     else:
