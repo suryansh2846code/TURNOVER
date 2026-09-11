@@ -100,11 +100,27 @@ class ClaudeCodeProvider(LLMProvider):
     def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
         if not self._bin:
             return ChatResult(text="Claude Code CLI not available.")
-        if self.model and "fable" in self.model.lower():
-            return ChatResult(
-                text="⚠️ Claude Fable 5.1 is currently disabled in Claude CLI (requires CLI v2.1.255+ or a Team / Enterprise tier). Please select Claude Opus 5 or Claude Sonnet 5 in the model dropdown.",
-                finish_reason="stop",
+
+        from .accounts import detect_claude_account
+        from .entitlements import evaluate_model_entitlement
+
+        acct = detect_claude_account()
+        user_plan = acct.get("plan")
+        context = {"disabled_models": acct.get("disabled_models", {})}
+        if self.model and self.model != "claude-code":
+            locked, plan_req = evaluate_model_entitlement(
+                provider="claude-code",
+                model_id=self.model,
+                is_connected=True,
+                user_plan=user_plan,
+                context=context,
             )
+            if locked:
+                return ChatResult(
+                    text=f"⚠️ Model `{self.model}` is currently locked ({plan_req}). "
+                         "Please select an unlocked model (such as Claude Opus 5 or Claude Sonnet 5) in the model selector.",
+                    finish_reason="stop",
+                )
         system_prompt, prompt = self._split(messages)
         cmd = [self._bin, "-p", "--output-format", "json"]
         if system_prompt:

@@ -153,20 +153,20 @@ def test_claude_opus_and_fable_discovery():
     assert opus.get("reasoning") is True
     assert opus.get("context_window") == 200_000
 
-    # Fable 5.1 is locked because local CLI session has it disabled (requires v2.1.255+)
+    # Fable 5.1 is locked because it requires Team or Enterprise tier
     fable = model_map["claude-fable-5-1"]
     assert fable.get("locked") is True
-    assert "2.1.255" in fable.get("plan_required", "") or "Enterprise" in fable.get("plan_required", "")
+    assert fable.get("plan_required") in ("Team", "Enterprise", "Team / Enterprise (v2.1.255+)") or "2.1.255" in fable.get("plan_required", "")
 
 
 def test_claude_code_fable_handled_gracefully():
-    """Verify ClaudeCodeProvider informs user about disabled Fable 5.1 cleanly."""
+    """Verify ClaudeCodeProvider informs user about locked model cleanly."""
     from lodestone.models.base import Message
     from lodestone.models.claude_code import ClaudeCodeProvider
 
     provider = ClaudeCodeProvider(model="claude-fable-5-1")
     res = provider.chat([Message(role="user", content="hello")])
-    assert "Fable 5.1 is currently disabled" in res.text or "v2.1.255" in res.text
+    assert "currently locked" in res.text or "Fable 5.1 is currently disabled" in res.text
 
 
 def test_cursor_locking_matches_plan():

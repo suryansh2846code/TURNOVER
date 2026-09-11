@@ -827,25 +827,23 @@ def chat_with_chatgpt_subscription(
         else:
             supported_models = {"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "o3-mini", "codex-auto-review"}
 
+    from .entitlements import evaluate_model_entitlement, get_best_unlocked_model
+
     # 2. Select and validate model
     req_model = (model or "").strip()
     if not req_model or req_model.lower() in ("auto", "default"):
         # Auto-pick best available model supported by user's plan
-        if "gpt-5.6-terra" in supported_models:
-            chosen_model = "gpt-5.6-terra"
-        elif "gpt-6-astra" in supported_models:
-            chosen_model = "gpt-6-astra"
-        elif "gpt-5.6-luna" in supported_models:
-            chosen_model = "gpt-5.6-luna"
-        elif "gpt-5.5" in supported_models:
-            chosen_model = "gpt-5.5"
-        else:
-            chosen_model = next((m for m in ("gpt-reserve", "gpt-5.5") if m in supported_models), "gpt-5.6-terra")
+        chosen_model = get_best_unlocked_model(
+            provider="openai",
+            available_models=list(supported_models) if supported_models else ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"],
+            is_connected=True,
+            user_plan=user_plan,
+        ) or "gpt-5.6-terra"
     else:
-        # User explicitly requested a model
-        if supported_models and req_model not in supported_models:
-            req_plan = "Pro" if req_model in ("gpt-6-astra", "gpt-5.6-sol") else ("Plus" if req_model == "o3-mini" else "a higher")
-            display_avail = [m for m in sorted(supported_models) if not m.startswith("codex-auto")]
+        locked, plan_req = evaluate_model_entitlement("openai", req_model, is_connected=True, user_plan=user_plan)
+        if locked or (supported_models and req_model not in supported_models):
+            req_plan = plan_req or "Pro"
+            display_avail = [m for m in sorted(supported_models) if not m.startswith("codex-auto")] if supported_models else ["gpt-5.6-terra", "gpt-5.6-luna"]
             avail_str = ", ".join(f"`{m}`" for m in display_avail)
             return ChatResult(
                 text=f"🔒 Model `{req_model}` is not supported on your **{user_plan}** plan (requires **{req_plan}**).\n\n"

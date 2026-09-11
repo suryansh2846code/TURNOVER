@@ -105,21 +105,28 @@ def test_api_endpoints():
     assert data["agent_id"] == "inbox"
     assert data["is_override"] is False
 
-    # 3. Set agent model
+    # 3. Set agent model using mock provider
     resp = client.post("/api/agents/inbox/model", json={
-        "provider": "gemini",
-        "model": "gemini-2.5-flash",
+        "provider": "mock",
+        "model": "mock-1",
     })
     assert resp.status_code == 200
-    assert resp.json()["provider"] == "gemini"
-    assert resp.json()["model"] == "gemini-2.5-flash"
+    assert resp.json()["provider"] == "mock"
+    assert resp.json()["model"] == "mock-1"
+
+    # Verify setting model on unconnected provider is rejected with 400
+    bad_resp = client.post("/api/agents/inbox/model", json={
+        "provider": "openrouter",
+        "model": "openai/gpt-5.6-terra",
+    })
+    assert bad_resp.status_code == 400
 
     # 4. Verify get reflects change
     resp = client.get("/api/agents/inbox/model")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["provider"] == "gemini"
-    assert data["model"] == "gemini-2.5-flash"
+    assert data["provider"] == "mock"
+    assert data["model"] == "mock-1"
     assert data["is_override"] is True
 
     # 5. Check GET /api/agents includes model info
@@ -127,8 +134,8 @@ def test_api_endpoints():
     assert resp.status_code == 200
     agents = resp.json()["agents"]
     inbox_agent = next(a for a in agents if a["id"] == "inbox")
-    assert inbox_agent["model_provider"] == "gemini"
-    assert inbox_agent["model_name"] == "gemini-2.5-flash"
+    assert inbox_agent["model_provider"] == "mock"
+    assert inbox_agent["model_name"] == "mock-1"
 
     # 6. Delete agent model override
     resp = client.delete("/api/agents/inbox/model")

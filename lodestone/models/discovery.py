@@ -614,7 +614,7 @@ def _fallback_cursor() -> list[DiscoveredModel]:
 
 def get_discovered_models(provider_id: str, force_refresh: bool = False,
                           api_key: str | None = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Retrieve discovered models for a provider, using cache unless forced."""
+    """Retrieve discovered models for a provider, evaluating connection status & plan entitlements."""
     pid = provider_id.lower()
     if pid == "anthropic":
         pid = "claude"
@@ -629,13 +629,20 @@ def get_discovered_models(provider_id: str, force_refresh: bool = False,
         if now - cached_time < _CACHE_TTL:
             return cached_models, {}
 
-    account_meta: dict[str, Any] = {}
+    from .entitlements import evaluate_model_entitlement, is_provider_connected
+
+    is_connected, user_plan, detected_meta = is_provider_connected(pid, api_key)
+    account_meta: dict[str, Any] = dict(detected_meta)
+    context: dict[str, Any] = {}
     models: list[DiscoveredModel] = []
 
     if pid == "openai":
-        models, account_meta = discover_openai_models(api_key)
+        models, meta = discover_openai_models(api_key)
+        account_meta.update(meta)
     elif pid == "claude":
         models = discover_anthropic_models(api_key)
+        if detected_meta and "disabled_models" in detected_meta:
+            context["disabled_models"] = detected_meta["disabled_models"]
     elif pid == "gemini":
         models = discover_gemini_models(api_key)
     elif pid == "xai":
@@ -646,31 +653,47 @@ def get_discovered_models(provider_id: str, force_refresh: bool = False,
         models = discover_openrouter_models(api_key)
     elif pid == "ollama":
         models = discover_ollama_models()
+        context["installed_models"] = {
+            m.id for m in models if "installed" in (m.desc or "").lower()
+        }
     elif pid == "cursor":
         models = _fallback_cursor()
     elif pid == "claude-code":
-        is_free = True
-        try:
-            from .accounts import detect_claude_account
-            acct = detect_claude_account()
-            plan = acct.get("plan", "").lower()
-            if "pro" in plan or "subscription" in plan or "team" in plan:
-                is_free = False
-        except Exception:
-            pass
-
         models = [
-            DiscoveredModel("claude-code", "Claude Code (Auto)", "Let Claude CLI select optimal model", 200_000, locked=False),
-            DiscoveredModel("claude-opus-5", "Claude Opus 5", "Frontier intelligence & autonomous engineering via Claude CLI", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
-            DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5", "Flagship agentic coding and reasoning workhorse", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
-            DiscoveredModel("claude-fable-5-1", "Claude Fable 5.1", "Long-horizon creative engineering & complex multi-turn reasoning", 200_000, vision=True, reasoning=True, locked=True, plan_required="Team / Enterprise (v2.1.255+)"),
-            DiscoveredModel("claude-3-7-sonnet", "Claude 3.7 Sonnet", "Hybrid reasoning and coding model via Claude CLI", 200_000, vision=True, reasoning=True, locked=False),
-            DiscoveredModel("claude-3-5-sonnet", "Claude 3.5 Sonnet", "High-intelligence workhorse via Claude CLI", 200_000, vision=True, locked=False),
+            DiscoveredModel("claude-code", "Claude Code (Auto)", "Let Claude CLI select optimal model", 200_000),
+            DiscoveredModel("claude-opus-5", "Claude Opus 5", "Frontier intelligence & autonomous engineering via Claude CLI", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5", "Flagship agentic coding and reasoning workhorse", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-fable-5-1", "Claude Fable 5.1", "Long-horizon creative engineering & complex multi-turn reasoning", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-3-7-sonnet", "Claude 3.7 Sonnet", "Hybrid reasoning and coding model via Claude CLI", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-3-5-sonnet", "Claude 3.5 Sonnet", "High-intelligence workhorse via Claude CLI", 200_000, vision=True),
         ]
+        if detected_meta and "disabled_models" in detected_meta:
+            context["disabled_models"] = detected_meta["disabled_models"]
     elif pid == "mock":
         models = [DiscoveredModel("mock-1", "Mock Test Model", "Offline test fixture", 32_000)]
+    elif pid == "subscription":
+        models = [
+            DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra (Subscription)", "Codex subscription agentic coding model", 272_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-opus-5", "Claude Opus 5 (Subscription)", "Anthropic flagship reasoning model", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5 (Subscription)", "Next-gen agentic coding model", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-3-7-sonnet", "Claude 3.7 Sonnet (Subscription)", "Claude subscription reasoning model", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-fable-5-1", "Claude Fable 5.1 (Subscription)", "Enterprise tier required", 200_000, vision=True, reasoning=True),
+        ]
     else:
         models = []
+
+    # UNIVERSAL ENTITLEMENT EVALUATION
+    for m in models:
+        locked, plan_req = evaluate_model_entitlement(
+            provider=pid,
+            model_id=m.id,
+            is_connected=is_connected,
+            user_plan=user_plan,
+            context=context,
+        )
+        m.locked = locked
+        m.plan_required = plan_req
+        m.status = "available" if not locked else "locked"
 
     dict_models = [m.to_dict() for m in models]
     _MODEL_CACHE[pid] = (now, dict_models)

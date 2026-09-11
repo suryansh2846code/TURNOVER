@@ -12,6 +12,7 @@ Credentials are NEVER exposed or duplicated into logs or memory.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,16 +45,37 @@ def detect_claude_account() -> dict[str, Any]:
     """Detect Claude Pro / Anthropic account found on this computer (e.g. Claude Code CLI)."""
     conn = get_connection("claude")
     is_disconnected = (conn.connection_status == ConnectionStatus.DISCONNECTED)
-    p = Path.home() / ".claude.json"
-    if p.exists():
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    candidates = [
+        Path(config_dir) / ".claude.json" if config_dir else None,
+        Path.home() / ".claude.json",
+        Path.home() / ".claude/claude.json",
+    ]
+    for p in candidates:
+        if not p or not p.exists():
+            continue
         try:
             data = json.loads(p.read_text())
             oa = data.get("oauthAccount") or {}
             email = oa.get("emailAddress")
             if email:
-                org_type = oa.get("organizationType", "")
-                plan = "Claude Pro" if "pro" in org_type.lower() else "Claude Subscription"
+                org_type = (oa.get("organizationType") or "").lower()
+                if "enterprise" in org_type:
+                    plan = "Claude Enterprise"
+                elif "team" in org_type:
+                    plan = "Claude Team"
+                elif "pro" in org_type:
+                    plan = "Claude Pro"
+                else:
+                    plan = "Claude Free"
+
                 name = oa.get("displayName") or oa.get("fullName") or "Claude User"
+                disabled_models: dict[str, str] = {}
+                for opt in data.get("additionalModelOptionsCache") or []:
+                    if isinstance(opt, dict) and opt.get("disabled"):
+                        val = opt.get("value") or opt.get("label") or ""
+                        disabled_models[val] = opt.get("description") or "Update Required"
+
                 return {
                     "provider": "claude",
                     "connected": False if is_disconnected else (conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED),
@@ -62,6 +84,7 @@ def detect_claude_account() -> dict[str, Any]:
                     "plan": plan,
                     "auth_method": "account",
                     "found_on_computer": True,
+                    "disabled_models": disabled_models,
                 }
         except Exception:
             pass
@@ -69,19 +92,34 @@ def detect_claude_account() -> dict[str, Any]:
 
 
 def detect_cursor_account() -> dict[str, Any]:
-    """Detect Cursor account found in Cursor's local globalStorage on macOS."""
+    """Detect Cursor account found in Cursor's local globalStorage across macOS, Linux, and Windows."""
     conn = get_connection("cursor")
     is_disconnected = (conn.connection_status == ConnectionStatus.DISCONNECTED)
-    db_path = Path.home() / "Library/Application Support/Cursor/User/globalStorage/state.vscdb"
-    if db_path.exists():
+    candidates = [
+        Path.home() / "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+        Path.home() / ".config/Cursor/User/globalStorage/state.vscdb",
+    ]
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        candidates.append(Path(appdata) / "Cursor/User/globalStorage/state.vscdb")
+
+    for db_path in candidates:
+        if not db_path.exists():
+            continue
         try:
             conn_sql = sqlite3.connect(str(db_path))
             rows = dict(conn_sql.execute("SELECT key, value FROM ItemTable WHERE key LIKE 'cursorAuth/%'").fetchall())
             email = rows.get("cursorAuth/cachedEmail")
-            membership = rows.get("cursorAuth/stripeMembershipType", "free")
+            membership = (rows.get("cursorAuth/stripeMembershipType") or "free").lower()
             token = rows.get("cursorAuth/accessToken")
             if email:
-                plan = f"Cursor {membership.title()}" if membership else "Cursor Account"
+                if "pro" in membership:
+                    plan = "Cursor Pro"
+                elif any(k in membership for k in ("business", "enterprise")):
+                    plan = "Cursor Business"
+                else:
+                    plan = "Cursor Free"
+
                 return {
                     "provider": "cursor",
                     "connected": False if is_disconnected else (conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED or bool(token)),
