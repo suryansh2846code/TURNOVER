@@ -213,140 +213,160 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        qs = urllib.parse.parse_qs(parsed.query)
-
-        if parsed.pathname == "/cancel":
-            with _GLOBAL_AUTH_STATE.lock:
-                _GLOBAL_AUTH_STATE.status = "error"
-                _GLOBAL_AUTH_STATE.error_message = "Sign-in cancelled by user"
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(b"Login cancelled")
-            _stop_server_async()
-            return
-
-        if parsed.pathname != "/auth/callback":
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b"Not found")
-            return
-
-        error = qs.get("error", [None])[0]
-        error_desc = qs.get("error_description", [error])[0]
-        code = qs.get("code", [None])[0]
-        state = qs.get("state", [None])[0]
-
-        if error:
-            with _GLOBAL_AUTH_STATE.lock:
-                _GLOBAL_AUTH_STATE.status = "error"
-                _GLOBAL_AUTH_STATE.error_message = error_desc or error
-            self._render_response(
-                title="TURNOVER - Authorization Failed",
-                heading="✕ Authorization Failed",
-                message=error_desc or error,
-                is_error=True,
-            )
-            _stop_server_async()
-            return
-
-        with _GLOBAL_AUTH_STATE.lock:
-            expected_state = _GLOBAL_AUTH_STATE.state
-            verifier = _GLOBAL_AUTH_STATE.verifier
-
-        if not code:
-            self._render_response(
-                title="TURNOVER - Missing Code",
-                heading="✕ Missing Authorization Code",
-                message="No authorization code received from OpenAI.",
-                is_error=True,
-            )
-            _stop_server_async()
-            return
-
-        if expected_state and state != expected_state:
-            self._render_response(
-                title="TURNOVER - Invalid State",
-                heading="✕ Security Verification Failed",
-                message="OAuth state mismatch. Please try again.",
-                is_error=True,
-            )
-            _stop_server_async()
-            return
-
-        # Perform token exchange
         try:
-            token_resp = httpx.post(
-                f"{AUTH_BASE_URL}/oauth/token",
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": REDIRECT_URI,
-                    "client_id": CLIENT_ID,
-                    "code_verifier": verifier,
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=30.0,
-            )
-            if token_resp.status_code != 200:
-                raise RuntimeError(
-                    f"Token exchange returned status {token_resp.status_code}: {token_resp.text[:200]}"
+            parsed = urllib.parse.urlparse(self.path)
+            qs = urllib.parse.parse_qs(parsed.query)
+
+            req_path = parsed.path.rstrip("/")
+            if req_path == "/cancel":
+                with _GLOBAL_AUTH_STATE.lock:
+                    _GLOBAL_AUTH_STATE.status = "error"
+                    _GLOBAL_AUTH_STATE.error_message = "Sign-in cancelled by user"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"Login cancelled")
+                _stop_server_async()
+                return
+
+            if req_path != "/auth/callback":
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"Not found")
+                return
+
+            error = qs.get("error", [None])[0]
+            error_desc = qs.get("error_description", [error])[0]
+            code = qs.get("code", [None])[0]
+            state = qs.get("state", [None])[0]
+
+            if error:
+                with _GLOBAL_AUTH_STATE.lock:
+                    _GLOBAL_AUTH_STATE.status = "error"
+                    _GLOBAL_AUTH_STATE.error_message = error_desc or error
+                self._render_response(
+                    title="TURNOVER - Authorization Failed",
+                    heading="✕ Authorization Failed",
+                    message=error_desc or error,
+                    is_error=True,
+                )
+                _stop_server_async()
+                return
+
+            with _GLOBAL_AUTH_STATE.lock:
+                expected_state = _GLOBAL_AUTH_STATE.state
+                verifier = _GLOBAL_AUTH_STATE.verifier
+
+            if not code:
+                self._render_response(
+                    title="TURNOVER - Missing Code",
+                    heading="✕ Missing Authorization Code",
+                    message="No authorization code received from OpenAI.",
+                    is_error=True,
+                )
+                _stop_server_async()
+                return
+
+            if expected_state and state != expected_state:
+                self._render_response(
+                    title="TURNOVER - Invalid State",
+                    heading="✕ Security Verification Failed",
+                    message="OAuth state mismatch. Please try again.",
+                    is_error=True,
+                )
+                _stop_server_async()
+                return
+
+            # Perform token exchange
+            try:
+                token_resp = httpx.post(
+                    f"{AUTH_BASE_URL}/oauth/token",
+                    data={
+                        "grant_type": "authorization_code",
+                        "code": code,
+                        "redirect_uri": REDIRECT_URI,
+                        "client_id": CLIENT_ID,
+                        "code_verifier": verifier,
+                    },
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    timeout=30.0,
+                )
+                if token_resp.status_code != 200:
+                    raise RuntimeError(
+                        f"Token exchange returned status {token_resp.status_code}: {token_resp.text[:200]}"
+                    )
+
+                token_data = token_resp.json()
+                id_token = token_data.get("id_token", "")
+                claims = _decode_jwt_payload(id_token)
+                email = claims.get("email") or "ChatGPT User"
+                name = claims.get("name") or "ChatGPT Account"
+
+                # Persist tokens securely
+                storage_file = _token_storage_path()
+                storage_file.parent.mkdir(parents=True, exist_ok=True)
+                payload = {
+                    "auth_mode": "chatgpt_subscription",
+                    "tokens": token_data,
+                    "email": email,
+                    "name": name,
+                    "last_refresh": datetime.now(timezone.utc).isoformat(),
+                }
+                storage_file.write_text(json.dumps(payload, indent=2))
+
+                # Update DB connection record
+                now = datetime.now(timezone.utc).isoformat()
+                conn = get_connection("openai")
+                conn.auth_method = "account"
+                conn.email = email
+                conn.account_display_name = name
+                conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+                conn.status_message = f"Connected to ChatGPT ({email})"
+                conn.connected_at = conn.connected_at or now
+                conn.last_verified_at = now
+                save_connection(conn)
+
+                try:
+                    from .registry import clear_provider_cache
+                    clear_provider_cache()
+                except Exception:
+                    pass
+
+                with _GLOBAL_AUTH_STATE.lock:
+                    _GLOBAL_AUTH_STATE.status = "success"
+                    _GLOBAL_AUTH_STATE.connected_email = email
+
+                self._render_response(
+                    title="TURNOVER - Authorization Successful",
+                    heading="✓ Authorization Successful",
+                    message=f"Your ChatGPT account ({email}) is now connected to TURNOVER. You can close this tab and return to the app.",
+                    is_error=False,
+                )
+            except Exception as exc:
+                logger.exception("Error during ChatGPT token exchange")
+                with _GLOBAL_AUTH_STATE.lock:
+                    _GLOBAL_AUTH_STATE.status = "error"
+                    _GLOBAL_AUTH_STATE.error_message = str(exc)
+                self._render_response(
+                    title="TURNOVER - Token Exchange Failed",
+                    heading="✕ Authorization Error",
+                    message=f"Failed to exchange token with OpenAI: {exc}",
+                    is_error=True,
                 )
 
-            token_data = token_resp.json()
-            id_token = token_data.get("id_token", "")
-            claims = _decode_jwt_payload(id_token)
-            email = claims.get("email") or "ChatGPT User"
-            name = claims.get("name") or "ChatGPT Account"
-
-            # Persist tokens securely
-            storage_file = _token_storage_path()
-            storage_file.parent.mkdir(parents=True, exist_ok=True)
-            payload = {
-                "auth_mode": "chatgpt_subscription",
-                "tokens": token_data,
-                "email": email,
-                "name": name,
-                "last_refresh": datetime.now(timezone.utc).isoformat(),
-            }
-            storage_file.write_text(json.dumps(payload, indent=2))
-
-            # Update DB connection record
-            now = datetime.now(timezone.utc).isoformat()
-            conn = get_connection("openai")
-            conn.auth_method = "account"
-            conn.email = email
-            conn.account_display_name = name
-            conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
-            conn.status_message = f"Connected to ChatGPT ({email})"
-            conn.connected_at = conn.connected_at or now
-            conn.last_verified_at = now
-            save_connection(conn)
-
-            with _GLOBAL_AUTH_STATE.lock:
-                _GLOBAL_AUTH_STATE.status = "success"
-                _GLOBAL_AUTH_STATE.connected_email = email
-
-            self._render_response(
-                title="TURNOVER - Authorization Successful",
-                heading="✓ Authorization Successful",
-                message=f"Your ChatGPT account ({email}) is now connected to TURNOVER. You can close this tab and return to the app.",
-                is_error=False,
-            )
-        except Exception as exc:
-            logger.exception("Error during ChatGPT token exchange")
-            with _GLOBAL_AUTH_STATE.lock:
-                _GLOBAL_AUTH_STATE.status = "error"
-                _GLOBAL_AUTH_STATE.error_message = str(exc)
-            self._render_response(
-                title="TURNOVER - Token Exchange Failed",
-                heading="✕ Authorization Error",
-                message=f"Failed to exchange token with OpenAI: {exc}",
-                is_error=True,
-            )
-
-        _stop_server_async()
+            _stop_server_async()
+        except Exception as top_exc:
+            logger.exception("Unhandled error in ChatGPT OAuth callback handler")
+            try:
+                self._render_response(
+                    title="TURNOVER - Error",
+                    heading="✕ Sign-In Processing Error",
+                    message=str(top_exc),
+                    is_error=True,
+                )
+            except Exception:
+                pass
+            _stop_server_async()
 
     def _render_response(self, title: str, heading: str, message: str, is_error: bool = False):
         color = "#fc533a" if is_error else "#10b981"

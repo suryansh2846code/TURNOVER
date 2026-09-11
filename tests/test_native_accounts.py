@@ -181,4 +181,52 @@ def test_open_browser_endpoint(monkeypatch):
     assert bad_resp.status_code == 400
 
 
+def test_openai_oauth_callback_handler(monkeypatch):
+    """Verify OpenAI OAuth callback handler handles /auth/callback without AttributeError and updates connection."""
+    import base64
+    import json
+    import urllib.request
+    from lodestone.models.chatgpt_auth import start_chatgpt_oauth_flow, _GLOBAL_AUTH_STATE
+    from lodestone.models.connections import get_connection, ConnectionStatus
+
+    # Mock httpx.post for token exchange
+    dummy_payload = base64.urlsafe_b64encode(json.dumps({
+        "email": "test-oauth@example.com",
+        "name": "Test OAuth User",
+    }).encode()).decode().rstrip("=")
+    dummy_id_token = f"header.{dummy_payload}.sig"
+
+    class DummyResp:
+        status_code = 200
+        def json(self):
+            return {
+                "access_token": "acc_12345",
+                "refresh_token": "ref_12345",
+                "id_token": dummy_id_token,
+                "expires_in": 3600,
+            }
+
+    import httpx
+    monkeypatch.setattr(httpx, "post", lambda *args, **kwargs: DummyResp())
+
+    ok, auth_url, msg = start_chatgpt_oauth_flow()
+    assert ok is True
+
+    # Call callback with valid state
+    state = _GLOBAL_AUTH_STATE.state
+    callback_url = f"http://127.0.0.1:1455/auth/callback?code=ac_test_code_123&state={state}"
+
+    req = urllib.request.Request(callback_url)
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 200
+        html = resp.read().decode("utf-8")
+        assert "Authorization Successful" in html
+        assert "test-oauth@example.com" in html
+
+    conn = get_connection("openai")
+    assert conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED
+    assert conn.email == "test-oauth@example.com"
+
+
+
 
