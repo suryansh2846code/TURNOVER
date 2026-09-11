@@ -343,9 +343,22 @@ def get_model_catalog(force_refresh: bool = False) -> list[dict]:
         conn = get_connection(pid)
         caps = get_capabilities(pid)
 
+        from .entitlements import is_provider_connected
+        is_conn, user_plan, _ = is_provider_connected(pid)
+
         # Sync readiness into connection if ready changed
         if ready and conn.connection_status == ConnectionStatus.NOT_CONNECTED:
             conn.connection_status = ConnectionStatus.API_KEY_CONNECTED if caps and caps.api_key_supported else ConnectionStatus.CONNECTED
+
+        if not is_conn:
+            ready = False
+            if conn.connection_status == ConnectionStatus.DISCONNECTED:
+                reason = "Disconnected by user"
+            elif not reason:
+                reason = "Not connected"
+            for m in models:
+                m["locked"] = True
+                m["plan_required"] = "Connect in Models"
 
         acct = None
         try:
@@ -365,6 +378,9 @@ def get_model_catalog(force_refresh: bool = False) -> list[dict]:
             "key_url": entry.get("key_url", ""),
             "models": models,
             "ready": ready,
+            "connected": is_conn,
+            "locked": not is_conn,
+            "lock_reason": "Connect in Models" if not is_conn else None,
             "reason": reason,
             "locality": locality,
             "destination": destination,
@@ -398,6 +414,15 @@ def list_providers() -> list[dict]:
         locality, destination = _LOCALITY.get(name, ("cloud", "Sent to the model provider."))
         conn = get_connection(name)
 
+        from .entitlements import is_provider_connected
+        is_conn, user_plan, _ = is_provider_connected(name)
+        if not is_conn:
+            ready = False
+            if conn.connection_status == ConnectionStatus.DISCONNECTED:
+                reason = "Disconnected by user"
+            elif not reason:
+                reason = "Not connected"
+
         acct = local_accounts.get(name)
         if acct and acct.get("found_on_computer"):
             if name == "gemini" and acct.get("connected") and conn.connection_status not in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.DISCONNECTED):
@@ -416,6 +441,7 @@ def list_providers() -> list[dict]:
         out.append({
             "name": name,
             "ready": ready,
+            "connected": is_conn,
             "reason": reason,
             "locality": locality,
             "destination": destination,

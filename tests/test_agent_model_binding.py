@@ -145,3 +145,46 @@ def test_api_endpoints():
     # 7. Verify cleared
     resp = client.get("/api/agents/inbox/model")
     assert resp.json()["is_override"] is False
+
+
+def test_disconnected_provider_model_binding_rejected(monkeypatch):
+    """Verify that attempting to bind an agent to a disconnected or unconnected provider
+    is rejected with HTTP 400 whether choosing Auto (model=None) or a specific model."""
+    client = TestClient(app)
+
+    # 1. Test unconnected provider (openrouter) with Auto (model=None)
+    resp = client.post("/api/agents/inbox/model", json={
+        "provider": "openrouter",
+        "model": None,
+    })
+    assert resp.status_code == 400
+    assert "not connected" in resp.json()["detail"].lower()
+
+    # 2. Test disconnected provider (claude when disconnected)
+    from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
+    conn = get_connection("claude")
+    orig_status = conn.connection_status
+    try:
+        conn.connection_status = ConnectionStatus.DISCONNECTED
+        save_connection(conn)
+
+        # Attempt to set claude (Auto)
+        resp = client.post("/api/agents/inbox/model", json={
+            "provider": "claude",
+            "model": None,
+        })
+        assert resp.status_code == 400
+        assert "not connected" in resp.json()["detail"].lower()
+
+        # Attempt to set claude with specific model
+        resp = client.post("/api/agents/inbox/model", json={
+            "provider": "claude",
+            "model": "claude-opus-5",
+        })
+        assert resp.status_code == 400
+        assert "not connected" in resp.json()["detail"].lower()
+
+    finally:
+        conn.connection_status = orig_status
+        save_connection(conn)
+

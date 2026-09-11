@@ -132,6 +132,8 @@ def get_agent_model_endpoint(agent_id: str):
             effective_model = cat.get("default_model") or ""
     else:
         effective_model = model or s.model_name or ""
+    from ..models.entitlements import is_provider_connected
+    is_conn, _, _ = is_provider_connected(effective_provider)
     return {
         "agent_id": agent_id,
         "provider": effective_provider,
@@ -139,6 +141,7 @@ def get_agent_model_endpoint(agent_id: str):
         "configured_provider": prov,
         "configured_model": model,
         "is_override": is_override,
+        "is_connected": is_conn,
     }
 
 
@@ -152,9 +155,18 @@ def set_agent_model_endpoint(agent_id: str, body: AgentModelIn):
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'")
 
+    from ..models.entitlements import is_provider_connected
+    is_conn, user_plan, _ = is_provider_connected(body.provider)
+    if not is_conn:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Provider '{body.provider}' is not connected. Please connect it in Models & Accounts first."
+        )
+
+    from ..models.discovery import get_discovered_models
+    discovered, _ = get_discovered_models(body.provider)
+
     if body.model:
-        from ..models.discovery import get_discovered_models
-        discovered, _ = get_discovered_models(body.provider)
         for m in discovered:
             if m.get("id") == body.model and m.get("locked"):
                 req_plan = m.get("plan_required") or "a higher"
@@ -162,6 +174,14 @@ def set_agent_model_endpoint(agent_id: str, body: AgentModelIn):
                     status_code=400,
                     detail=f"Model '{body.model}' requires {req_plan} plan and is locked on your current plan."
                 )
+    else:
+        # User selected Auto: verify at least one model is unlocked for this provider
+        unlocked = [m for m in discovered if not m.get("locked")]
+        if not unlocked:
+            raise HTTPException(
+                status_code=400,
+                detail=f"All models for provider '{body.provider}' are locked on your current plan."
+            )
 
     return set_agent_model(agent_id, body.provider, body.model)
 

@@ -814,6 +814,24 @@ const COMPOSER_PROVIDERS = [
 let activePickerProvider = "cursor";
 let activePickerModel = null;
 
+function isProviderConnected(pid) {
+  if (!pid) return false;
+  const p = (MODEL_CATALOG || []).find((c) => c.id === pid);
+  if (p) {
+    if (typeof p.connected === "boolean") return p.connected;
+    if (p.connection && p.connection.connection_status === "DISCONNECTED") return false;
+    if (p.connection && (p.connection.connection_status === "ACCOUNT_CONNECTED" || p.connection.connection_status === "API_KEY_CONNECTED" || p.connection.connection_status === "CONNECTED")) return true;
+    if (p.ready) return true;
+  }
+  const prov = (PROVIDERS || []).find((x) => x.name === pid);
+  if (prov) {
+    if (typeof prov.connected === "boolean") return prov.connected;
+    if (prov.connection && prov.connection.connection_status === "DISCONNECTED") return false;
+    if (prov.ready) return true;
+  }
+  return false;
+}
+
 function closeAllPickerFlyouts() {
   const pf = $("#cmpProvFlyout");
   const mf = $("#cmpModelFlyout");
@@ -831,9 +849,19 @@ function renderProviderFlyout() {
 
   list.innerHTML = COMPOSER_PROVIDERS.map((p) => {
     const isSel = p.id === activePickerProvider;
+    const isConn = isProviderConnected(p.id);
+    const badgeHtml = !isConn
+      ? `<span class="cmp-lock-badge">🔒 Not Connected</span>`
+      : "";
     return `
-      <div class="cmp-flyout-item ${isSel ? 'is-selected' : ''}" data-prov="${esc(p.id)}">
-        <span>${esc(p.label)}</span>
+      <div class="cmp-flyout-item ${isSel ? 'is-selected' : ''} ${!isConn ? 'is-locked' : ''}"
+           data-prov="${esc(p.id)}"
+           data-connected="${isConn ? 'true' : 'false'}"
+           title="${!isConn ? `${esc(p.label)} is not connected. Connect in Models & Accounts first.` : ''}">
+        <div class="cmp-flyout-item-label">
+          <span>${esc(p.label)}</span>
+          ${badgeHtml}
+        </div>
         ${isSel ? '<span class="cmp-flyout-check">✓</span>' : ''}
       </div>
     `;
@@ -843,8 +871,15 @@ function renderProviderFlyout() {
     el.onclick = async (e) => {
       e.stopPropagation();
       const pid = el.dataset.prov;
+      const isConn = el.dataset.connected === "true";
       const p = COMPOSER_PROVIDERS.find((x) => x.id === pid);
       const pLabel = p ? p.label : pid;
+
+      if (!isConn) {
+        toast(`🔒 ${pLabel} is not connected. Connect it in Models & Accounts first.`);
+        return;
+      }
+
       activePickerProvider = pid;
       activePickerModel = null;
       if ($("#cmpSelectedProvLabel")) $("#cmpSelectedProvLabel").textContent = pLabel;
@@ -864,7 +899,7 @@ function renderProviderFlyout() {
           await updateAgentModelChip(current);
           refreshPickerPopover();
         } catch (err) {
-          toast("Could not update model: " + err);
+          toast("Could not update model: " + (err.message || err));
         }
       }
     };
@@ -875,17 +910,26 @@ function renderModelFlyout() {
   const list = $("#cmpModelFlyoutList");
   if (!list) return;
 
+  const isProvConn = isProviderConnected(activePickerProvider);
   const pEntry = (MODEL_CATALOG || []).find((c) => c.id === activePickerProvider);
   const models = (pEntry && pEntry.models) || [];
 
+  // If provider is not connected, Auto is locked too!
+  const autoLocked = !isProvConn;
   const items = [
-    { id: "", name: "Auto", desc: "Recommended model automatically", locked: false, plan_required: null },
+    {
+      id: "",
+      name: "Auto",
+      desc: autoLocked ? "Provider not connected" : "Recommended model automatically",
+      locked: autoLocked,
+      plan_required: autoLocked ? "Connect in Models" : null
+    },
     ...models.map((m) => ({
       id: m.id,
       name: m.name,
       desc: m.desc,
-      locked: Boolean(m.locked),
-      plan_required: m.plan_required || null,
+      locked: !isProvConn || Boolean(m.locked),
+      plan_required: !isProvConn ? "Connect in Models" : (m.plan_required || null),
     })),
   ];
 
@@ -909,14 +953,25 @@ function renderModelFlyout() {
       </div>
     `;
   }).join("") + `
-    <div class="cmp-flyout-item" data-model="__custom__">
-      <span style="font-size:12px;color:var(--muted)">Custom model identifier…</span>
+    <div class="cmp-flyout-item ${!isProvConn ? 'is-locked' : ''}" data-model="__custom__" data-locked="${!isProvConn ? 'true' : 'false'}">
+      <div class="cmp-flyout-item-label">
+        <span style="font-size:12px;color:var(--muted)">Custom model identifier…</span>
+        ${!isProvConn ? '<span class="cmp-lock-badge">🔒 Locked</span>' : ''}
+      </div>
     </div>
   `;
 
   list.querySelectorAll(".cmp-flyout-item").forEach((el) => {
     el.onclick = async (e) => {
       e.stopPropagation();
+      const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === activePickerProvider);
+      const pLabel = pSpec ? pSpec.label : activePickerProvider;
+
+      if (!isProvConn) {
+        toast(`🔒 ${pLabel} is not connected. Connect it in Models & Accounts first.`);
+        return;
+      }
+
       if (el.dataset.locked === "true") {
         const req = el.dataset.planReq || "a higher";
         const modelId = el.dataset.model;
@@ -936,7 +991,6 @@ function renderModelFlyout() {
       if ($("#cmpSelectedModelLabel")) $("#cmpSelectedModelLabel").textContent = displayLabel;
       const pillLabel = $("#cmpModelLabel");
       if (pillLabel) {
-        const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === activePickerProvider);
         pillLabel.textContent = chosen ? displayLabel : (pSpec ? pSpec.label : "Auto");
       }
       $("#cmpModelMenu").hidden = true;
@@ -966,10 +1020,12 @@ function formatProviderPlanInfo(providerId) {
   const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === providerId);
   const providerLabel = pSpec ? pSpec.label : (p ? p.label : providerId);
 
-  if (!p) {
+  const isConnected = isProviderConnected(providerId);
+
+  if (!isConnected) {
     return {
-      title: `${providerLabel} plan`,
-      plan: "Not configured",
+      title: `${providerLabel}`,
+      plan: "Not connected",
       identity: "",
       connected: false,
     };
@@ -977,21 +1033,6 @@ function formatProviderPlanInfo(providerId) {
 
   const conn = (typeof p.connection === "object" && p.connection !== null) ? p.connection : {};
   const acct = (typeof p.detected_account === "object" && p.detected_account !== null) ? p.detected_account : {};
-  const isConnected = Boolean(
-    p.ready ||
-    conn.connection_status === "ACCOUNT_CONNECTED" ||
-    conn.connection_status === "API_KEY_CONNECTED" ||
-    acct.connected
-  );
-
-  if (!isConnected) {
-    return {
-      title: `Sign in with ${providerLabel} to see plan usage`,
-      plan: "",
-      identity: "",
-      connected: false,
-    };
-  }
 
   // Extract clean string for plan
   let planLabel = "";
@@ -1039,8 +1080,11 @@ function refreshPickerStatusRows() {
   const info = formatProviderPlanInfo(pid);
   if (!info.connected) {
     statusBox.innerHTML = `
-      <div class="cmp-status-row" data-provider="${esc(pid)}">
-        <span class="cmp-status-sub">${esc(info.title)}</span>
+      <div class="cmp-status-row is-disconnected" data-provider="${esc(pid)}">
+        <div class="cmp-status-label-group">
+          <span class="cmp-status-label" style="color:#ef4444">🔒 ${esc(info.title)}</span>
+          <span class="cmp-status-sub">Provider not connected · Connect in Models & Accounts</span>
+        </div>
         <span class="cmp-chevron">›</span>
       </div>
     `;
@@ -1077,21 +1121,29 @@ async function refreshPickerPopover() {
     activePickerProvider = prov;
     activePickerModel = isOverride ? (data.configured_model || null) : null;
 
+    const isProvConn = isProviderConnected(prov);
     const pEntry = (MODEL_CATALOG || []).find((c) => c.id === prov);
     const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === prov);
     const provName = pSpec ? pSpec.label : (pEntry ? pEntry.label : prov);
-    if ($("#cmpSelectedProvLabel")) $("#cmpSelectedProvLabel").textContent = provName;
+    const provDisplay = isProvConn ? provName : `${provName} (🔒 Locked)`;
+    if ($("#cmpSelectedProvLabel")) $("#cmpSelectedProvLabel").textContent = provDisplay;
 
     let modelName = "Auto";
     if (isOverride && data.configured_model) {
       const mEntry = pEntry && (pEntry.models || []).find((m) => m.id === data.configured_model);
       modelName = mEntry ? mEntry.name : data.configured_model;
+    } else if (!isProvConn) {
+      modelName = "🔒 Connect in Models";
     }
     if ($("#cmpSelectedModelLabel")) $("#cmpSelectedModelLabel").textContent = modelName;
 
     const pillLabel = $("#cmpModelLabel");
     if (pillLabel) {
-      pillLabel.textContent = isOverride ? (modelName !== "Auto" ? modelName : provName) : "Auto";
+      if (!isProvConn) {
+        pillLabel.textContent = `${provName} (🔒 Locked)`;
+      } else {
+        pillLabel.textContent = isOverride ? (modelName !== "Auto" ? modelName : provName) : "Auto";
+      }
     }
 
     refreshPickerStatusRows();
@@ -1233,8 +1285,11 @@ async function updateAgentModelChip(agentId) {
     const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === provName);
     const provLabel = pSpec ? pSpec.label : (pEntry ? pEntry.label : provName);
 
+    const isProvConn = isProviderConnected(provName);
     let display = "Auto";
-    if (data.is_override) {
+    if (!isProvConn) {
+      display = `${provLabel} (🔒 Locked)`;
+    } else if (data.is_override) {
       if (modelName) {
         const mEntry = pEntry && (pEntry.models || []).find((m) => m.id === modelName);
         display = mEntry ? mEntry.name : modelName;
@@ -1249,9 +1304,11 @@ async function updateAgentModelChip(agentId) {
     if (labelEl) labelEl.textContent = display;
     if (chip) {
       chip.classList.toggle("is-override", Boolean(data.is_override));
-      chip.title = data.is_override
-        ? `Dedicated model for this agent: ${provLabel} (${modelName || 'Auto'}). Click to change.`
-        : `Using global default model: ${provLabel} (${modelName || 'Auto'}). Click to set custom.`;
+      chip.title = !isProvConn
+        ? `${provLabel} is not connected. Open Models drawer to connect.`
+        : (data.is_override
+          ? `Dedicated model for this agent: ${provLabel} (${modelName || 'Auto'}). Click to change.`
+          : `Using global default model: ${provLabel} (${modelName || 'Auto'}). Click to set custom.`);
     }
 
     // Update the composer pill smoothly
@@ -1271,11 +1328,18 @@ async function updateAgentModelChip(agentId) {
     activePickerProvider = data.configured_provider || data.provider || "cursor";
     activePickerModel = data.configured_model || null;
     const activeSpec = COMPOSER_PROVIDERS.find((x) => x.id === activePickerProvider);
+    const activeProvConn = isProviderConnected(activePickerProvider);
+    const activeProvLabel = activeSpec ? activeSpec.label : (pEntry ? pEntry.label : activePickerProvider);
+
     if ($("#cmpSelectedProvLabel")) {
-      $("#cmpSelectedProvLabel").textContent = activeSpec ? activeSpec.label : (pEntry ? pEntry.label : activePickerProvider);
+      $("#cmpSelectedProvLabel").textContent = activeProvConn ? activeProvLabel : `${activeProvLabel} (🔒 Locked)`;
     }
     if ($("#cmpSelectedModelLabel")) {
-      $("#cmpSelectedModelLabel").textContent = data.is_override ? (data.configured_model || "Auto") : "Auto";
+      if (!activeProvConn) {
+        $("#cmpSelectedModelLabel").textContent = "🔒 Connect in Models";
+      } else {
+        $("#cmpSelectedModelLabel").textContent = data.is_override ? (data.configured_model || "Auto") : "Auto";
+      }
     }
 
     refreshPickerStatusRows();
@@ -1447,6 +1511,7 @@ async function loadProviders() {
   loadProviderCards();
   initComposerModelPicker();
   if (current) updateAgentModelChip(current);
+  refreshPickerPopover();
 }
 
 // Which provider/model to use for enrichment: the dedicated one if set, else the
