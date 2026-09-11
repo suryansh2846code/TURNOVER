@@ -41,12 +41,12 @@ def _detect_capabilities(model_id: str, desc: str = "") -> dict[str, Any]:
     d = desc.lower()
 
     # Reasoning models
-    is_reasoning = any(k in mid for k in ("o1", "o3", "reasoner", "r1", "thinking")) or "reasoning" in d
+    is_reasoning = any(k in mid for k in ("o1", "o3", "reasoner", "r1", "thinking", "terra", "luna", "sol", "astra", "gpt-5", "gpt-6")) or "reasoning" in d
     if "3-7-sonnet" in mid:
         is_reasoning = True
 
     # Vision models
-    is_vision = any(k in mid for k in ("vision", "4o", "gemini", "claude-3", "vl", "pixtral")) or "vision" in d
+    is_vision = any(k in mid for k in ("vision", "4o", "gemini", "claude-3", "vl", "pixtral", "gpt-5", "gpt-6", "terra", "luna", "sol", "astra")) or "vision" in d
 
     # Tool calling support
     # (Almost all current flagship models support tools; legacy/completion models don't)
@@ -59,6 +59,8 @@ def _detect_capabilities(model_id: str, desc: str = "") -> dict[str, Any]:
         context_window = 1_000_000 if "1.5" in mid or "2.5" in mid else 128_000
     elif any(k in mid for k in ("claude-3", "sonnet", "haiku", "opus")):
         context_window = 200_000
+    elif any(k in mid for k in ("gpt-5", "gpt-6", "terra", "luna", "sol", "astra")):
+        context_window = 272_000
     elif "gpt-4o" in mid or "gpt-4-turbo" in mid:
         context_window = 128_000
     elif any(k in mid for k in ("o1", "o3")):
@@ -79,9 +81,69 @@ def _detect_capabilities(model_id: str, desc: str = "") -> dict[str, Any]:
     }
 
 
+def _chatgpt_subscription_models() -> list[DiscoveredModel]:
+    """Retrieve models available through ChatGPT Subscription / Codex."""
+    models: list[DiscoveredModel] = []
+    cache_path = Path.home() / "Library/Application Support/Turnstone/provider-auth/codex/models_cache.json"
+    if cache_path.exists():
+        try:
+            cached_data = json.loads(cache_path.read_text())
+            for m in cached_data.get("models", []):
+                slug = m.get("slug")
+                if not slug:
+                    continue
+                display_name = m.get("display_name") or slug.replace("-", " ").title()
+                desc = m.get("description") or "Codex agentic coding model"
+                models.append(DiscoveredModel(
+                    id=slug,
+                    name=display_name,
+                    desc=desc,
+                    reasoning=True,
+                    vision=True,
+                    tool_calling=True,
+                    context_window=m.get("context_window", 272_000),
+                    structured_output=True,
+                    streaming=True,
+                    status="available",
+                ))
+        except Exception:
+            pass
+
+    if models:
+        return models
+
+    return [
+        DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-5.5", "GPT-5.5", "Proven model for coding and general work", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-5.6-sol", "GPT-5.6-Sol", "Flagship agentic coding model for complex tasks", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-6-astra", "GPT-6-Astra", "Our most capable model for complex, demanding work", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-reserve", "GPT-Reserve", "Fast and affordable backup agentic coding model", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-4o", "GPT-4o", "Flagship multimodal intelligence", 128_000, vision=True),
+        DiscoveredModel("gpt-4o-mini", "GPT-4o Mini", "Fast, affordable intelligence", 128_000, vision=True),
+        DiscoveredModel("o3-mini", "o3-mini", "High-speed STEM and code reasoning", 200_000, reasoning=True),
+        DiscoveredModel("o1", "o1", "Deliberate deep reasoning", 200_000, reasoning=True),
+    ]
+
+
 def discover_openai_models(api_key: str | None = None) -> tuple[list[DiscoveredModel], dict[str, Any]]:
     key = api_key or os.environ.get("OPENAI_API_KEY") or _saved_key("OPENAI_API_KEY")
     account_info: dict[str, Any] = {}
+
+    # Check if ChatGPT Subscription is active
+    try:
+        from .chatgpt_auth import get_chatgpt_access_token, detect_chatgpt_local_session
+        sess = detect_chatgpt_local_session(fetch_usage=False)
+        has_sub = bool(get_chatgpt_access_token() or (sess and sess.get("has_token")))
+        if sess and sess.get("email"):
+            account_info["email"] = sess.get("email")
+            account_info["name"] = sess.get("name")
+            account_info["plan"] = sess.get("plan")
+        if not key and has_sub:
+            return _chatgpt_subscription_models(), account_info
+    except Exception:
+        pass
+
     if not key:
         return _fallback_openai(), account_info
 
@@ -101,7 +163,7 @@ def discover_openai_models(api_key: str | None = None) -> tuple[list[DiscoveredM
     except Exception:
         pass
 
-    # 2. Discover models
+    # 2. Discover models from OpenAI API
     try:
         resp = httpx.get("https://api.openai.com/v1/models", headers=headers, timeout=6.0)
         if resp.status_code != 200:
@@ -110,7 +172,7 @@ def discover_openai_models(api_key: str | None = None) -> tuple[list[DiscoveredM
         data = resp.json().get("data", [])
         models: list[DiscoveredModel] = []
         # Filter for chat / reasoning models
-        chat_prefixes = ("gpt-4o", "gpt-4", "o1", "o3", "chatgpt")
+        chat_prefixes = ("gpt-5", "gpt-6", "gpt-4o", "gpt-4", "o1", "o3", "chatgpt")
         for m in sorted(data, key=lambda x: x.get("created", 0), reverse=True):
             mid = m.get("id", "")
             if not any(mid.startswith(p) for p in chat_prefixes):
@@ -126,7 +188,7 @@ def discover_openai_models(api_key: str | None = None) -> tuple[list[DiscoveredM
                 **caps,
             ))
 
-        return models[:12] if models else _fallback_openai(), account_info
+        return models[:16] if models else _fallback_openai(), account_info
     except Exception:
         return _fallback_openai(), account_info
 
@@ -310,10 +372,16 @@ def discover_ollama_models(host: str | None = None) -> list[DiscoveredModel]:
 
 def _fallback_openai() -> list[DiscoveredModel]:
     return [
+        DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-5.5", "GPT-5.5", "Proven model for coding and general work", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-5.6-sol", "GPT-5.6-Sol", "Flagship agentic coding model for complex tasks", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-6-astra", "GPT-6-Astra", "Our most capable model for complex, demanding work", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-reserve", "GPT-Reserve", "Fast and affordable backup agentic coding model", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-4o", "GPT-4o", "Flagship multimodal intelligence", 128_000, vision=True),
         DiscoveredModel("gpt-4o-mini", "GPT-4o Mini", "Fast, lightweight daily driver", 128_000, vision=True),
-        DiscoveredModel("o1", "o1", "Deliberate deep reasoning", 200_000, reasoning=True),
         DiscoveredModel("o3-mini", "o3-mini", "High-speed STEM and code reasoning", 200_000, reasoning=True),
+        DiscoveredModel("o1", "o1", "Deliberate deep reasoning", 200_000, reasoning=True),
     ]
 
 

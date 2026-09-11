@@ -18,7 +18,7 @@ from .base import ChatResult, LLMProvider, Message, Tool, ToolCall, _saved_key
 class OpenAICompatProvider(LLMProvider):
     name = "openai"
     default_base = "https://api.openai.com/v1"
-    default_model = "gpt-4o-mini"
+    default_model = "gpt-5.6-terra"
     key_env = "OPENAI_API_KEY"
     key_required = True
 

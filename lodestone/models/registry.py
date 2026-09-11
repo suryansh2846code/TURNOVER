@@ -132,7 +132,8 @@ _LOCALITY = {
 # we can know without a provider account API; matched loosely, shown as approximate.
 _CONTEXT_WINDOW = {
     "opus": 200_000, "sonnet": 200_000, "haiku": 200_000, "claude": 200_000,
-    "gpt-5": 400_000, "gpt-4o": 128_000, "gpt-4.1": 1_000_000, "gpt-4": 128_000,
+    "gpt-6": 400_000, "gpt-5": 272_000, "terra": 272_000, "luna": 272_000, "sol": 272_000, "astra": 400_000,
+    "gpt-4o": 128_000, "gpt-4.1": 1_000_000, "gpt-4": 128_000,
     "o1": 200_000, "o3": 200_000, "o4": 200_000, "gemini": 1_000_000,
     "grok": 131_072, "cursor": 128_000,
     "llama": 128_000, "qwen": 32_000, "mistral": 32_000, "deepseek": 64_000,
@@ -200,14 +201,20 @@ MODEL_CATALOG = {
         "id": "openai",
         "label": "OpenAI",
         "icon": "spark",
-        "default_model": "gpt-4o",
+        "default_model": "gpt-5.6-terra",
         "key_env": "OPENAI_API_KEY",
         "key_url": "https://platform.openai.com/api-keys",
         "models": [
+            {"id": "gpt-5.6-terra", "name": "GPT-5.6-Terra", "desc": "Balanced agentic coding model for everyday work"},
+            {"id": "gpt-5.6-luna", "name": "GPT-5.6-Luna", "desc": "Fast and affordable agentic coding model"},
+            {"id": "gpt-5.5", "name": "GPT-5.5", "desc": "Proven model for coding and general work"},
+            {"id": "gpt-5.6-sol", "name": "GPT-5.6-Sol", "desc": "Flagship agentic coding model for complex tasks"},
+            {"id": "gpt-6-astra", "name": "GPT-6-Astra", "desc": "Our most capable model for complex, demanding work"},
+            {"id": "gpt-reserve", "name": "GPT-Reserve", "desc": "Fast and affordable backup agentic coding model"},
             {"id": "gpt-4o", "name": "GPT-4o", "desc": "Omni flagship for general tasks"},
             {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "desc": "Fast, affordable intelligence"},
-            {"id": "o1", "name": "o1", "desc": "Advanced deliberate reasoning"},
             {"id": "o3-mini", "name": "o3-mini", "desc": "Fast STEM & code reasoning"},
+            {"id": "o1", "name": "o1", "desc": "Advanced deliberate reasoning"},
         ],
     },
     "deepseek": {
