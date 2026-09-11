@@ -497,14 +497,25 @@ def start_chatgpt_oauth_flow() -> tuple[bool, str, str]:
 
             _watch_codex_auth_file_async(initial_mtime)
 
-            # Build direct fallback URL just in case user needs to open manually
+            # Build direct fallback URL with valid PKCE params in case user needs to open manually
+            verifier = "".join(
+                secrets.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+                for _ in range(43)
+            )
+            digest = hashlib.sha256(verifier.encode("utf-8")).digest()
+            challenge = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
+            state = secrets.token_hex(16)
+
             params = {
                 "response_type": "code",
                 "client_id": CLIENT_ID,
                 "redirect_uri": REDIRECT_URI,
                 "scope": SCOPE,
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
                 "id_token_add_organizations": "true",
                 "codex_cli_simplified_flow": "true",
+                "state": state,
                 "originator": "opencode",
             }
             auth_url = f"{AUTH_BASE_URL}/oauth/authorize?{urllib.parse.urlencode(params)}"

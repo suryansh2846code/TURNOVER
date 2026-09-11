@@ -854,15 +854,16 @@ def signin_provider_endpoint(name: str):
     url = caps.official_auth_url if caps else ""
 
     if pid in ("claude", "anthropic"):
-        from ..models.claude_auth import start_claude_login_flow
+        from ..models.claude_auth import start_claude_login_flow, find_claude_cli
         ok, auth_url, msg = start_claude_login_flow()
+        has_cli = bool(find_claude_cli())
         return {
             "started": True,
             "provider_id": "claude",
             "auth_url": auth_url,
             "brand_name": "Claude",
             "requires_code": True,
-            "browser_opened": ok,
+            "browser_opened": bool(ok and has_cli),
             "detail": "Opened Claude authorization in browser — sign in to your account.",
         }
 
@@ -878,14 +879,15 @@ def signin_provider_endpoint(name: str):
         }
 
     elif pid == "openai":
-        from ..models.chatgpt_auth import start_chatgpt_oauth_flow
+        from ..models.chatgpt_auth import start_chatgpt_oauth_flow, find_codex_cli
         ok, auth_url, msg = start_chatgpt_oauth_flow()
+        has_cli = bool(find_codex_cli())
         return {
             "started": True,
             "provider_id": "openai",
             "auth_url": auth_url,
             "brand_name": "ChatGPT",
-            "browser_opened": ok,
+            "browser_opened": bool(ok and has_cli),
             "detail": "Opened ChatGPT sign-in in browser — choose your account to continue to Codex.",
         }
 
