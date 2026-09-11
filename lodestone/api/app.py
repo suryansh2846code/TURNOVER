@@ -419,6 +419,7 @@ def agent_welcome(agent_id: str, body: ChatIn | None = None):
     """A one-time, personalised welcome from an agent that introduces itself and
     teaches the app. Generated fresh (not persisted to chat history)."""
     from ..agents.presets import get_agent
+    from ..agents.runtime import build_runtime_identity, format_runtime_context_prompt
     from ..models.registry import get_provider
     from ..models.base import Message
     try:
@@ -426,14 +427,17 @@ def agent_welcome(agent_id: str, body: ChatIn | None = None):
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'")
     s = get_settings()
-    provider = get_provider((body.provider if body else None) or s.model_provider,
-                            (body.model if body else None) or s.model_name)
+    p_name = (body.provider if body else None) or agent.model_provider or s.model_provider
+    m_name = (body.model if body else None) or agent.model_name or s.model_name
+    provider = get_provider(p_name, m_name)
+    identity = build_runtime_identity(agent, provider)
     try:
         ready, _ = provider.is_ready()
     except Exception:
         ready = False
     if not ready:
-        return {"reply": _fallback_welcome(agent.name)}
+        return {"reply": _fallback_welcome(agent.name), "runtime_identity": identity,
+                "provider": provider.name, "model": provider.model}
     seed = (
         "You are meeting the user for the very first time as their lead agent. "
         "Write a warm welcome that: (1) greets them and introduces yourself in 1-2 "
@@ -444,13 +448,22 @@ def agent_welcome(agent_id: str, body: ChatIn | None = None):
         "graph, and teaching it new facts); Tasks and Automations; and connecting more "
         "sources (all on-device). End by inviting them to ask you anything. Use Markdown."
     )
+    runtime_prompt = format_runtime_context_prompt(identity)
     try:
-        res = provider.chat([Message(role="system", content=agent.system_message()),
-                             Message(role="user", content=seed)],
-                            temperature=0.5, max_tokens=700)
-        return {"reply": (res.text or "").strip() or _fallback_welcome(agent.name)}
+        res = provider.chat([
+            Message(role="system", content=runtime_prompt),
+            Message(role="system", content=agent.system_message()),
+            Message(role="user", content=seed),
+        ], temperature=0.5, max_tokens=700)
+        return {
+            "reply": (res.text or "").strip() or _fallback_welcome(agent.name),
+            "runtime_identity": identity,
+            "provider": provider.name,
+            "model": provider.model,
+        }
     except Exception:
-        return {"reply": _fallback_welcome(agent.name)}
+        return {"reply": _fallback_welcome(agent.name), "runtime_identity": identity,
+                "provider": provider.name, "model": provider.model}
 
 
 class EnrichIn(BaseModel):

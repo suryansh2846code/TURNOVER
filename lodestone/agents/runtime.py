@@ -31,6 +31,7 @@ class TurnResult:
     trace: list[TraceStep] = field(default_factory=list)
     provider: str = ""
     model: str = ""
+    runtime_identity: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -38,6 +39,7 @@ class TurnResult:
             "reply": self.reply,
             "provider": self.provider,
             "model": self.model,
+            "runtime_identity": self.runtime_identity,
             "trace": [
                 {"kind": s.kind, "name": s.name,
                  "arguments": s.arguments, "result": s.result}
@@ -109,6 +111,93 @@ def _auto_learn(user_text: str, provider) -> int:
     return stored
 
 
+PROVIDER_DISPLAY_NAMES: dict[str, str] = {
+    "openai": "OpenAI",
+    "claude": "Anthropic",
+    "anthropic": "Anthropic",
+    "claude-code": "Claude Code",
+    "gemini": "Google",
+    "google": "Google",
+    "cursor": "Cursor",
+    "xai": "xAI",
+    "grok": "xAI",
+    "deepseek": "DeepSeek",
+    "ollama": "Ollama",
+    "openrouter": "OpenRouter",
+    "subscription": "Subscription",
+    "mock": "Mock",
+}
+
+
+def build_runtime_identity(agent: Agent, provider: Any) -> dict[str, Any]:
+    provider_name = getattr(provider, "name", "unknown")
+    provider_display = PROVIDER_DISPLAY_NAMES.get(provider_name.lower(), provider_name.title())
+    model_name = getattr(provider, "model", "") or "default"
+
+    harness = None
+    if provider_name == "openai":
+        try:
+            from ..models.chatgpt_auth import get_chatgpt_access_token
+            if not getattr(provider, "api_key", None) and get_chatgpt_access_token():
+                harness = "Codex harness"
+        except Exception:
+            pass
+    elif provider_name == "claude-code":
+        harness = "Claude Code harness"
+    elif provider_name == "cursor":
+        harness = "Cursor session bridge"
+    elif provider_name == "subscription":
+        harness = "Subscription gateway"
+
+    return {
+        "application": "Lodestone",
+        "agent_id": agent.id,
+        "agent_name": agent.name,
+        "agent_role": getattr(agent, "role", ""),
+        "provider": provider_display,
+        "provider_name": provider_name,
+        "model": model_name,
+        "harness": harness,
+    }
+
+
+def format_runtime_context_prompt(identity: dict[str, Any]) -> str:
+    app = identity.get("application", "Lodestone")
+    agent_name = identity.get("agent_name", "Assistant")
+    role = identity.get("agent_role", "")
+    provider = identity.get("provider", "Unknown")
+    model = identity.get("model", "unknown")
+    harness = identity.get("harness")
+
+    lines = [
+        "RUNTIME CONTEXT — AUTHORITATIVE",
+        "",
+        f"Application: {app}",
+        f"Selected Agent: {agent_name}",
+    ]
+    if role:
+        lines.append(f"Agent Role: {role}")
+    lines.append(f"Provider: {provider}")
+    lines.append(f"Model: {model}")
+    if harness:
+        lines.append(f"Harness: {harness}")
+
+    role_desc = f"your {role} Agent" if role else f"the {agent_name} Agent"
+    harness_suffix = f" through the {harness}" if harness else ""
+
+    lines.extend([
+        "",
+        "The user selected this agent. The model/provider above are the actual runtime configuration for this turn.",
+        "",
+        'If asked "what model are you using?", "which AI are you using?", "what provider are you running on?", '
+        'or similar questions, answer directly from this runtime context.',
+        f"Example truthful answer: \"I'm {role_desc}, running on {provider}'s `{model}` model{harness_suffix}.\"",
+        "- Do not claim the model is unknown if the Model field is populated.",
+        "- Do not invent a different model.",
+    ])
+    return "\n".join(lines)
+
+
 def run_turn(agent_id: str, user_text: str, *,
              provider_name: str | None = None,
              model_name: str | None = None) -> TurnResult:
@@ -117,6 +206,7 @@ def run_turn(agent_id: str, user_text: str, *,
     p_name = (provider_name.strip() if provider_name else None) or agent.model_provider or settings.model_provider
     m_name = (model_name.strip() if model_name else None) or agent.model_name or settings.model_name
     provider = get_provider(p_name, m_name)
+    identity = build_runtime_identity(agent, provider)
     # Fail fast with a helpful message if the chosen backend isn't usable.
     ready, why = provider.is_ready()
     if not ready:
@@ -126,6 +216,7 @@ def run_turn(agent_id: str, user_text: str, *,
                   "Pick another model in the Model dropdown, or fix the backend "
                   "(e.g. run `ollama serve`, or set the API key).",
             provider=provider.name, model=provider.model,
+            runtime_identity=identity,
         )
     mem = AgentMemory()
     tools = build_tools(agent.tools)
@@ -139,15 +230,20 @@ def run_turn(agent_id: str, user_text: str, *,
     date_line = f"{now:%A, %B %d, %Y}"
     time_line = f"{now:%-I:%M %p} {now:%Z}"
 
-    messages: list[Message] = [Message(
-        role="system",
-        content=(
-            agent.system_message()
-            + f"\n\nRIGHT NOW it is {date_line}, {time_line}. This is the "
-              "authoritative current date — never state any other date as today. "
-              "Resolve 'today', 'tomorrow', 'this week' from this date."
+    runtime_prompt = format_runtime_context_prompt(identity)
+
+    messages: list[Message] = [
+        Message(role="system", content=runtime_prompt),
+        Message(
+            role="system",
+            content=(
+                agent.system_message()
+                + f"\n\nRIGHT NOW it is {date_line}, {time_line}. This is the "
+                  "authoritative current date — never state any other date as today. "
+                  "Resolve 'today', 'tomorrow', 'this week' from this date."
+            ),
         ),
-    )]
+    ]
 
     # Auto-recall: inject the relevant slice of the brain up front so the agent
     # *already knows the user* regardless of whether the (possibly small) model
@@ -204,6 +300,7 @@ def run_turn(agent_id: str, user_text: str, *,
                 reply=f"⚠️ The **{provider.name}** model failed: "
                       f"{str(exc)[:200]}.{hint}",
                 trace=trace, provider=provider.name, model=provider.model,
+                runtime_identity=identity,
             )
         if result.wants_tools:
             messages.append(Message(
@@ -250,4 +347,5 @@ def run_turn(agent_id: str, user_text: str, *,
     return TurnResult(
         agent_id=agent.id, reply=reply, trace=trace,
         provider=provider.name, model=provider.model,
+        runtime_identity=identity,
     )
