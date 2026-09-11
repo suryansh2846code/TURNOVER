@@ -45,12 +45,12 @@ def _detect_capabilities(model_id: str, desc: str = "") -> dict[str, Any]:
     d = desc.lower()
 
     # Reasoning models
-    is_reasoning = any(k in mid for k in ("o1", "o3", "reasoner", "r1", "thinking", "terra", "luna", "sol", "astra", "gpt-5", "gpt-6")) or "reasoning" in d
-    if "3-7-sonnet" in mid:
+    is_reasoning = any(k in mid for k in ("o1", "o3", "reasoner", "r1", "thinking", "terra", "luna", "sol", "astra", "gpt-5", "gpt-6", "opus", "fable", "sonnet-5")) or "reasoning" in d
+    if "3-7-sonnet" in mid or "opus" in mid or "fable" in mid:
         is_reasoning = True
 
     # Vision models
-    is_vision = any(k in mid for k in ("vision", "4o", "gemini", "claude-3", "vl", "pixtral", "gpt-5", "gpt-6", "terra", "luna", "sol", "astra")) or "vision" in d
+    is_vision = any(k in mid for k in ("vision", "4o", "gemini", "claude-3", "claude-", "vl", "pixtral", "gpt-5", "gpt-6", "terra", "luna", "sol", "astra", "opus", "sonnet", "fable")) or "vision" in d
 
     # Tool calling support
     # (Almost all current flagship models support tools; legacy/completion models don't)
@@ -61,7 +61,7 @@ def _detect_capabilities(model_id: str, desc: str = "") -> dict[str, Any]:
     context_window = 128_000
     if "gemini" in mid:
         context_window = 1_000_000 if "1.5" in mid or "2.5" in mid else 128_000
-    elif any(k in mid for k in ("claude-3", "sonnet", "haiku", "opus")):
+    elif any(k in mid for k in ("claude", "sonnet", "haiku", "opus", "fable", "mythos")):
         context_window = 200_000
     elif any(k in mid for k in ("gpt-5", "gpt-6", "terra", "luna", "sol", "astra")):
         context_window = 272_000
@@ -271,18 +271,28 @@ def discover_anthropic_models(api_key: str | None = None) -> list[DiscoveredMode
 
         data = resp.json().get("data", [])
         models: list[DiscoveredModel] = []
+        seen = set()
         for m in data:
             mid = m.get("id", "")
-            if not any(k in mid for k in ("3-7", "3-5", "claude-3-7", "claude-3-5")):
+            if not any(k in mid for k in ("claude", "opus", "sonnet", "haiku", "fable", "mythos", "3-7", "3-5")):
                 continue
+            seen.add(mid)
             display_name = m.get("display_name") or mid.replace("-", " ").title()
             caps = _detect_capabilities(mid)
+            locked = "fable" in mid.lower()
+            plan_req = "Team / Enterprise (v2.1.255+)" if locked else None
             models.append(DiscoveredModel(
                 id=mid,
                 name=display_name,
                 desc=f"Official Anthropic model ({caps['context_window'] // 1000}k context)",
+                locked=locked,
+                plan_required=plan_req,
                 **caps,
             ))
+        # Merge flagship models if not present in API listing
+        for fb in _fallback_anthropic():
+            if fb.id not in seen:
+                models.append(fb)
         return models if models else _fallback_anthropic()
     except Exception:
         return _fallback_anthropic()
@@ -427,26 +437,60 @@ def discover_openrouter_models(api_key: str | None = None) -> list[DiscoveredMod
 
 def discover_ollama_models(host: str | None = None) -> list[DiscoveredModel]:
     url = (host or os.environ.get("OLLAMA_HOST") or "http://localhost:11434").rstrip("/")
+    installed_names: set[str] = set()
+    installed_models: list[DiscoveredModel] = []
     try:
         resp = httpx.get(f"{url}/api/tags", timeout=3.0)
-        if resp.status_code != 200:
-            return _fallback_ollama()
+        if resp.status_code == 200:
+            items = resp.json().get("models", [])
+            for m in items:
+                name = m.get("name", "")
+                if name:
+                    installed_names.add(name)
+                    installed_names.add(name.split(":")[0])
+                    size_gb = round(m.get("size", 0) / (1024 ** 3), 1)
+                    caps = _detect_capabilities(name)
+                    caps.pop("status", None)
+                    installed_models.append(DiscoveredModel(
+                        id=name,
+                        name=name,
+                        desc=f"Local Ollama model ({size_gb} GB, installed)",
+                        locked=False,
+                        status="available",
+                        **caps,
+                    ))
+    except Exception:
+        pass
 
-        items = resp.json().get("models", [])
-        models: list[DiscoveredModel] = []
-        for m in items:
-            name = m.get("name", "")
-            size_gb = round(m.get("size", 0) / (1024 ** 3), 1)
-            caps = _detect_capabilities(name)
+    catalog_ollama = [
+        ("llama3.2", "Llama 3.2", "Compact offline local model", 128_000),
+        ("qwen2.5:3b", "Qwen 2.5 (3B)", "Compact fast local model", 32_000),
+        ("llama3.3:70b", "Llama 3.3 (70B)", "Latest flagship open weights model", 128_000),
+        ("qwen2.5-coder:7b", "Qwen 2.5 Coder (7B)", "Strong multilingual local model", 32_000),
+        ("deepseek-r1:8b", "DeepSeek R1 (8B)", "Local reasoning model", 64_000),
+    ]
+
+    models: list[DiscoveredModel] = list(installed_models)
+    seen = {m.id for m in models}
+
+    for mid, name, desc, ctx in catalog_ollama:
+        base = mid.split(":")[0]
+        is_installed = mid in installed_names or base in installed_names
+        if mid not in seen and not any(m.id.startswith(base) for m in models):
+            caps = _detect_capabilities(mid)
+            caps.pop("status", None)
+            caps["context_window"] = ctx
             models.append(DiscoveredModel(
-                id=name,
+                id=mid,
                 name=name,
-                desc=f"Local Ollama model ({size_gb} GB, on-device)",
+                desc=desc,
+                locked=not is_installed,
+                plan_required="Pull required" if not is_installed else None,
+                status="available" if is_installed else "locked",
                 **caps,
             ))
-        return models if models else _fallback_ollama()
-    except Exception:
-        return _fallback_ollama()
+
+    return models if models else _fallback_ollama()
 
 
 # ── Fallback static definitions when offline or unconfigured ─────────────────
@@ -474,62 +518,97 @@ def _fallback_openai() -> list[DiscoveredModel]:
 
 
 def _fallback_anthropic() -> list[DiscoveredModel]:
+    is_free = True
+    try:
+        from .accounts import detect_claude_account
+        acct = detect_claude_account()
+        plan = acct.get("plan", "").lower()
+        if "pro" in plan or "subscription" in plan or "team" in plan:
+            is_free = False
+    except Exception:
+        pass
+
     return [
-        DiscoveredModel("claude-3-7-sonnet-latest", "Claude 3.7 Sonnet", "Hybrid reasoning and coding flagship", 200_000, vision=True, reasoning=True),
-        DiscoveredModel("claude-3-5-sonnet-latest", "Claude 3.5 Sonnet", "High-intelligence workhorse", 200_000, vision=True),
-        DiscoveredModel("claude-3-5-haiku-latest", "Claude 3.5 Haiku", "Fast & responsive everyday model", 200_000),
+        DiscoveredModel("claude-opus-5", "Claude Opus 5", "Frontier intelligence, deep synthesis & complex architecture", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
+        DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5", "Next-gen flagship agentic coding & reasoning workhorse", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
+        DiscoveredModel("claude-fable-5-1", "Claude Fable 5.1", "Long-horizon creative engineering & complex multi-turn reasoning", 200_000, vision=True, reasoning=True, locked=True, plan_required="Team / Enterprise (v2.1.255+)"),
+        DiscoveredModel("claude-3-7-sonnet-latest", "Claude 3.7 Sonnet", "Hybrid reasoning and coding flagship", 200_000, vision=True, reasoning=True, locked=False),
+        DiscoveredModel("claude-3-5-sonnet-latest", "Claude 3.5 Sonnet", "High-intelligence workhorse", 200_000, vision=True, locked=False),
+        DiscoveredModel("claude-3-5-haiku-latest", "Claude 3.5 Haiku", "Fast & responsive everyday model", 200_000, locked=False),
     ]
 
 
 def _fallback_gemini() -> list[DiscoveredModel]:
+    has_key = bool(os.environ.get("GEMINI_API_KEY") or _saved_key("GEMINI_API_KEY"))
+    try:
+        from .accounts import detect_google_account
+        acct = detect_google_account()
+        if acct.get("connected"):
+            has_key = True
+    except Exception:
+        pass
+
     return [
-        DiscoveredModel("gemini-2.5-pro", "Gemini 2.5 Pro", "Deep reasoning powerhouse", 1_000_000, vision=True, reasoning=True),
-        DiscoveredModel("gemini-2.5-flash", "Gemini 2.5 Flash", "Next-gen speed and reasoning", 1_000_000, vision=True),
-        DiscoveredModel("gemini-2.0-flash", "Gemini 2.0 Flash", "Ultra-fast generation & tool use", 1_000_000, vision=True),
+        DiscoveredModel("gemini-2.5-pro", "Gemini 2.5 Pro", "Deep reasoning powerhouse across code & math", 1_000_000, vision=True, reasoning=True, locked=not has_key, plan_required="API Key / AI Studio" if not has_key else None),
+        DiscoveredModel("gemini-2.5-flash", "Gemini 2.5 Flash", "Next-gen speed and reasoning", 1_000_000, vision=True, locked=False),
+        DiscoveredModel("gemini-2.0-flash", "Gemini 2.0 Flash", "Ultra-fast generation & tool use", 1_000_000, vision=True, locked=False),
     ]
 
 
 def _fallback_xai() -> list[DiscoveredModel]:
+    has_key = bool(os.environ.get("XAI_API_KEY") or _saved_key("XAI_API_KEY"))
     return [
-        DiscoveredModel("grok-3", "Grok 3", "Flagship reasoning & deep intelligence", 200_000, reasoning=True),
-        DiscoveredModel("grok-3-mini", "Grok 3 Mini", "High-speed reasoning & code generation", 200_000, reasoning=True),
-        DiscoveredModel("grok-2-latest", "Grok 2", "Advanced reasoning & tool calling", 131_072),
-        DiscoveredModel("grok-2-vision-latest", "Grok 2 Vision", "Multimodal reasoning & image input", 131_072, vision=True),
-        DiscoveredModel("grok-2-1212", "Grok 2 (1212)", "Stable production snapshot", 131_072),
+        DiscoveredModel("grok-3", "Grok 3", "Flagship reasoning & deep intelligence", 200_000, reasoning=True, locked=not has_key, plan_required="SuperGrok / Tier 2" if not has_key else None),
+        DiscoveredModel("grok-3-mini", "Grok 3 Mini", "High-speed reasoning & code generation", 200_000, reasoning=True, locked=False),
+        DiscoveredModel("grok-2-latest", "Grok 2", "Advanced reasoning & tool calling", 131_072, locked=False),
+        DiscoveredModel("grok-2-vision-latest", "Grok 2 Vision", "Multimodal reasoning & image input", 131_072, vision=True, locked=False),
+        DiscoveredModel("grok-2-1212", "Grok 2 (1212)", "Stable production snapshot", 131_072, locked=False),
     ]
 
 
 def _fallback_deepseek() -> list[DiscoveredModel]:
     return [
-        DiscoveredModel("deepseek-chat", "DeepSeek V3", "Elite coding and conversational tier", 64_000),
-        DiscoveredModel("deepseek-reasoner", "DeepSeek R1", "Full chain-of-thought deliberate reasoning", 64_000, reasoning=True),
+        DiscoveredModel("deepseek-chat", "DeepSeek V3", "Elite coding and conversational tier", 64_000, locked=False),
+        DiscoveredModel("deepseek-reasoner", "DeepSeek R1", "Full chain-of-thought deliberate reasoning", 64_000, reasoning=True, locked=False),
     ]
 
 
 def _fallback_openrouter() -> list[DiscoveredModel]:
     return [
-        DiscoveredModel("anthropic/claude-3.7-sonnet", "Claude 3.7 Sonnet", "Via OpenRouter gateway", 200_000, vision=True, reasoning=True),
-        DiscoveredModel("openai/gpt-5.6-terra", "GPT-5.6-Terra", "Via OpenRouter gateway", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("deepseek/deepseek-r1", "DeepSeek R1", "Via OpenRouter gateway", 64_000, reasoning=True),
-        DiscoveredModel("meta-llama/llama-3.3-70b-instruct", "Llama 3.3 70B", "Via OpenRouter gateway", 128_000),
+        DiscoveredModel("anthropic/claude-3.7-sonnet", "Claude 3.7 Sonnet", "Via OpenRouter gateway", 200_000, vision=True, reasoning=True, locked=False),
+        DiscoveredModel("openai/gpt-5.6-terra", "GPT-5.6-Terra", "Via OpenRouter gateway", 272_000, vision=True, reasoning=True, locked=False),
+        DiscoveredModel("deepseek/deepseek-r1", "DeepSeek R1", "Via OpenRouter gateway", 64_000, reasoning=True, locked=False),
+        DiscoveredModel("meta-llama/llama-3.3-70b-instruct", "Llama 3.3 70B", "Via OpenRouter gateway", 128_000, locked=False),
     ]
 
 
 def _fallback_ollama() -> list[DiscoveredModel]:
     return [
-        DiscoveredModel("llama3.3:70b", "Llama 3.3 (70B)", "Latest flagship open weights model", 128_000),
-        DiscoveredModel("llama3.2", "Llama 3.2", "Compact offline local model", 128_000),
-        DiscoveredModel("qwen2.5-coder:7b", "Qwen 2.5 Coder (7B)", "Strong multilingual local model", 32_000),
-        DiscoveredModel("deepseek-r1:8b", "DeepSeek R1 (8B)", "Local reasoning model", 64_000, reasoning=True),
+        DiscoveredModel("llama3.2", "Llama 3.2", "Compact offline local model", 128_000, locked=False),
+        DiscoveredModel("qwen2.5:3b", "Qwen 2.5 (3B)", "Compact fast local model", 32_000, locked=False),
+        DiscoveredModel("llama3.3:70b", "Llama 3.3 (70B)", "Latest flagship open weights model", 128_000, locked=True, plan_required="Pull required"),
+        DiscoveredModel("qwen2.5-coder:7b", "Qwen 2.5 Coder (7B)", "Strong multilingual local model", 32_000, locked=True, plan_required="Pull required"),
+        DiscoveredModel("deepseek-r1:8b", "DeepSeek R1 (8B)", "Local reasoning model", 64_000, reasoning=True, locked=True, plan_required="Pull required"),
     ]
 
 
 def _fallback_cursor() -> list[DiscoveredModel]:
+    is_free = True
+    try:
+        from .accounts import detect_cursor_account
+        acct = detect_cursor_account()
+        plan = acct.get("plan", "").lower()
+        if "pro" in plan or "business" in plan or "enterprise" in plan:
+            is_free = False
+    except Exception:
+        pass
+
     return [
-        DiscoveredModel("cursor-fast", "Cursor Fast", "Low latency reasoning & agent flow", 128_000),
-        DiscoveredModel("cursor-small", "Cursor Small", "Fast local coding & agent flow", 128_000),
-        DiscoveredModel("claude-3.7-sonnet", "Cursor Claude 3.7 Sonnet", "Via Cursor API", 200_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-5.6-terra", "Cursor GPT-5.6-Terra", "Via Cursor API", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("cursor-fast", "Cursor Fast", "Low latency reasoning & agent flow", 128_000, locked=False),
+        DiscoveredModel("cursor-small", "Cursor Small", "Fast local coding & agent flow", 128_000, locked=False),
+        DiscoveredModel("claude-opus-5", "Cursor Claude Opus 5", "Via Cursor session bridge", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
+        DiscoveredModel("claude-3.7-sonnet", "Cursor Claude 3.7 Sonnet", "Via Cursor session bridge", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
+        DiscoveredModel("gpt-5.6-terra", "Cursor GPT-5.6-Terra", "Via Cursor session bridge", 272_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
     ]
 
 
@@ -570,7 +649,24 @@ def get_discovered_models(provider_id: str, force_refresh: bool = False,
     elif pid == "cursor":
         models = _fallback_cursor()
     elif pid == "claude-code":
-        models = [DiscoveredModel("claude-code", "Claude Code Session", "Local Claude CLI bridge", 200_000)]
+        is_free = True
+        try:
+            from .accounts import detect_claude_account
+            acct = detect_claude_account()
+            plan = acct.get("plan", "").lower()
+            if "pro" in plan or "subscription" in plan or "team" in plan:
+                is_free = False
+        except Exception:
+            pass
+
+        models = [
+            DiscoveredModel("claude-code", "Claude Code (Auto)", "Let Claude CLI select optimal model", 200_000, locked=False),
+            DiscoveredModel("claude-opus-5", "Claude Opus 5", "Frontier intelligence & autonomous engineering via Claude CLI", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
+            DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5", "Flagship agentic coding and reasoning workhorse", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
+            DiscoveredModel("claude-fable-5-1", "Claude Fable 5.1", "Long-horizon creative engineering & complex multi-turn reasoning", 200_000, vision=True, reasoning=True, locked=True, plan_required="Team / Enterprise (v2.1.255+)"),
+            DiscoveredModel("claude-3-7-sonnet", "Claude 3.7 Sonnet", "Hybrid reasoning and coding model via Claude CLI", 200_000, vision=True, reasoning=True, locked=False),
+            DiscoveredModel("claude-3-5-sonnet", "Claude 3.5 Sonnet", "High-intelligence workhorse via Claude CLI", 200_000, vision=True, locked=False),
+        ]
     elif pid == "mock":
         models = [DiscoveredModel("mock-1", "Mock Test Model", "Offline test fixture", 32_000)]
     else:

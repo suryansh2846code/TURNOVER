@@ -100,6 +100,11 @@ class ClaudeCodeProvider(LLMProvider):
     def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
         if not self._bin:
             return ChatResult(text="Claude Code CLI not available.")
+        if self.model and "fable" in self.model.lower():
+            return ChatResult(
+                text="⚠️ Claude Fable 5.1 is currently disabled in Claude CLI (requires CLI v2.1.255+ or a Team / Enterprise tier). Please select Claude Opus 5 or Claude Sonnet 5 in the model dropdown.",
+                finish_reason="stop",
+            )
         system_prompt, prompt = self._split(messages)
         cmd = [self._bin, "-p", "--output-format", "json"]
         if system_prompt:

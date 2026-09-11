@@ -145,10 +145,13 @@ MODEL_CATALOG = {
         "id": "claude",
         "label": "Claude (Anthropic)",
         "icon": "spark",
-        "default_model": "claude-3-7-sonnet-latest",
+        "default_model": "claude-opus-5",
         "key_env": "ANTHROPIC_API_KEY",
         "key_url": "https://console.anthropic.com/settings/keys",
         "models": [
+            {"id": "claude-opus-5", "name": "Claude Opus 5", "desc": "Frontier intelligence & highest-capacity reasoning"},
+            {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "desc": "Next-gen balanced speed, coding & agentic reasoning"},
+            {"id": "claude-fable-5-1", "name": "Claude Fable 5.1", "desc": "Advanced agentic model (Requires Team / Enterprise v2.1.255+)", "locked": True, "plan_required": "Team / Enterprise (v2.1.255+)"},
             {"id": "claude-3-7-sonnet-latest", "name": "Claude 3.7 Sonnet", "desc": "Hybrid reasoning & coding flagship"},
             {"id": "claude-3-5-sonnet-latest", "name": "Claude 3.5 Sonnet", "desc": "High-intelligence workhorse"},
             {"id": "claude-3-5-haiku-latest", "name": "Claude 3.5 Haiku", "desc": "Fast & responsive everyday model"},
@@ -162,10 +165,11 @@ MODEL_CATALOG = {
         "key_env": "CURSOR_API_KEY",
         "key_url": "https://cursor.com",
         "models": [
-            {"id": "cursor-fast", "name": "Cursor Fast", "desc": "Low latency reasoning & agent flow"},
-            {"id": "cursor-small", "name": "Cursor Small", "desc": "Fast local coding & agent flow"},
-            {"id": "claude-3.7-sonnet", "name": "Cursor Claude 3.7 Sonnet", "desc": "Via Cursor session bridge"},
-            {"id": "gpt-5.6-terra", "name": "Cursor GPT-5.6-Terra", "desc": "Via Cursor session bridge"},
+            {"id": "cursor-fast", "name": "Cursor Fast", "desc": "Low latency reasoning & agent flow (Free tier)"},
+            {"id": "cursor-small", "name": "Cursor Small", "desc": "Fast local coding & agent flow (Free tier)"},
+            {"id": "claude-opus-5", "name": "Cursor Claude Opus 5", "desc": "Via Cursor session bridge", "locked": True, "plan_required": "Pro"},
+            {"id": "claude-3.7-sonnet", "name": "Cursor Claude 3.7 Sonnet", "desc": "Via Cursor session bridge", "locked": True, "plan_required": "Pro"},
+            {"id": "gpt-5.6-terra", "name": "Cursor GPT-5.6-Terra", "desc": "Via Cursor session bridge", "locked": True, "plan_required": "Pro"},
         ],
     },
     "gemini": {
@@ -176,7 +180,7 @@ MODEL_CATALOG = {
         "key_env": "GEMINI_API_KEY",
         "key_url": "https://aistudio.google.com/apikey",
         "models": [
-            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "desc": "Deep reasoning across complex domains"},
+            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "desc": "Deep reasoning across complex domains", "locked": True, "plan_required": "API Key / AI Studio"},
             {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "desc": "Next-gen speed, reasoning & multimodal"},
             {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "desc": "Ultra-fast generation & tool use"},
         ],
@@ -189,7 +193,7 @@ MODEL_CATALOG = {
         "key_env": "XAI_API_KEY",
         "key_url": "https://console.x.ai",
         "models": [
-            {"id": "grok-3", "name": "Grok 3", "desc": "Flagship reasoning & deep intelligence"},
+            {"id": "grok-3", "name": "Grok 3", "desc": "Flagship reasoning & deep intelligence", "locked": True, "plan_required": "SuperGrok / Tier 2"},
             {"id": "grok-3-mini", "name": "Grok 3 Mini", "desc": "High-speed reasoning & code generation"},
             {"id": "grok-2-latest", "name": "Grok 2", "desc": "Advanced reasoning & tool calling"},
             {"id": "grok-2-vision-latest", "name": "Grok 2 Vision", "desc": "Multimodal reasoning & image understanding"},
@@ -233,10 +237,11 @@ MODEL_CATALOG = {
         "key_env": "",
         "key_url": "https://ollama.com",
         "models": [
-            {"id": "llama3.3:70b", "name": "Llama 3.3 (70B)", "desc": "Latest flagship open weights model"},
-            {"id": "llama3.2", "name": "Llama 3.2", "desc": "Compact offline local model"},
-            {"id": "qwen2.5-coder:7b", "name": "Qwen 2.5 Coder (7B)", "desc": "Strong multilingual & coding local model"},
-            {"id": "deepseek-r1:8b", "name": "DeepSeek R1 (8B)", "desc": "Local reasoning model"},
+            {"id": "llama3.2", "name": "Llama 3.2", "desc": "Compact offline local model (Installed)"},
+            {"id": "qwen2.5:3b", "name": "Qwen 2.5 (3B)", "desc": "Compact multilingual & coding model (Installed)"},
+            {"id": "llama3.3:70b", "name": "Llama 3.3 (70B)", "desc": "Latest flagship open weights model", "locked": True, "plan_required": "Pull required"},
+            {"id": "qwen2.5-coder:7b", "name": "Qwen 2.5 Coder (7B)", "desc": "Strong multilingual & coding local model", "locked": True, "plan_required": "Pull required"},
+            {"id": "deepseek-r1:8b", "name": "DeepSeek R1 (8B)", "desc": "Local reasoning model", "locked": True, "plan_required": "Pull required"},
         ],
     },
     "openrouter": {
@@ -261,7 +266,12 @@ MODEL_CATALOG = {
         "key_env": "",
         "key_url": "https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview",
         "models": [
-            {"id": "claude-code", "name": "Claude Code Session", "desc": "Local Anthropic CLI bridge"},
+            {"id": "claude-code", "name": "Claude Code Session", "desc": "Local Anthropic CLI bridge (uses active CLI model)"},
+            {"id": "claude-opus-5", "name": "Claude Opus 5", "desc": "Frontier intelligence & deep reasoning (CLI session)"},
+            {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "desc": "Next-gen agentic coding (CLI session)"},
+            {"id": "claude-fable-5-1", "name": "Claude Fable 5.1", "desc": "Disabled in current CLI — requires v2.1.255+", "locked": True, "plan_required": "Team / Enterprise (v2.1.255+)"},
+            {"id": "claude-3-7-sonnet", "name": "Claude 3.7 Sonnet", "desc": "Hybrid reasoning & coding flagship"},
+            {"id": "claude-3-5-sonnet", "name": "Claude 3.5 Sonnet", "desc": "High-intelligence workhorse"},
         ],
     },
     "subscription": {
@@ -273,7 +283,10 @@ MODEL_CATALOG = {
         "key_url": "",
         "models": [
             {"id": "gpt-5.6-terra", "name": "GPT-5.6-Terra (Subscription)", "desc": "Codex subscription agentic coding model"},
+            {"id": "claude-opus-5", "name": "Claude Opus 5 (Subscription)", "desc": "Anthropic flagship reasoning model"},
+            {"id": "claude-sonnet-5", "name": "Claude Sonnet 5 (Subscription)", "desc": "Next-gen agentic coding model"},
             {"id": "claude-3-7-sonnet", "name": "Claude 3.7 Sonnet (Subscription)", "desc": "Claude subscription reasoning model"},
+            {"id": "claude-fable-5-1", "name": "Claude Fable 5.1 (Subscription)", "desc": "Enterprise tier required", "locked": True, "plan_required": "Enterprise"},
         ],
     },
     "mock": {
@@ -336,9 +349,9 @@ def get_model_catalog(force_refresh: bool = False) -> list[dict]:
 
         acct = None
         try:
-            from .accounts import detect_openai_account
-            if pid == "openai":
-                acct = detect_openai_account()
+            from .accounts import detect_all_accounts
+            all_accts = detect_all_accounts()
+            acct = all_accts.get(pid)
         except Exception:
             pass
 

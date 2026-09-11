@@ -137,3 +137,47 @@ def test_set_agent_model_api_rejects_locked_model():
     resp = client.post("/api/agents/inbox/model", json={"provider": "openai", "model": "gpt-6-astra"})
     assert resp.status_code == 400
     assert "locked" in resp.json()["detail"].lower() or "requires" in resp.json()["detail"].lower()
+
+
+def test_claude_opus_and_fable_discovery():
+    """Verify Claude Opus 5, Sonnet 5, and Fable 5.1 are discovered and locked appropriately."""
+    models, _ = get_discovered_models("claude")
+    model_map = {m["id"]: m for m in models}
+
+    assert "claude-opus-5" in model_map
+    assert "claude-sonnet-5" in model_map
+    assert "claude-fable-5-1" in model_map
+
+    # Opus 5 capabilities
+    opus = model_map["claude-opus-5"]
+    assert opus.get("reasoning") is True
+    assert opus.get("context_window") == 200_000
+
+    # Fable 5.1 is locked because local CLI session has it disabled (requires v2.1.255+)
+    fable = model_map["claude-fable-5-1"]
+    assert fable.get("locked") is True
+    assert "2.1.255" in fable.get("plan_required", "") or "Enterprise" in fable.get("plan_required", "")
+
+
+def test_claude_code_fable_handled_gracefully():
+    """Verify ClaudeCodeProvider informs user about disabled Fable 5.1 cleanly."""
+    from lodestone.models.base import Message
+    from lodestone.models.claude_code import ClaudeCodeProvider
+
+    provider = ClaudeCodeProvider(model="claude-fable-5-1")
+    res = provider.chat([Message(role="user", content="hello")])
+    assert "Fable 5.1 is currently disabled" in res.text or "v2.1.255" in res.text
+
+
+def test_cursor_locking_matches_plan():
+    """Verify Cursor Free tier keeps cursor-fast unlocked while locking Pro models."""
+    models, _ = get_discovered_models("cursor")
+    model_map = {m["id"]: m for m in models}
+
+    assert "cursor-fast" in model_map
+    assert model_map["cursor-fast"].get("locked") is False
+
+    assert "claude-opus-5" in model_map
+    assert model_map["claude-opus-5"].get("locked") is True
+    assert model_map["claude-opus-5"].get("plan_required") == "Pro"
+

@@ -108,18 +108,18 @@ def test_api_endpoints():
     # 3. Set agent model
     resp = client.post("/api/agents/inbox/model", json={
         "provider": "gemini",
-        "model": "gemini-2.5-pro",
+        "model": "gemini-2.5-flash",
     })
     assert resp.status_code == 200
     assert resp.json()["provider"] == "gemini"
-    assert resp.json()["model"] == "gemini-2.5-pro"
+    assert resp.json()["model"] == "gemini-2.5-flash"
 
     # 4. Verify get reflects change
     resp = client.get("/api/agents/inbox/model")
     assert resp.status_code == 200
     data = resp.json()
     assert data["provider"] == "gemini"
-    assert data["model"] == "gemini-2.5-pro"
+    assert data["model"] == "gemini-2.5-flash"
     assert data["is_override"] is True
 
     # 5. Check GET /api/agents includes model info
@@ -128,7 +128,7 @@ def test_api_endpoints():
     agents = resp.json()["agents"]
     inbox_agent = next(a for a in agents if a["id"] == "inbox")
     assert inbox_agent["model_provider"] == "gemini"
-    assert inbox_agent["model_name"] == "gemini-2.5-pro"
+    assert inbox_agent["model_name"] == "gemini-2.5-flash"
 
     # 6. Delete agent model override
     resp = client.delete("/api/agents/inbox/model")
