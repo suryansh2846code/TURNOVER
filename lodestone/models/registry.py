@@ -372,7 +372,7 @@ def list_providers() -> list[dict]:
 
         acct = local_accounts.get(name)
         if acct and acct.get("found_on_computer"):
-            if name == "gemini" and acct.get("connected") and conn.connection_status != ConnectionStatus.ACCOUNT_CONNECTED:
+            if name == "gemini" and acct.get("connected") and conn.connection_status not in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.DISCONNECTED):
                 conn.email = acct.get("email")
                 conn.auth_method = "account"
                 conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED

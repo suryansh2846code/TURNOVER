@@ -83,6 +83,8 @@ class CursorProvider(OpenAICompatProvider):
         try:
             from .connections import ConnectionStatus, get_connection
             conn = get_connection("cursor")
+            if conn.connection_status == ConnectionStatus.DISCONNECTED:
+                return False, "Disconnected. Set CURSOR_API_KEY or sign in with Cursor"
             if conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED:
                 return True, ""
         except Exception:

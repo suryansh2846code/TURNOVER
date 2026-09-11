@@ -336,12 +336,13 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
          || (PROVIDERS || []).find((x) => x.name === providerId)
          || { id: providerId, label: providerId, ready: false };
 
-  const isReady = Boolean(p.ready);
   const conn = p.connection || {};
+  const isDisconnected = (conn.connection_status === "DISCONNECTED");
+  const isReady = Boolean(p.ready && !isDisconnected);
   const caps = p.capabilities || {};
   const detected = p.detected_account || {};
-  const accountEmail = conn.email || detected.email || (p.account_meta && p.account_meta.email) || "";
-  const hasActiveAccount = Boolean(isReady && (accountEmail || conn.auth_method === "account"));
+  const accountEmail = (!isDisconnected && (conn.email || (conn.connection_status === "ACCOUNT_CONNECTED" && detected.email) || (p.account_meta && p.account_meta.email))) || "";
+  const hasActiveAccount = Boolean(!isDisconnected && isReady && (accountEmail || conn.auth_method === "account" || conn.connection_status === "ACCOUNT_CONNECTED"));
   const isFoundOnComputer = Boolean(!hasActiveAccount && detected.found_on_computer && detected.email);
   const keyEnv = p.key_env || (caps.key_env || (providerId === "openai" ? "OPENAI_API_KEY" : (providerId === "anthropic" || providerId === "claude" ? "ANTHROPIC_API_KEY" : (providerId === "gemini" ? "GEMINI_API_KEY" : (providerId === "xai" ? "XAI_API_KEY" : (providerId === "deepseek" ? "DEEPSEEK_API_KEY" : (providerId === "openrouter" ? "OPENROUTER_API_KEY" : (providerId === "cursor" ? "CURSOR_API_KEY" : ""))))))));
   const keyUrl = p.key_url || (caps.official_auth_url || "");

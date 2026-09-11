@@ -471,62 +471,25 @@ def _watch_codex_auth_file_async(initial_mtime: float):
 
 
 def start_chatgpt_oauth_flow() -> tuple[bool, str, str]:
-    """Start the OAuth flow for ChatGPT / Codex.
-
-    Uses `codex login` CLI if installed (preferred by user), otherwise falls back
-    to the built-in PKCE server on port 1455.
-    """
-    codex_cli = find_codex_cli()
-    codex_auth = _codex_auth_path()
-    initial_mtime = codex_auth.stat().st_mtime if codex_auth.exists() else 0.0
-
-    # If official codex CLI exists, invoke `codex login`
-    if codex_cli:
-        try:
-            proc = subprocess.Popen(
-                [str(codex_cli), "login"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            with _GLOBAL_AUTH_STATE.lock:
-                _GLOBAL_AUTH_STATE.cli_proc = proc
-                _GLOBAL_AUTH_STATE.status = "waiting"
-                _GLOBAL_AUTH_STATE.started_at = time.time()
-                _GLOBAL_AUTH_STATE.error_message = ""
-                _GLOBAL_AUTH_STATE.connected_email = ""
-
-            _watch_codex_auth_file_async(initial_mtime)
-
-            # Build direct fallback URL with valid PKCE params in case user needs to open manually
-            verifier = "".join(
-                secrets.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-                for _ in range(43)
-            )
-            digest = hashlib.sha256(verifier.encode("utf-8")).digest()
-            challenge = base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
-            state = secrets.token_hex(16)
-
-            params = {
-                "response_type": "code",
-                "client_id": CLIENT_ID,
-                "redirect_uri": REDIRECT_URI,
-                "scope": SCOPE,
-                "code_challenge": challenge,
-                "code_challenge_method": "S256",
-                "id_token_add_organizations": "true",
-                "codex_cli_simplified_flow": "true",
-                "state": state,
-                "originator": "opencode",
-            }
-            auth_url = f"{AUTH_BASE_URL}/oauth/authorize?{urllib.parse.urlencode(params)}"
-            return True, auth_url, "Launched Codex CLI sign-in in browser"
-        except Exception as exc:
-            logger.warning(f"Could not launch codex CLI: {exc}, falling back to built-in server")
-
-    # Built-in PKCE fallback server
+    """Start the native OAuth PKCE loopback flow for ChatGPT / OpenAI on port 1455."""
     with _GLOBAL_AUTH_STATE.lock:
-        if _GLOBAL_AUTH_STATE.server and (time.time() - _GLOBAL_AUTH_STATE.started_at < 180):
-            return True, _GLOBAL_AUTH_STATE.auth_url, "OAuth flow already in progress"
+        # Kill previous CLI process if any
+        if _GLOBAL_AUTH_STATE.cli_proc:
+            try:
+                _GLOBAL_AUTH_STATE.cli_proc.terminate()
+            except Exception:
+                pass
+            _GLOBAL_AUTH_STATE.cli_proc = None
+
+        # Cleanly stop any existing server before starting a fresh one
+        if _GLOBAL_AUTH_STATE.server:
+            try:
+                _GLOBAL_AUTH_STATE.server.shutdown()
+                _GLOBAL_AUTH_STATE.server.server_close()
+            except Exception:
+                pass
+            _GLOBAL_AUTH_STATE.server = None
+            _GLOBAL_AUTH_STATE.thread = None
 
         verifier = "".join(
             secrets.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")

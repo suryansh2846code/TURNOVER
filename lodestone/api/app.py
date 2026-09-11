@@ -879,16 +879,15 @@ def signin_provider_endpoint(name: str):
         }
 
     elif pid == "openai":
-        from ..models.chatgpt_auth import start_chatgpt_oauth_flow, find_codex_cli
+        from ..models.chatgpt_auth import start_chatgpt_oauth_flow
         ok, auth_url, msg = start_chatgpt_oauth_flow()
-        has_cli = bool(find_codex_cli())
         return {
             "started": True,
             "provider_id": "openai",
             "auth_url": auth_url,
             "brand_name": "ChatGPT",
-            "browser_opened": bool(ok and has_cli),
-            "detail": "Opened ChatGPT sign-in in browser — choose your account to continue to Codex.",
+            "browser_opened": False,
+            "detail": "Opened ChatGPT sign-in in browser — choose your account to continue to TURNOVER.",
         }
 
     elif pid in ("xai", "grok"):
@@ -1002,7 +1001,8 @@ def disconnect_provider_endpoint(name: str):
     from ..models.connections import ConnectionStatus, get_connection, save_connection
     from ..models.registry import _REGISTRY, clear_provider_cache
 
-    cls = _REGISTRY.get(name)
+    pid = name.lower()
+    cls = _REGISTRY.get(pid)
     if cls is None:
         raise HTTPException(404, f"unknown provider '{name}'")
     key_env = getattr(cls, "key_env", None)
@@ -1010,11 +1010,35 @@ def disconnect_provider_endpoint(name: str):
         get_settings().set_secret(key_env, None)
     clear_provider_cache()
 
-    conn = get_connection(name)
+    conn = get_connection(pid)
     conn.connection_status = ConnectionStatus.DISCONNECTED
+    conn.auth_method = "none"
+    conn.email = ""
+    conn.account_display_name = ""
+    conn.account_id = ""
     conn.status_message = "Disconnected by user"
     conn.last_verified_at = datetime.now(timezone.utc).isoformat()
     save_connection(conn)
+
+    # Clean up any local tokens or active auth sessions
+    if pid in ("openai", "chatgpt"):
+        from ..models.chatgpt_auth import _token_storage_path, _stop_server_async
+        p_tok = _token_storage_path()
+        if p_tok.exists():
+            try:
+                p_tok.unlink()
+            except Exception:
+                pass
+        _stop_server_async()
+    elif pid in ("gemini", "google"):
+        from ..connectors.google_auth import _token_path
+        gtok = _token_path()
+        if gtok.exists():
+            try:
+                gtok.unlink()
+            except Exception:
+                pass
+
     return {"disconnected": True, "connection": conn.to_dict()}
 
 

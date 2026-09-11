@@ -27,6 +27,8 @@ class AnthropicProvider(LLMProvider):
         try:
             from .connections import ConnectionStatus, get_connection
             conn = get_connection("claude")
+            if conn.connection_status == ConnectionStatus.DISCONNECTED:
+                return False, "Disconnected. Set ANTHROPIC_API_KEY or sign in with Claude"
             if conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED:
                 return True, ""
             from .claude_code import find_claude

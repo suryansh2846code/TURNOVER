@@ -42,6 +42,8 @@ def detect_google_account() -> dict[str, Any]:
 
 def detect_claude_account() -> dict[str, Any]:
     """Detect Claude Pro / Anthropic account found on this computer (e.g. Claude Code CLI)."""
+    conn = get_connection("claude")
+    is_disconnected = (conn.connection_status == ConnectionStatus.DISCONNECTED)
     p = Path.home() / ".claude.json"
     if p.exists():
         try:
@@ -54,7 +56,7 @@ def detect_claude_account() -> dict[str, Any]:
                 name = oa.get("displayName") or oa.get("fullName") or "Claude User"
                 return {
                     "provider": "claude",
-                    "connected": True,
+                    "connected": False if is_disconnected else (conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED),
                     "email": email,
                     "name": name,
                     "plan": plan,
@@ -68,11 +70,13 @@ def detect_claude_account() -> dict[str, Any]:
 
 def detect_cursor_account() -> dict[str, Any]:
     """Detect Cursor account found in Cursor's local globalStorage on macOS."""
+    conn = get_connection("cursor")
+    is_disconnected = (conn.connection_status == ConnectionStatus.DISCONNECTED)
     db_path = Path.home() / "Library/Application Support/Cursor/User/globalStorage/state.vscdb"
     if db_path.exists():
         try:
-            conn = sqlite3.connect(str(db_path))
-            rows = dict(conn.execute("SELECT key, value FROM ItemTable WHERE key LIKE 'cursorAuth/%'").fetchall())
+            conn_sql = sqlite3.connect(str(db_path))
+            rows = dict(conn_sql.execute("SELECT key, value FROM ItemTable WHERE key LIKE 'cursorAuth/%'").fetchall())
             email = rows.get("cursorAuth/cachedEmail")
             membership = rows.get("cursorAuth/stripeMembershipType", "free")
             token = rows.get("cursorAuth/accessToken")
@@ -80,7 +84,7 @@ def detect_cursor_account() -> dict[str, Any]:
                 plan = f"Cursor {membership.title()}" if membership else "Cursor Account"
                 return {
                     "provider": "cursor",
-                    "connected": bool(token),
+                    "connected": False if is_disconnected else (conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED or bool(token)),
                     "email": email,
                     "name": "Cursor User",
                     "plan": plan,
@@ -96,7 +100,8 @@ def detect_cursor_account() -> dict[str, Any]:
 def detect_openai_account() -> dict[str, Any]:
     """Detect OpenAI connection or ChatGPT subscription state."""
     conn = get_connection("openai")
-    if conn.email or conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
+    is_disconnected = (conn.connection_status == ConnectionStatus.DISCONNECTED)
+    if not is_disconnected and conn.email and conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
         return {
             "provider": "openai",
             "connected": True,
@@ -112,7 +117,7 @@ def detect_openai_account() -> dict[str, Any]:
         if local and local.get("email"):
             return {
                 "provider": "openai",
-                "connected": False,
+                "connected": False if is_disconnected else (local.get("source") == "turnover" and conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED),
                 "email": local["email"],
                 "name": local.get("name") or "ChatGPT User",
                 "plan": local.get("plan") or "ChatGPT Subscription",
@@ -128,7 +133,8 @@ def detect_openai_account() -> dict[str, Any]:
 def detect_xai_account() -> dict[str, Any]:
     """Detect xAI Grok connection state."""
     conn = get_connection("xai")
-    if conn.email or conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
+    is_disconnected = (conn.connection_status == ConnectionStatus.DISCONNECTED)
+    if not is_disconnected and conn.email and conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
         return {
             "provider": "xai",
             "connected": True,

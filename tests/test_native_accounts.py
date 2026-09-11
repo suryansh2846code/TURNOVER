@@ -135,3 +135,34 @@ def test_openai_chatgpt_oauth_flow():
         assert conn_dict.get("email") == info["email"]
         assert conn_dict.get("connection_status") == ConnectionStatus.ACCOUNT_CONNECTED
 
+
+def test_disconnect_provider():
+    """Verify disconnecting a provider clears account email, tokens and sets status to DISCONNECTED."""
+    from lodestone.models.connections import get_connection, ConnectionStatus
+    from lodestone.models.accounts import detect_openai_account
+
+    # 1. Connect or simulate connected account
+    conn = get_connection("openai")
+    conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+    conn.email = "test@example.com"
+    conn.auth_method = "account"
+    from lodestone.models.connections import save_connection
+    save_connection(conn)
+
+    # 2. Call disconnect endpoint
+    resp = client.post("/api/providers/openai/disconnect")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("disconnected") is True
+
+    # 3. Connection record must be reset
+    conn = get_connection("openai")
+    assert conn.connection_status == ConnectionStatus.DISCONNECTED
+    assert conn.email == ""
+    assert conn.auth_method == "none"
+
+    # 4. detect_openai_account must report connected=False
+    acct = detect_openai_account()
+    assert acct.get("connected") is False
+
+

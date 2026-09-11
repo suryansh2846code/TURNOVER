@@ -37,12 +37,13 @@ class OpenAICompatProvider(LLMProvider):
             if self.name == "openai":
                 try:
                     from .connections import ConnectionStatus, get_connection
-                    from .chatgpt_auth import detect_chatgpt_local_session
+                    from .chatgpt_auth import _token_storage_path
                     conn = get_connection("openai")
+                    if conn.connection_status == ConnectionStatus.DISCONNECTED:
+                        return False, f"Disconnected. Set {self.key_env} or Sign in with ChatGPT"
                     if conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED:
                         return True, ""
-                    local = detect_chatgpt_local_session()
-                    if local and local.get("has_token"):
+                    if _token_storage_path().exists():
                         return True, ""
                 except Exception:
                     pass

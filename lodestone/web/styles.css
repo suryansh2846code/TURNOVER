@@ -1175,13 +1175,14 @@ button.tiny.running:hover { background: linear-gradient(to right,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .ts-card-left {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  min-width: 0;
-  flex: 1;
+  min-width: 160px;
+  flex: 1 1 180px;
 }
 .ts-card-title-wrap {
   display: flex;
