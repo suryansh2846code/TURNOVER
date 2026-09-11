@@ -628,6 +628,11 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
           return;
         }
 
+        // Open browser tab if the backend hasn't already (e.g. no CLI available)
+        if (res.auth_url && !res.browser_opened) {
+          window.open(res.auth_url, "_blank");
+        }
+
         // Show floating HUD widget
         hud = showWaitingHud({
           brandName,

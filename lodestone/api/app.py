@@ -842,7 +842,6 @@ def connect_local_provider_endpoint(name: str):
 
 @app.post("/api/providers/{name}/signin")
 def signin_provider_endpoint(name: str):
-    import webbrowser
     from ..models.accounts import connect_local_account, detect_all_accounts
     from ..models.capabilities import get_capabilities
     from ..models.registry import clear_provider_cache
@@ -857,69 +856,53 @@ def signin_provider_endpoint(name: str):
     if pid in ("claude", "anthropic"):
         from ..models.claude_auth import start_claude_login_flow
         ok, auth_url, msg = start_claude_login_flow()
-        try:
-            webbrowser.open(auth_url)
-        except Exception:
-            pass
         return {
             "started": True,
             "provider_id": "claude",
             "auth_url": auth_url,
             "brand_name": "Claude",
             "requires_code": True,
+            "browser_opened": ok,
             "detail": "Opened Claude authorization in browser — sign in to your account.",
         }
 
     elif pid == "cursor":
         auth_url = "https://cursor.com/login"
-        try:
-            webbrowser.open(auth_url)
-        except Exception:
-            pass
         return {
             "started": True,
             "provider_id": "cursor",
             "auth_url": auth_url,
             "brand_name": "Cursor",
+            "browser_opened": False,
             "detail": "Opened Cursor in browser — sign in to your Cursor account.",
         }
 
     elif pid == "openai":
         from ..models.chatgpt_auth import start_chatgpt_oauth_flow
         ok, auth_url, msg = start_chatgpt_oauth_flow()
-        try:
-            webbrowser.open(auth_url)
-        except Exception:
-            pass
         return {
             "started": True,
             "provider_id": "openai",
             "auth_url": auth_url,
             "brand_name": "ChatGPT",
+            "browser_opened": ok,
             "detail": "Opened ChatGPT sign-in in browser — choose your account to continue to Codex.",
         }
 
     elif pid in ("xai", "grok"):
         from ..models.xai_auth import start_xai_oauth_flow
         ok, auth_url, msg = start_xai_oauth_flow()
-        try:
-            webbrowser.open(auth_url)
-        except Exception:
-            pass
         return {
             "started": True,
             "provider_id": "xai",
             "auth_url": auth_url,
             "brand_name": "Grok",
+            "browser_opened": False,
             "detail": "Opened Grok sign-in in browser — log in to your account.",
         }
 
     elif url:
-        try:
-            webbrowser.open(url)
-        except Exception:
-            pass
-        return {"started": True, "detail": f"Opened {caps.display_name if caps else pid} in browser."}
+        return {"started": True, "auth_url": url, "browser_opened": False, "detail": f"Opened {caps.display_name if caps else pid} in browser."}
 
     return {"started": True, "detail": "Please sign in to your provider."}
 
