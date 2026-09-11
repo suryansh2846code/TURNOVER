@@ -115,14 +115,10 @@ def _chatgpt_subscription_models() -> list[DiscoveredModel]:
     return [
         DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-5.5", "GPT-5.5", "Proven model for coding and general work", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-5.6-sol", "GPT-5.6-Sol", "Flagship agentic coding model for complex tasks", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-6-astra", "GPT-6-Astra", "Our most capable model for complex, demanding work", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-reserve", "GPT-Reserve", "Fast and affordable backup agentic coding model", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-4o", "GPT-4o", "Flagship multimodal intelligence", 128_000, vision=True),
-        DiscoveredModel("gpt-4o-mini", "GPT-4o Mini", "Fast, affordable intelligence", 128_000, vision=True),
         DiscoveredModel("o3-mini", "o3-mini", "High-speed STEM and code reasoning", 200_000, reasoning=True),
-        DiscoveredModel("o1", "o1", "Deliberate deep reasoning", 200_000, reasoning=True),
     ]
 
 
@@ -211,6 +207,8 @@ def discover_anthropic_models(api_key: str | None = None) -> list[DiscoveredMode
         models: list[DiscoveredModel] = []
         for m in data:
             mid = m.get("id", "")
+            if not any(k in mid for k in ("3-7", "3-5", "claude-3-7", "claude-3-5")):
+                continue
             display_name = m.get("display_name") or mid.replace("-", " ").title()
             caps = _detect_capabilities(mid)
             models.append(DiscoveredModel(
@@ -246,6 +244,8 @@ def discover_gemini_models(api_key: str | None = None) -> list[DiscoveredModel]:
             if "generateContent" not in methods:
                 continue
             if "embedding" in name or "aqa" in name:
+                continue
+            if not any(k in name for k in ("2.5", "2.0")):
                 continue
             display_name = m.get("displayName") or name.replace("-", " ").title()
             caps = _detect_capabilities(name, m.get("description", ""))
@@ -319,7 +319,9 @@ def discover_deepseek_models(api_key: str | None = None) -> list[DiscoveredModel
 
 def discover_openrouter_models(api_key: str | None = None) -> list[DiscoveredModel]:
     key = api_key or os.environ.get("OPENROUTER_API_KEY") or _saved_key("OPENROUTER_API_KEY")
-    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    if not key:
+        return _fallback_openrouter()
+    headers = {"Authorization": f"Bearer {key}"}
     try:
         resp = httpx.get("https://openrouter.ai/api/v1/models", headers=headers, timeout=6.0)
         if resp.status_code != 200:
@@ -327,8 +329,19 @@ def discover_openrouter_models(api_key: str | None = None) -> list[DiscoveredMod
 
         items = resp.json().get("data", [])
         models: list[DiscoveredModel] = []
-        for m in items[:25]:
+        for m in items:
             mid = m.get("id", "")
+            if ":batch" in mid or ":free" in mid:
+                continue
+            # Filter to only latest generation models
+            is_latest = any(k in mid.lower() for k in (
+                "claude-3.7", "claude-3-7", "claude-3.5",
+                "gpt-5", "gpt-6", "o3",
+                "deepseek-r1", "deepseek-v3", "deepseek-chat",
+                "llama-3.3", "qwen-2.5", "grok-3", "grok-2"
+            ))
+            if not is_latest:
+                continue
             name = m.get("name") or mid
             ctx = m.get("context_length") or 128_000
             caps = _detect_capabilities(mid, m.get("description", ""))
@@ -339,6 +352,8 @@ def discover_openrouter_models(api_key: str | None = None) -> list[DiscoveredMod
                 desc=m.get("description") or f"OpenRouter model ({ctx // 1000}k context)",
                 **caps,
             ))
+            if len(models) >= 20:
+                break
         return models if models else _fallback_openrouter()
     except Exception:
         return _fallback_openrouter()
@@ -374,14 +389,10 @@ def _fallback_openai() -> list[DiscoveredModel]:
     return [
         DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-5.5", "GPT-5.5", "Proven model for coding and general work", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-5.6-sol", "GPT-5.6-Sol", "Flagship agentic coding model for complex tasks", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-6-astra", "GPT-6-Astra", "Our most capable model for complex, demanding work", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-reserve", "GPT-Reserve", "Fast and affordable backup agentic coding model", 272_000, vision=True, reasoning=True),
-        DiscoveredModel("gpt-4o", "GPT-4o", "Flagship multimodal intelligence", 128_000, vision=True),
-        DiscoveredModel("gpt-4o-mini", "GPT-4o Mini", "Fast, lightweight daily driver", 128_000, vision=True),
         DiscoveredModel("o3-mini", "o3-mini", "High-speed STEM and code reasoning", 200_000, reasoning=True),
-        DiscoveredModel("o1", "o1", "Deliberate deep reasoning", 200_000, reasoning=True),
     ]
 
 
@@ -390,24 +401,24 @@ def _fallback_anthropic() -> list[DiscoveredModel]:
         DiscoveredModel("claude-3-7-sonnet-latest", "Claude 3.7 Sonnet", "Hybrid reasoning and coding flagship", 200_000, vision=True, reasoning=True),
         DiscoveredModel("claude-3-5-sonnet-latest", "Claude 3.5 Sonnet", "High-intelligence workhorse", 200_000, vision=True),
         DiscoveredModel("claude-3-5-haiku-latest", "Claude 3.5 Haiku", "Fast & responsive everyday model", 200_000),
-        DiscoveredModel("claude-3-opus-latest", "Claude 3 Opus", "Complex long-form analysis", 200_000, vision=True),
     ]
 
 
 def _fallback_gemini() -> list[DiscoveredModel]:
     return [
-        DiscoveredModel("gemini-2.5-flash", "Gemini 2.5 Flash", "Next-gen speed and reasoning", 1_000_000, vision=True),
         DiscoveredModel("gemini-2.5-pro", "Gemini 2.5 Pro", "Deep reasoning powerhouse", 1_000_000, vision=True, reasoning=True),
+        DiscoveredModel("gemini-2.5-flash", "Gemini 2.5 Flash", "Next-gen speed and reasoning", 1_000_000, vision=True),
         DiscoveredModel("gemini-2.0-flash", "Gemini 2.0 Flash", "Ultra-fast generation & tool use", 1_000_000, vision=True),
-        DiscoveredModel("gemini-1.5-pro", "Gemini 1.5 Pro", "2-million token massive context", 2_000_000, vision=True),
     ]
 
 
 def _fallback_xai() -> list[DiscoveredModel]:
     return [
-        DiscoveredModel("grok-2-1212", "Grok 2 (1212)", "Advanced reasoning & tool calling", 131_072),
-        DiscoveredModel("grok-2-vision-1212", "Grok 2 Vision", "Multimodal reasoning & image input", 131_072, vision=True),
-        DiscoveredModel("grok-beta", "Grok Beta", "Latest experimental release", 131_072),
+        DiscoveredModel("grok-3", "Grok 3", "Flagship reasoning & deep intelligence", 200_000, reasoning=True),
+        DiscoveredModel("grok-3-mini", "Grok 3 Mini", "High-speed reasoning & code generation", 200_000, reasoning=True),
+        DiscoveredModel("grok-2-latest", "Grok 2", "Advanced reasoning & tool calling", 131_072),
+        DiscoveredModel("grok-2-vision-latest", "Grok 2 Vision", "Multimodal reasoning & image input", 131_072, vision=True),
+        DiscoveredModel("grok-2-1212", "Grok 2 (1212)", "Stable production snapshot", 131_072),
     ]
 
 
@@ -420,8 +431,8 @@ def _fallback_deepseek() -> list[DiscoveredModel]:
 
 def _fallback_openrouter() -> list[DiscoveredModel]:
     return [
-        DiscoveredModel("anthropic/claude-3.5-sonnet", "Claude 3.5 Sonnet", "Via OpenRouter gateway", 200_000, vision=True),
-        DiscoveredModel("openai/gpt-4o", "GPT-4o", "Via OpenRouter gateway", 128_000, vision=True),
+        DiscoveredModel("anthropic/claude-3.7-sonnet", "Claude 3.7 Sonnet", "Via OpenRouter gateway", 200_000, vision=True, reasoning=True),
+        DiscoveredModel("openai/gpt-5.6-terra", "GPT-5.6-Terra", "Via OpenRouter gateway", 272_000, vision=True, reasoning=True),
         DiscoveredModel("deepseek/deepseek-r1", "DeepSeek R1", "Via OpenRouter gateway", 64_000, reasoning=True),
         DiscoveredModel("meta-llama/llama-3.3-70b-instruct", "Llama 3.3 70B", "Via OpenRouter gateway", 128_000),
     ]
@@ -429,19 +440,19 @@ def _fallback_openrouter() -> list[DiscoveredModel]:
 
 def _fallback_ollama() -> list[DiscoveredModel]:
     return [
+        DiscoveredModel("llama3.3:70b", "Llama 3.3 (70B)", "Latest flagship open weights model", 128_000),
         DiscoveredModel("llama3.2", "Llama 3.2", "Compact offline local model", 128_000),
-        DiscoveredModel("llama3.1", "Llama 3.1", "Balanced local model", 128_000),
-        DiscoveredModel("qwen2.5:7b", "Qwen 2.5 (7B)", "Strong multilingual local model", 32_000),
+        DiscoveredModel("qwen2.5-coder:7b", "Qwen 2.5 Coder (7B)", "Strong multilingual local model", 32_000),
         DiscoveredModel("deepseek-r1:8b", "DeepSeek R1 (8B)", "Local reasoning model", 64_000, reasoning=True),
     ]
 
 
 def _fallback_cursor() -> list[DiscoveredModel]:
     return [
+        DiscoveredModel("cursor-fast", "Cursor Fast", "Low latency reasoning & agent flow", 128_000),
         DiscoveredModel("cursor-small", "Cursor Small", "Fast local coding & agent flow", 128_000),
-        DiscoveredModel("cursor-fast", "Cursor Fast", "Low latency reasoning", 128_000),
-        DiscoveredModel("claude-3.5-sonnet", "Cursor Claude 3.5 Sonnet", "Via Cursor API", 200_000, vision=True),
-        DiscoveredModel("gpt-4o", "Cursor GPT-4o", "Via Cursor API", 128_000, vision=True),
+        DiscoveredModel("claude-3.7-sonnet", "Cursor Claude 3.7 Sonnet", "Via Cursor API", 200_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-5.6-terra", "Cursor GPT-5.6-Terra", "Via Cursor API", 272_000, vision=True, reasoning=True),
     ]
 
 
