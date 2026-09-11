@@ -138,14 +138,29 @@ async function loadAgents() {
 }
 
 const MODEL_HINTS = {
-  ollama: "e.g. llama3.2, qwen2.5:3b", "claude-code": "leave blank (uses your Claude)",
-  anthropic: "e.g. claude-sonnet-5", openai: "e.g. gpt-4o-mini",
-  openrouter: "e.g. anthropic/claude-3.5-sonnet", mock: "offline test model",
+  claude: "e.g. claude-3-7-sonnet-latest, claude-3-5-haiku-latest",
+  anthropic: "e.g. claude-3-7-sonnet-latest, claude-3-5-haiku-latest",
+  cursor: "e.g. cursor-small, claude-3.5-sonnet, gpt-4o",
+  gemini: "e.g. gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash",
+  xai: "e.g. grok-2-latest, grok-2-mini",
+  openai: "e.g. gpt-4o, gpt-4o-mini, o1, o3-mini",
+  deepseek: "e.g. deepseek-chat (V3), deepseek-reasoner (R1)",
+  ollama: "e.g. llama3.2, qwen2.5:7b, deepseek-r1:8b",
+  "claude-code": "uses your local Claude CLI session",
+  openrouter: "e.g. anthropic/claude-3.5-sonnet, openai/gpt-4o",
+  subscription: "local session gateway proxy",
+  mock: "offline test model",
 };
+
 function applyModelHint() {
-  $("#modelHint").textContent = MODEL_HINTS[$("#provider").value] || "";
+  const prov = $("#provider") ? $("#provider").value : "";
+  if (!prov) return;
+  $("#modelHint").textContent = MODEL_HINTS[prov] || "";
   updatePrivacyBadge();
+  const defBox = $("#defaultProviderConnectBox");
+  if (defBox) renderProviderConnectBox(defBox, prov);
 }
+
 function updatePrivacyBadge() {
   const el = $("#privacyBadge");
   if (!el) return;
@@ -159,30 +174,1190 @@ function updatePrivacyBadge() {
   el.title = p.destination || "";
 }
 
-let PROVIDERS = [];
-async function loadProviders() {
-  const d = await api("/api/providers");
-  PROVIDERS = d.providers;
-  const savedP = localStorage.getItem("lodestone_provider");
-  const active = savedP || d.active;
-  $("#provider").innerHTML = d.providers.map((p) =>
-    `<option value="${p.name}" ${p.name === active ? "selected" : ""}>${p.name}${p.ready ? "" : " (not ready)"}</option>`).join("");
-  $("#modelName").value = localStorage.getItem("lodestone_model") || "";
-  applyModelHint();
-  $("#provider").onchange = () => { localStorage.setItem("lodestone_provider", $("#provider").value); applyModelHint(); };
-  $("#modelName").onchange = () => localStorage.setItem("lodestone_model", $("#modelName").value.trim());
+const FALLBACK_CATALOG = [
+  { id: "claude", label: "Claude (Anthropic)", key_env: "ANTHROPIC_API_KEY", key_url: "https://console.anthropic.com/settings/keys", destination: "Sent to Anthropic's API.", locality: "cloud", default_model: "claude-3-7-sonnet-latest", models: [{ id: "claude-3-7-sonnet-latest", name: "Claude 3.7 Sonnet", desc: "Hybrid reasoning & coding flagship" }, { id: "claude-3-5-sonnet-latest", name: "Claude 3.5 Sonnet", desc: "High-intelligence workhorse" }, { id: "claude-3-5-haiku-latest", name: "Claude 3.5 Haiku", desc: "Fast & responsive everyday model" }] },
+  { id: "cursor", label: "Cursor", key_env: "CURSOR_API_KEY", key_url: "https://cursor.com", destination: "Connects to your local Cursor bridge or Cursor API.", locality: "local", default_model: "cursor-small", models: [{ id: "cursor-small", name: "Cursor Small", desc: "Fast local coding & agent flow" }, { id: "cursor-fast", name: "Cursor Fast", desc: "Low latency reasoning" }, { id: "claude-3.5-sonnet", name: "Cursor Claude 3.5 Sonnet", desc: "Via Cursor bridge" }, { id: "gpt-4o", name: "Cursor GPT-4o", desc: "Via Cursor bridge" }] },
+  { id: "gemini", label: "Google Gemini", key_env: "GEMINI_API_KEY", key_url: "https://aistudio.google.com/apikey", destination: "Sent to Google Gemini API.", locality: "cloud", default_model: "gemini-2.5-flash", models: [{ id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", desc: "Next-gen speed & reasoning" }, { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", desc: "Deep reasoning powerhouse" }, { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", desc: "Ultra-fast generation & tools" }] },
+  { id: "xai", label: "xAI (Grok)", key_env: "XAI_API_KEY", key_url: "https://console.x.ai", destination: "Sent to xAI Grok API.", locality: "cloud", default_model: "grok-2-latest", models: [{ id: "grok-2-latest", name: "Grok 2", desc: "Advanced reasoning & tool calling" }, { id: "grok-2-mini", name: "Grok 2 Mini", desc: "High-throughput efficient tier" }] },
+  { id: "openai", label: "OpenAI", key_env: "OPENAI_API_KEY", key_url: "https://platform.openai.com/api-keys", destination: "Sent to OpenAI's API.", locality: "cloud", default_model: "gpt-4o", models: [{ id: "gpt-4o", name: "GPT-4o", desc: "Omni flagship for general tasks" }, { id: "gpt-4o-mini", name: "GPT-4o Mini", desc: "Fast, affordable intelligence" }, { id: "o1", name: "o1", desc: "Advanced deliberate reasoning" }, { id: "o3-mini", name: "o3-mini", desc: "Fast STEM & code reasoning" }] },
+  { id: "deepseek", label: "DeepSeek", key_env: "DEEPSEEK_API_KEY", key_url: "https://platform.deepseek.com/api_keys", destination: "Sent to DeepSeek's API.", locality: "cloud", default_model: "deepseek-chat", models: [{ id: "deepseek-chat", name: "DeepSeek V3", desc: "Elite coding & general intelligence" }, { id: "deepseek-reasoner", name: "DeepSeek R1", desc: "Reasoning model with chain of thought" }] },
+  { id: "ollama", label: "Ollama (Local)", key_env: "", key_url: "https://ollama.com", destination: "Runs on your Mac — your context stays on-device.", locality: "local", default_model: "llama3.2", models: [{ id: "llama3.2", name: "Llama 3.2", desc: "Compact offline local model" }, { id: "llama3.1", name: "Llama 3.1", desc: "Balanced local model" }, { id: "qwen2.5:7b", name: "Qwen 2.5 (7B)", desc: "Strong multilingual model" }, { id: "deepseek-r1:8b", name: "DeepSeek R1 (8B)", desc: "Local reasoning model" }] },
+  { id: "openrouter", label: "OpenRouter", key_env: "OPENROUTER_API_KEY", key_url: "https://openrouter.ai/keys", destination: "Sent to OpenRouter (and the chosen model's host).", locality: "cloud", default_model: "anthropic/claude-3.5-sonnet", models: [{ id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", desc: "Via OpenRouter" }, { id: "openai/gpt-4o", name: "GPT-4o", desc: "Via OpenRouter" }, { id: "deepseek/deepseek-r1", name: "DeepSeek R1", desc: "Via OpenRouter" }] },
+  { id: "claude-code", label: "Claude Code CLI", key_env: "", key_url: "https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview", destination: "Sent to Anthropic through the Claude CLI.", locality: "cloud", default_model: "claude-code", models: [{ id: "claude-code", name: "Claude Code Session", desc: "Local Anthropic CLI bridge" }] },
+];
 
-  // Enrichment model — independent of the agent model. Empty = "same as agent".
-  const ep = $("#enrichProvider");
-  if (ep) {
-    const savedE = localStorage.getItem("lodestone_enrich_provider") || "";
-    ep.innerHTML = `<option value="">same as agent model</option>` + d.providers.map((p) =>
-      `<option value="${p.name}" ${p.name === savedE ? "selected" : ""}>${p.name}${p.ready ? "" : " (not ready)"}</option>`).join("");
-    $("#enrichModelName").value = localStorage.getItem("lodestone_enrich_model") || "";
-    ep.onchange = () => localStorage.setItem("lodestone_enrich_provider", ep.value);
-    $("#enrichModelName").onchange = () => localStorage.setItem("lodestone_enrich_model", $("#enrichModelName").value.trim());
+let PROVIDERS = [];
+let MODEL_CATALOG = FALLBACK_CATALOG;
+
+const BRAND_ICONS = {
+  openai: `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M22.28 9.82a5.98 5.98 0 0 0-.51-4.91 6.05 6.05 0 0 0-6.51-2.9 6.06 6.06 0 0 0-10.28 2.17 5.98 5.98 0 0 0-4 2.9 6.05 6.05 0 0 0 .74 7.1 5.98 5.98 0 0 0 .51 4.91 6.05 6.05 0 0 0 6.51 2.9 6.06 6.06 0 0 0 10.28-2.17 5.99 5.99 0 0 0 4-2.9 6.05 6.05 0 0 0-.74-7.1zm-9.02 12.61a4.48 4.48 0 0 1-2.88-1.04l.14-.08 4.78-2.76a.8.8 0 0 0 .39-.68v-6.74l2.02 1.17a.07.07 0 0 1 .04.05v5.58a4.5 4.5 0 0 1-4.49 4.5zm-9.66-4.13a4.47 4.47 0 0 1-.53-3.01l.14.08 4.78 2.76a.77.77 0 0 0 .78 0l5.84-3.37v2.33a.08.08 0 0 1-.03.06L9.74 19.95a4.5 4.5 0 0 1-6.14-1.65zM2.34 7.9a4.48 4.48 0 0 1 2.37-1.98v5.69a.77.77 0 0 0 .38.67l5.82 3.36-2.02 1.17a.08.08 0 0 1-.07 0L3.99 14.02A4.5 4.5 0 0 1 2.34 7.9zm16.1 3.85l-5.84-3.37 2.02-1.16a.08.08 0 0 1 .07 0l4.83 2.79a4.5 4.5 0 0 1-.68 8.1v-5.67a.79.79 0 0 0-.4-.69zm2.01-3.02l-.14-.09-4.78-2.78a.78.78 0 0 0-.78 0L9.41 9.23V6.9a.07.07 0 0 1 .03-.06l4.83-2.79a4.5 4.5 0 0 1 6.68 4.66zM8.31 12.86l-2.02-1.16a.08.08 0 0 1-.04-.06V6.07a4.5 4.5 0 0 1 7.38-3.45l-.14.08-4.78 2.76a.8.8 0 0 0-.4.68v6.72zm1.14-2.07l2.55-1.47 2.55 1.47v2.94l-2.55 1.47-2.55-1.47z"/></svg>`,
+  claude: `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1 1 0 0 1 1 1v2.5a1 1 0 0 1-2 0V3a1 1 0 0 1 1-1zm0 15.5a1 1 0 0 1 1 1V21a1 1 0 0 1-2 0v-2.5a1 1 0 0 1 1-1zm8-6.5a1 1 0 0 1 1 1 1 1 0 0 1-1 1h-2.5a1 1 0 0 1 0-2H20zM6.5 12a1 1 0 0 1 0 2H4a1 1 0 0 1 0-2h2.5zm11.16-6.25a1 1 0 0 1 1.42 0 1 1 0 0 1 0 1.42l-1.77 1.76a1 1 0 0 1-1.41-1.41l1.76-1.77zm-11.31 11.32a1 1 0 0 1 1.41 0 1 1 0 0 1 0 1.41l-1.77 1.77a1 1 0 0 1-1.41-1.41l1.77-1.77zm12.73 0a1 1 0 0 1 0 1.41l-1.77 1.77a1 1 0 0 1-1.41-1.41l1.77-1.77a1 1 0 0 1 1.41 0zM6.35 7.17a1 1 0 0 1 0-1.42l1.77-1.76a1 1 0 1 1 1.41 1.41L7.76 7.17a1 1 0 0 1-1.41 0z"/></svg>`,
+  cursor: `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.75l9.5 5.5v11.5L12 24.25 2.5 18.75V7.25L12 1.75zm0 2.3L4.5 8.38l7.5 4.33 7.5-4.33L12 4.05zm8 6.13l-7 4.04v7.73l7-4.04v-7.73zm-9 11.77v-7.73l-7-4.04v7.73l7 4.04z"/></svg>`,
+  xai: `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18.24 2.25h3.31l-7.23 8.26 8.5 11.24H16.17l-5.21-6.82L4.99 21.75H1.68l7.73-8.84L1.25 2.25H8.08l4.71 6.23zm-1.16 17.52h1.83L7.08 4.13H5.12z"/></svg>`,
+  gemini: `<svg width="15" height="15" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.75 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>`,
+};
+
+let activeWaitingHud = null;
+
+function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, onCancel, onConnected }) {
+  if (activeWaitingHud) {
+    activeWaitingHud.dismiss();
   }
+
+  const hud = document.createElement("div");
+  hud.className = "ts-floating-hud";
+  hud.innerHTML = `
+    <div class="ts-hud-header">
+      <div class="ts-hud-status">
+        <span class="ts-hud-icon">✨</span>
+        <span>Waiting to connect</span>
+      </div>
+      <button type="button" class="ts-hud-close" title="Dismiss">✕</button>
+    </div>
+    <div class="ts-hud-title">Connect ${esc(brandName)} in your browser</div>
+    <div class="ts-hud-body">Sign in and approve access there. TURNOVER will update when the connection is ready.</div>
+    ${authUrl ? `<button type="button" class="ts-hud-btn"><span>↗</span> Open browser sign in</button>` : ""}
+    ${requiresCode ? `
+      <div class="ts-hud-code-form" style="margin-top:8px;display:flex;gap:6px">
+        <input type="text" class="ts-hud-code-input" placeholder="Paste code#state here" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:7px;padding:6px 10px;font-size:11px;color:#fff;font-family:var(--mono)">
+        <button type="button" class="ts-hud-code-submit tiny primary" style="padding:6px 12px;font-size:11px">Connect</button>
+      </div>
+    ` : ""}
+  `;
+
+  document.body.appendChild(hud);
+
+  const closeBtn = hud.querySelector(".ts-hud-close");
+  const openBtn = hud.querySelector(".ts-hud-btn");
+  const codeInput = hud.querySelector(".ts-hud-code-input");
+  const codeSubmit = hud.querySelector(".ts-hud-code-submit");
+
+  if (openBtn && authUrl) {
+    openBtn.onclick = () => {
+      window.open(authUrl, "_blank");
+    };
+  }
+
+  if (codeInput && codeSubmit) {
+    codeSubmit.onclick = async () => {
+      const code = codeInput.value.trim();
+      if (!code) return;
+      codeSubmit.disabled = true;
+      codeSubmit.innerText = "Connecting…";
+      try {
+        const res = await api(`/api/providers/${providerId}/submit-code`, {
+          method: "POST",
+          body: { code }
+        });
+        toast(`✓ ${res.message || 'Authenticated!'}`);
+        await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
+        dismiss();
+        if (onConnected) onConnected();
+      } catch (err) {
+        toast(`Error: ${err.message || err}`);
+        codeSubmit.disabled = false;
+        codeSubmit.innerText = "Connect";
+      }
+    };
+  }
+
+  let pollTimer = null;
+  const dismiss = () => {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    hud.style.opacity = "0";
+    hud.style.transform = "translateY(-10px) scale(0.95)";
+    hud.style.transition = "all 0.2s ease";
+    setTimeout(() => {
+      if (hud.parentNode) hud.parentNode.removeChild(hud);
+    }, 220);
+    if (activeWaitingHud && activeWaitingHud.el === hud) {
+      activeWaitingHud = null;
+    }
+    if (onCancel) onCancel();
+  };
+
+  closeBtn.onclick = dismiss;
+
+  let attempts = 0;
+  pollTimer = setInterval(async () => {
+    attempts++;
+    if (attempts > 120) { // ~2.5 mins
+      dismiss();
+      return;
+    }
+    try {
+      if (providerId === "gemini") {
+        const st = await api("/api/google/status");
+        if (st.connected && st.account) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          await api("/api/providers/gemini/refresh", { method: "POST" });
+          dismiss();
+          toast(`✓ Google account connected (${st.account})!`);
+          if (onConnected) onConnected();
+        }
+      } else {
+        // Check dedicated oauth-status if applicable
+        if (["openai", "xai", "claude"].includes(providerId)) {
+          const st = await api(`/api/providers/${providerId}/oauth-status`).catch(() => ({}));
+          if (st.status === "success") {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
+            dismiss();
+            toast(`✓ Connected ${brandName} (${st.email || ''})!`);
+            if (onConnected) onConnected();
+            return;
+          }
+        }
+        const ref = await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
+        if (ref.ready || ref.connection?.connection_status === "ACCOUNT_CONNECTED") {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          dismiss();
+          const email = ref.connection?.email || "";
+          toast(`✓ Connected ${brandName}${email ? ` (${email})` : ""}!`);
+          if (onConnected) onConnected();
+        }
+      }
+    } catch (_) {}
+  }, 1200);
+
+  activeWaitingHud = { el: hud, dismiss };
+  return activeWaitingHud;
+}
+
+function renderProviderConnectBox(boxEl, providerId, options = {}) {
+  if (!boxEl) return;
+  const p = (MODEL_CATALOG || []).find((c) => c.id === providerId)
+         || (PROVIDERS || []).find((x) => x.name === providerId)
+         || { id: providerId, label: providerId, ready: false };
+
+  const isReady = Boolean(p.ready);
+  const conn = p.connection || {};
+  const caps = p.capabilities || {};
+  const detected = p.detected_account || {};
+  const accountEmail = conn.email || detected.email || (p.account_meta && p.account_meta.email) || "";
+  const hasActiveAccount = Boolean(isReady && (accountEmail || conn.auth_method === "account"));
+  const isFoundOnComputer = Boolean(!hasActiveAccount && detected.found_on_computer && detected.email);
+  const keyEnv = p.key_env || (caps.key_env || (providerId === "openai" ? "OPENAI_API_KEY" : (providerId === "anthropic" || providerId === "claude" ? "ANTHROPIC_API_KEY" : (providerId === "gemini" ? "GEMINI_API_KEY" : (providerId === "xai" ? "XAI_API_KEY" : (providerId === "deepseek" ? "DEEPSEEK_API_KEY" : (providerId === "openrouter" ? "OPENROUTER_API_KEY" : (providerId === "cursor" ? "CURSOR_API_KEY" : ""))))))));
+  const keyUrl = p.key_url || (caps.official_auth_url || "");
+  const models = p.models || [];
+
+  let brandName = "Account";
+  let signinBtnName = "Sign in";
+  let brandIcon = "";
+  if (providerId === "openai") {
+    brandName = "ChatGPT";
+    signinBtnName = "Sign in with ChatGPT";
+    brandIcon = BRAND_ICONS.openai;
+  } else if (providerId === "claude" || providerId === "anthropic") {
+    brandName = "Claude";
+    signinBtnName = "Sign in with Claude";
+    brandIcon = BRAND_ICONS.claude;
+  } else if (providerId === "cursor") {
+    brandName = "Cursor";
+    signinBtnName = "Sign in with Cursor";
+    brandIcon = BRAND_ICONS.cursor;
+  } else if (providerId === "xai") {
+    brandName = "Grok";
+    signinBtnName = "Sign in with Grok";
+    brandIcon = BRAND_ICONS.xai;
+  } else if (providerId === "gemini") {
+    brandName = "Google";
+    signinBtnName = "Sign in with Google";
+    brandIcon = BRAND_ICONS.gemini;
+  }
+
+  // 1. Detected / Active Account Card
+  let activeCardHtml = "";
+  if (hasActiveAccount || isFoundOnComputer) {
+    let cardTitle = "Connected Account";
+    let badgeText = "Using this account";
+    let badgeClass = "using";
+
+    if (providerId === "openai") {
+      cardTitle = detected.plan || "ChatGPT Go";
+      badgeText = "Using this account";
+    } else if (providerId === "claude" || providerId === "anthropic") {
+      cardTitle = isFoundOnComputer ? `${detected.plan || "Claude Pro"} found` : "Claude connected";
+      badgeText = isFoundOnComputer ? "Found on this computer" : "Using this account";
+      badgeClass = isFoundOnComputer ? "found" : "using";
+    } else if (providerId === "cursor") {
+      cardTitle = isFoundOnComputer ? `${detected.plan || "Cursor"} found` : "Cursor connected";
+      badgeText = isFoundOnComputer ? "Found on this computer" : "Connected";
+      badgeClass = isFoundOnComputer ? "found" : "using";
+    } else if (providerId === "xai") {
+      cardTitle = "Grok connected";
+      badgeText = "Connected";
+    } else if (providerId === "gemini") {
+      cardTitle = "Google connected";
+      badgeText = "Using this account";
+    }
+
+    const subText = isFoundOnComputer
+      ? `${esc(detected.email || accountEmail)} · Found on this computer`
+      : `${esc(accountEmail || "API Key Active")} · Added to TURNOVER`;
+
+    const descText = providerId === "openai"
+      ? "Your ChatGPT plan includes a limited set of models. TURNOVER automatically uses the best model available with your plan."
+      : "Added to TURNOVER. Other apps keep their own sign-in.";
+
+    let usageHtml = "";
+    if (providerId === "openai" && hasActiveAccount) {
+      usageHtml = `
+        <div class="ts-usage-section">
+          <div class="ts-usage-head">
+            <span>Usage limits</span>
+            <span>Active subscription</span>
+          </div>
+          <div class="ts-usage-row">
+            <span>30-day limit</span>
+            <span style="color:var(--muted)">100% remaining</span>
+          </div>
+          <div class="ts-progress-track">
+            <div class="ts-progress-fill" style="width:100%"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    let actionBtnHtml = "";
+    if (isFoundOnComputer) {
+      actionBtnHtml = `
+        <button type="button" class="tiny primary ts-continue-btn" style="padding:5px 12px">Continue</button>
+        <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
+      `;
+    } else {
+      actionBtnHtml = `
+        <button type="button" class="tiny ts-btn-signin" style="background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.3);color:#34d399;cursor:default">Connected</button>
+        <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
+        <button type="button" class="ts-btn-link ts-disconnect-btn" style="color:#ef4444" title="Disconnect provider">✕</button>
+      `;
+    }
+
+    activeCardHtml = `
+      <div class="ts-card active-account">
+        <div class="ts-card-row">
+          <div class="ts-card-left">
+            <div class="ts-card-title-wrap">
+              <span class="ts-card-title">${esc(cardTitle)}</span>
+              <span class="ts-badge ${badgeClass}">${esc(badgeText)}</span>
+            </div>
+            <div class="ts-card-sub" style="font-weight:500;color:var(--text)">${subText}</div>
+            <div class="ts-card-desc">${descText}</div>
+          </div>
+          <div class="ts-action-group">
+            ${actionBtnHtml}
+          </div>
+        </div>
+        ${usageHtml}
+      </div>
+    `;
+  }
+
+  // 2. Account Sign-in / Different Account Card
+  let signinCardHtml = "";
+  if (caps.browser_login_supported || caps.oauth_supported || ["openai", "claude", "cursor", "xai", "gemini"].includes(providerId)) {
+    const signinTitle = hasActiveAccount
+      ? `Different ${brandName} account`
+      : `${brandName} account for TURNOVER`;
+    const signinSub = hasActiveAccount
+      ? `Sign in for TURNOVER without changing the account used by other apps.`
+      : `Sign in again or use a different account without changing other apps.`;
+
+    signinCardHtml = `
+      <div class="ts-card ts-signin-container">
+        <div class="ts-card-row">
+          <div class="ts-card-left">
+            <span class="ts-card-title">${esc(signinTitle)}</span>
+            <span class="ts-card-sub">${esc(signinSub)}</span>
+          </div>
+          <div class="ts-action-group">
+            <button type="button" class="ts-btn-signin ts-signin-btn">
+              ${brandIcon}
+              <span>${esc(hasActiveAccount ? "Sign in with a different account" : signinBtnName)}</span>
+            </button>
+            <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // 3. API Key Card
+  let apiKeyCardHtml = "";
+  if (keyEnv) {
+    apiKeyCardHtml = `
+      <div class="ts-card">
+        <div class="ts-card-row">
+          <div class="ts-card-left">
+            <span class="ts-card-title">${esc(p.label || providerId)} API key</span>
+            <span class="ts-card-sub">Used for ${esc(p.label || providerId)} runs.${keyUrl ? ` <a href="${keyUrl}" target="_blank" rel="noopener" class="pc-link" style="margin-left:4px">Get key ↗</a>` : ""}</span>
+          </div>
+          <div class="ts-action-group">
+            <button type="button" class="tiny ghost ts-toggle-key-btn">${isReady ? 'Update API key' : 'Add API key'}</button>
+          </div>
+        </div>
+        <div class="ts-key-collapse" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <input type="password" class="pc-key-input" placeholder="Paste ${esc(keyEnv)}…" autocomplete="off" />
+          <button type="button" class="tiny primary pc-connect-btn">Save</button>
+          <button type="button" class="tiny ghost pc-test-btn">Test</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // 4. Models Card
+  let modelsCardHtml = "";
+  if (models && models.length) {
+    modelsCardHtml = `
+      <div style="margin-top:4px">
+        <div class="pc-models-list">
+          ${models.slice(0, 8).map((m) => {
+            const isReasoning = Boolean(m.reasoning);
+            const hasTools = m.tool_calling !== false;
+            const hasVision = Boolean(m.vision);
+            return `
+              <div class="pc-model-pill" title="${esc(m.desc || m.id)}">
+                <span>${esc(m.name || m.id)}</span>
+                ${isReasoning ? `<span class="pc-tag reasoning">r1/o1</span>` : ""}
+                ${hasTools ? `<span class="pc-tag tools">tools</span>` : ""}
+                ${hasVision ? `<span class="pc-tag vision">vision</span>` : ""}
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  boxEl.innerHTML = `
+    ${activeCardHtml}
+    ${signinCardHtml}
+    ${apiKeyCardHtml}
+    ${modelsCardHtml}
+    <div class="pc-feedback" style="display:none;margin-top:4px;padding:4px 6px"></div>
+  `;
+
+  const feedbackEl = boxEl.querySelector(".pc-feedback");
+  const setFeedback = (msg, isErr = false) => {
+    if (!feedbackEl) return;
+    feedbackEl.style.display = "block";
+    feedbackEl.style.color = isErr ? "#f87171" : "#34d399";
+    feedbackEl.textContent = msg;
+  };
+
+  // Toggle API key form
+  const toggleKeyBtn = boxEl.querySelector(".ts-toggle-key-btn");
+  const keyCollapse = boxEl.querySelector(".ts-key-collapse");
+  if (toggleKeyBtn && keyCollapse) {
+    toggleKeyBtn.onclick = () => {
+      const isClosed = keyCollapse.style.display === "none";
+      keyCollapse.style.display = isClosed ? "flex" : "none";
+      if (isClosed) {
+        const inp = keyCollapse.querySelector(".pc-key-input");
+        if (inp) inp.focus();
+      }
+    };
+  }
+
+  // Connect local account (e.g. Claude / Cursor found on this computer)
+  const continueBtn = boxEl.querySelector(".ts-continue-btn");
+  if (continueBtn) {
+    continueBtn.onclick = async () => {
+      continueBtn.disabled = true;
+      setFeedback("Connecting local account…");
+      try {
+        const res = await api(`/api/providers/${providerId}/connect-local`, { method: "POST" });
+        toast(`✓ Connected ${p.label || providerId} account!`);
+        await loadProviders();
+        if (options.onConnect) options.onConnect();
+      } catch (e) {
+        setFeedback(`Connection error: ${e.message || e}`, true);
+      } finally {
+        continueBtn.disabled = false;
+      }
+    };
+  }
+
+  // Sign in flow with live waiting card and reactive polling
+  const signinBtn = boxEl.querySelector(".ts-signin-btn");
+  const signinContainer = boxEl.querySelector(".ts-signin-container");
+  if (signinBtn && signinContainer) {
+    signinBtn.onclick = async () => {
+      signinBtn.disabled = true;
+      const originalHtml = signinContainer.innerHTML;
+
+      signinContainer.innerHTML = `
+        <div class="ts-waiting-card">
+          <div class="ts-spinner"></div>
+          <div class="ts-waiting-body">
+            <div class="ts-waiting-title">Waiting for ${esc(brandName)} sign-in…</div>
+            <div class="ts-waiting-sub">Finish signing in to ${esc(brandName)} in your browser. TURNOVER will automatically update when your account is ready.</div>
+          </div>
+          <button type="button" class="tiny ghost ts-cancel-poll-btn">Cancel</button>
+        </div>
+      `;
+
+      let hud = null;
+      const cancelBtn = signinContainer.querySelector(".ts-cancel-poll-btn");
+      const stopPolling = () => {
+        if (hud) {
+          hud.dismiss();
+          hud = null;
+        }
+        signinContainer.innerHTML = originalHtml;
+        renderProviderConnectBox(boxEl, providerId, options);
+      };
+
+      if (cancelBtn) cancelBtn.onclick = stopPolling;
+
+      try {
+        const res = await api(`/api/providers/${providerId}/signin`, { method: "POST" });
+        toast(`Opening ${brandName} in browser…`);
+
+        if (res.connected) {
+          toast(`✓ ${res.detail || 'Connected!'}`);
+          stopPolling();
+          await loadProviders();
+          if (options.onConnect) options.onConnect();
+          return;
+        }
+
+        // Show floating HUD widget
+        hud = showWaitingHud({
+          brandName,
+          authUrl: res.auth_url || "",
+          providerId,
+          requiresCode: res.requires_code || false,
+          onCancel: () => {
+            signinContainer.innerHTML = originalHtml;
+            renderProviderConnectBox(boxEl, providerId, options);
+          },
+          onConnected: async () => {
+            await loadProviders();
+            if (options.onConnect) options.onConnect();
+          }
+        });
+
+      } catch (e) {
+        stopPolling();
+        setFeedback(`Sign in error: ${e.message || e}`, true);
+      }
+    };
+  }
+
+  // Refresh
+  boxEl.querySelectorAll(".ts-refresh-btn").forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      setFeedback("Refreshing connection & models…");
+      try {
+        const res = await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
+        setFeedback(res.ready ? `✓ Ready! (${res.models?.length || 0} models)` : `Status: ${res.reason || 'not ready'}`, !res.ready);
+        toast(`Refreshed ${p.label || providerId}`);
+        await loadProviders();
+      } catch (e) {
+        setFeedback(`Refresh error: ${e.message || e}`, true);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
+
+  // Disconnect
+  const disconnectBtn = boxEl.querySelector(".ts-disconnect-btn");
+  if (disconnectBtn) {
+    disconnectBtn.onclick = async () => {
+      disconnectBtn.disabled = true;
+      setFeedback("Disconnecting…");
+      try {
+        if (providerId === "gemini") {
+          await api("/api/google/disconnect", { method: "POST" });
+        }
+        await api(`/api/providers/${providerId}/disconnect`, { method: "POST" });
+        toast(`Disconnected ${p.label || providerId}`);
+        await loadProviders();
+        if (options.onConnect) options.onConnect();
+      } catch (e) {
+        setFeedback(`Disconnect error: ${e.message || e}`, true);
+      } finally {
+        disconnectBtn.disabled = false;
+      }
+    };
+  }
+
+  // Connect via API key
+  const connectBtn = boxEl.querySelector(".pc-connect-btn");
+  const inputEl = boxEl.querySelector(".pc-key-input");
+  if (connectBtn && inputEl) {
+    connectBtn.onclick = async () => {
+      const keyVal = inputEl.value.trim();
+      if (!keyVal) { setFeedback("Please paste an API key first", true); return; }
+      connectBtn.disabled = true;
+      setFeedback("Connecting & verifying…");
+      try {
+        const res = await api(`/api/providers/${providerId}/key`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: keyVal }),
+        });
+        toast(res.ready ? `✓ Connected ${p.label || providerId}!` : `Saved key for ${p.label || providerId}`);
+        inputEl.value = "";
+        await loadProviders();
+        if (options.onConnect) options.onConnect();
+      } catch (e) {
+        setFeedback(`Failed to connect: ${e.message || e}`, true);
+      } finally {
+        connectBtn.disabled = false;
+      }
+    };
+  }
+
+  // Test connection
+  const testBtn = boxEl.querySelector(".pc-test-btn");
+  if (testBtn && inputEl) {
+    testBtn.onclick = async () => {
+      testBtn.disabled = true;
+      setFeedback("Testing connection…");
+      try {
+        const res = await api(`/api/providers/${providerId}/test`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: inputEl.value.trim() || "" }),
+        });
+        setFeedback(res.ok ? `✓ ${res.message}` : `⚠️ ${res.message}`, !res.ok);
+      } catch (e) {
+        setFeedback(`Test request error: ${e.message || e}`, true);
+      } finally {
+        testBtn.disabled = false;
+      }
+    };
+  }
+}
+
+
+const COMPOSER_PROVIDERS = [
+  { id: "claude", label: "Anthropic" },
+  { id: "openai", label: "OpenAI" },
+  { id: "openrouter", label: "OpenRouter" },
+  { id: "deepseek", label: "Free open-source models" },
+  { id: "ollama", label: "Ollama" },
+  { id: "xai", label: "xAI" },
+  { id: "cursor", label: "Cursor" },
+  { id: "gemini", label: "Google Gemini" },
+];
+
+let activePickerProvider = "cursor";
+let activePickerModel = null;
+
+function closeAllPickerFlyouts() {
+  const pf = $("#cmpProvFlyout");
+  const mf = $("#cmpModelFlyout");
+  const pr = $("#cmpProvRow");
+  const mr = $("#cmpModelRow");
+  if (pf) pf.hidden = true;
+  if (mf) mf.hidden = true;
+  if (pr) pr.classList.remove("cmp-active");
+  if (mr) mr.classList.remove("cmp-active");
+}
+
+function renderProviderFlyout() {
+  const list = $("#cmpProvFlyoutList");
+  if (!list) return;
+
+  list.innerHTML = COMPOSER_PROVIDERS.map((p) => {
+    const isSel = p.id === activePickerProvider;
+    return `
+      <div class="cmp-flyout-item ${isSel ? 'is-selected' : ''}" data-prov="${esc(p.id)}">
+        <span>${esc(p.label)}</span>
+        ${isSel ? '<span class="cmp-flyout-check">✓</span>' : ''}
+      </div>
+    `;
+  }).join("");
+
+  list.querySelectorAll(".cmp-flyout-item").forEach((el) => {
+    el.onclick = async (e) => {
+      e.stopPropagation();
+      const pid = el.dataset.prov;
+      const p = COMPOSER_PROVIDERS.find((x) => x.id === pid);
+      const pLabel = p ? p.label : pid;
+      activePickerProvider = pid;
+      activePickerModel = null;
+      if ($("#cmpSelectedProvLabel")) $("#cmpSelectedProvLabel").textContent = pLabel;
+      if ($("#cmpSelectedModelLabel")) $("#cmpSelectedModelLabel").textContent = "Auto";
+      const pillLabel = $("#cmpModelLabel");
+      if (pillLabel) pillLabel.textContent = pLabel;
+      closeAllPickerFlyouts();
+
+      if (current) {
+        try {
+          await api(`/api/agents/${current}/model`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ provider: pid, model: null }),
+          });
+          toast(`Selected ${pLabel} (Auto) for ${current}`);
+          await updateAgentModelChip(current);
+          refreshPickerPopover();
+        } catch (err) {
+          toast("Could not update model: " + err);
+        }
+      }
+    };
+  });
+}
+
+function renderModelFlyout() {
+  const list = $("#cmpModelFlyoutList");
+  if (!list) return;
+
+  const pEntry = (MODEL_CATALOG || []).find((c) => c.id === activePickerProvider);
+  const models = (pEntry && pEntry.models) || [];
+
+  const items = [
+    { id: "", name: "Auto", desc: "Recommended model automatically" },
+    ...models.map((m) => ({ id: m.id, name: m.name, desc: m.desc })),
+  ];
+
+  list.innerHTML = items.map((m) => {
+    const isSel = (!activePickerModel && m.id === "") || (activePickerModel === m.id);
+    return `
+      <div class="cmp-flyout-item ${isSel ? 'is-selected' : ''}" data-model="${esc(m.id)}">
+        <span>${esc(m.name)}</span>
+        ${isSel ? '<span class="cmp-flyout-check">✓</span>' : ''}
+      </div>
+    `;
+  }).join("") + `
+    <div class="cmp-flyout-item" data-model="__custom__">
+      <span style="font-size:12px;color:var(--muted)">Custom model identifier…</span>
+    </div>
+  `;
+
+  list.querySelectorAll(".cmp-flyout-item").forEach((el) => {
+    el.onclick = async (e) => {
+      e.stopPropagation();
+      let chosen = el.dataset.model;
+      if (chosen === "__custom__") {
+        const customName = prompt("Enter custom model identifier:", activePickerModel || "");
+        if (customName === null) return;
+        chosen = customName.trim();
+      }
+      activePickerModel = chosen || null;
+      const displayLabel = chosen ? (items.find((x) => x.id === chosen)?.name || chosen) : "Auto";
+      if ($("#cmpSelectedModelLabel")) $("#cmpSelectedModelLabel").textContent = displayLabel;
+      const pillLabel = $("#cmpModelLabel");
+      if (pillLabel) {
+        const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === activePickerProvider);
+        pillLabel.textContent = chosen ? displayLabel : (pSpec ? pSpec.label : "Auto");
+      }
+      $("#cmpModelMenu").hidden = true;
+      closeAllPickerFlyouts();
+      const pill = $("#cmpModelPill");
+      if (pill) pill.classList.remove("is-active");
+
+      if (current) {
+        try {
+          await api(`/api/agents/${current}/model`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ provider: activePickerProvider, model: activePickerModel }),
+          });
+          toast(`Selected ${displayLabel} for ${current}`);
+          await updateAgentModelChip(current);
+        } catch (err) {
+          toast("Could not update model: " + err);
+        }
+      }
+    };
+  });
+}
+
+function formatProviderPlanInfo(providerId) {
+  const p = (MODEL_CATALOG || []).find((c) => c.id === providerId);
+  const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === providerId);
+  const providerLabel = pSpec ? pSpec.label : (p ? p.label : providerId);
+
+  if (!p) {
+    return {
+      title: `${providerLabel} plan`,
+      plan: "Not configured",
+      identity: "",
+      connected: false,
+    };
+  }
+
+  const conn = (typeof p.connection === "object" && p.connection !== null) ? p.connection : {};
+  const acct = (typeof p.detected_account === "object" && p.detected_account !== null) ? p.detected_account : {};
+  const isConnected = Boolean(
+    p.ready ||
+    conn.connection_status === "ACCOUNT_CONNECTED" ||
+    conn.connection_status === "API_KEY_CONNECTED" ||
+    acct.connected
+  );
+
+  if (!isConnected) {
+    return {
+      title: `Sign in with ${providerLabel} to see plan usage`,
+      plan: "",
+      identity: "",
+      connected: false,
+    };
+  }
+
+  // Extract clean string for plan
+  let planLabel = "";
+  if (acct.plan && typeof acct.plan === "string") {
+    planLabel = acct.plan;
+  } else if (conn.auth_method === "api_key") {
+    planLabel = "API Key";
+  } else {
+    if (providerId === "openai") planLabel = "ChatGPT Subscription";
+    else if (providerId === "claude") planLabel = "Claude Pro";
+    else if (providerId === "cursor") planLabel = "Cursor Free";
+    else if (providerId === "xai") planLabel = "Grok Account";
+    else if (providerId === "gemini") planLabel = "Google Gemini";
+    else planLabel = "Connected Account";
+  }
+
+  // Extract clean string for email / account identity
+  let emailOrIdentity = "";
+  if (acct.email && typeof acct.email === "string") {
+    emailOrIdentity = acct.email;
+  } else if (conn.email && typeof conn.email === "string") {
+    emailOrIdentity = conn.email;
+  } else if (acct.name && typeof acct.name === "string") {
+    emailOrIdentity = acct.name;
+  } else if (conn.account_display_name && typeof conn.account_display_name === "string") {
+    emailOrIdentity = conn.account_display_name;
+  }
+
+  return {
+    title: `${providerLabel} plan`,
+    plan: planLabel,
+    identity: emailOrIdentity,
+    connected: true,
+  };
+}
+
+function refreshPickerStatusRows() {
+  const statusBox = $("#cmpMenuStatus");
+  if (!statusBox) return;
+
+  // Show status only for the currently selected provider
+  const pid = activePickerProvider;
+  if (!pid) { statusBox.innerHTML = ""; return; }
+
+  const info = formatProviderPlanInfo(pid);
+  if (!info.connected) {
+    statusBox.innerHTML = `
+      <div class="cmp-status-row" data-provider="${esc(pid)}">
+        <span class="cmp-status-sub">${esc(info.title)}</span>
+        <span class="cmp-chevron">›</span>
+      </div>
+    `;
+  } else {
+    statusBox.innerHTML = `
+      <div class="cmp-status-row" data-provider="${esc(pid)}">
+        <div class="cmp-status-label-group">
+          <span class="cmp-status-label">${esc(info.title)}</span>
+          <span class="cmp-status-sub">${esc(info.plan)}${info.identity ? ` · ${esc(info.identity)}` : ''}</span>
+        </div>
+        <span class="cmp-chevron">›</span>
+      </div>
+    `;
+  }
+
+  statusBox.querySelectorAll(".cmp-status-row").forEach((el) => {
+    el.onclick = (e) => {
+      e.stopPropagation();
+      const pid = el.dataset.provider;
+      openDrawer("model");
+      toast(`Viewing ${pid} in Models & Accounts`);
+    };
+  });
+}
+
+async function refreshPickerPopover() {
+  const agentId = current || (agents.length ? agents[0].id : null);
+  if (!agentId) return;
+  try {
+    const data = await api(`/api/agents/${agentId}/model`);
+    const isOverride = Boolean(data.is_override);
+
+    const prov = data.configured_provider || data.provider || "cursor";
+    activePickerProvider = prov;
+    activePickerModel = isOverride ? (data.configured_model || null) : null;
+
+    const pEntry = (MODEL_CATALOG || []).find((c) => c.id === prov);
+    const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === prov);
+    const provName = pSpec ? pSpec.label : (pEntry ? pEntry.label : prov);
+    if ($("#cmpSelectedProvLabel")) $("#cmpSelectedProvLabel").textContent = provName;
+
+    let modelName = "Auto";
+    if (isOverride && data.configured_model) {
+      const mEntry = pEntry && (pEntry.models || []).find((m) => m.id === data.configured_model);
+      modelName = mEntry ? mEntry.name : data.configured_model;
+    }
+    if ($("#cmpSelectedModelLabel")) $("#cmpSelectedModelLabel").textContent = modelName;
+
+    const pillLabel = $("#cmpModelLabel");
+    if (pillLabel) {
+      pillLabel.textContent = isOverride ? (modelName !== "Auto" ? modelName : provName) : "Auto";
+    }
+
+    refreshPickerStatusRows();
+  } catch (_) {}
+}
+
+function initComposerModelPicker() {
+  const pill = $("#cmpModelPill");
+  const menu = $("#cmpModelMenu");
+  const provRow = $("#cmpProvRow");
+  const modelRow = $("#cmpModelRow");
+  const provFlyout = $("#cmpProvFlyout");
+  const modelFlyout = $("#cmpModelFlyout");
+  const wsPill = $("#cmpWorkspacePill");
+
+  if (wsPill && !wsPill._wired) {
+    wsPill._wired = true;
+    wsPill.onclick = () => {
+      openDrawer("sources");
+    };
+  }
+
+  if (pill && menu && !pill._wired) {
+    pill._wired = true;
+    pill.onclick = (e) => {
+      e.stopPropagation();
+      const isHidden = menu.hidden;
+      closeAllPickerFlyouts();
+      if (isHidden) {
+        refreshPickerPopover();
+        menu.hidden = false;
+        pill.classList.add("is-active");
+      } else {
+        menu.hidden = true;
+        pill.classList.remove("is-active");
+      }
+    };
+  }
+
+  const headerChip = $("#agentModelChip");
+  if (headerChip && !headerChip._pickerWired) {
+    headerChip._pickerWired = true;
+    headerChip.onclick = (e) => {
+      e.stopPropagation();
+      if (!menu) return;
+      closeAllPickerFlyouts();
+      refreshPickerPopover();
+      menu.hidden = false;
+      if (pill) pill.classList.add("is-active");
+    };
+  }
+
+  if (provRow && !provRow._wired) {
+    provRow._wired = true;
+    provRow.onclick = (e) => {
+      e.stopPropagation();
+      if (!provFlyout) return;
+      const isHidden = provFlyout.hidden;
+      closeAllPickerFlyouts();
+      if (isHidden) {
+        renderProviderFlyout();
+        provFlyout.hidden = false;
+        provRow.classList.add("cmp-active");
+      }
+    };
+  }
+
+  if (modelRow && !modelRow._wired) {
+    modelRow._wired = true;
+    modelRow.onclick = (e) => {
+      e.stopPropagation();
+      if (!modelFlyout) return;
+      const isHidden = modelFlyout.hidden;
+      closeAllPickerFlyouts();
+      if (isHidden) {
+        renderModelFlyout();
+        modelFlyout.hidden = false;
+        modelRow.classList.add("cmp-active");
+      }
+    };
+  }
+
+  const claudeRow = $("#cmpClaudeStatusItem");
+  if (claudeRow && !claudeRow._wired) {
+    claudeRow._wired = true;
+    claudeRow.onclick = (e) => {
+      e.stopPropagation();
+      openDrawer("model");
+      const p = (MODEL_CATALOG || []).find((x) => x.id === "claude");
+      if (!p || !p.ready) {
+        toast("Opening Models drawer to sign in with Claude");
+      }
+    };
+  }
+
+  const gptRow = $("#cmpChatGptStatusItem");
+  if (gptRow && !gptRow._wired) {
+    gptRow._wired = true;
+    gptRow.onclick = (e) => {
+      e.stopPropagation();
+      openDrawer("model");
+      const p = (MODEL_CATALOG || []).find((x) => x.id === "openai");
+      if (!p || !p.ready) {
+        toast("Opening Models drawer to sign in with ChatGPT");
+      }
+    };
+  }
+
+  if (!document._cmpPickerDocWired) {
+    document._cmpPickerDocWired = true;
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".cmp-model-picker-wrap") && !e.target.closest("#agentModelChip")) {
+        if (menu) menu.hidden = true;
+        closeAllPickerFlyouts();
+        if (pill) pill.classList.remove("is-active");
+      }
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && menu && !menu.hidden) {
+        menu.hidden = true;
+        closeAllPickerFlyouts();
+        if (pill) pill.classList.remove("is-active");
+      }
+    });
+  }
+}
+
+async function updateAgentModelChip(agentId) {
+  const chip = $("#agentModelChip");
+  const cmpLabel = $("#cmpModelLabel");
+  try {
+    const data = await api(`/api/agents/${agentId}/model`);
+    const labelEl = $("#agentModelLabel");
+    const provName = data.configured_provider || data.provider || "cursor";
+    const modelName = data.configured_model || "";
+
+    const pEntry = (MODEL_CATALOG || []).find((c) => c.id === provName);
+    const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === provName);
+    const provLabel = pSpec ? pSpec.label : (pEntry ? pEntry.label : provName);
+
+    let display = "Auto";
+    if (data.is_override) {
+      if (modelName) {
+        const mEntry = pEntry && (pEntry.models || []).find((m) => m.id === modelName);
+        display = mEntry ? mEntry.name : modelName;
+      } else {
+        display = provLabel;
+      }
+    }
+
+    if (labelEl) labelEl.textContent = display;
+    if (chip) {
+      chip.classList.toggle("is-override", Boolean(data.is_override));
+      chip.title = data.is_override
+        ? `Dedicated model for this agent: ${provLabel} (${modelName || 'Auto'}). Click to change.`
+        : `Using global default model: ${provLabel} (${modelName || 'Auto'}). Click to set custom.`;
+    }
+
+    // Update the composer pill smoothly
+    if (cmpLabel) {
+      cmpLabel.textContent = display;
+    }
+
+    // Update privacy lock icon
+    const lockEl = $("#cmpPrivacyLock");
+    if (lockEl) {
+      const isLocal = pEntry && pEntry.locality === "local";
+      lockEl.title = isLocal ? "On-device (Private)" : "Leaves your Mac";
+      lockEl.style.color = isLocal ? "#10b981" : "#e06c75";
+    }
+
+    // Sync composer picker state
+    activePickerProvider = data.configured_provider || data.provider || "cursor";
+    activePickerModel = data.configured_model || null;
+    const activeSpec = COMPOSER_PROVIDERS.find((x) => x.id === activePickerProvider);
+    if ($("#cmpSelectedProvLabel")) {
+      $("#cmpSelectedProvLabel").textContent = activeSpec ? activeSpec.label : (pEntry ? pEntry.label : activePickerProvider);
+    }
+    if ($("#cmpSelectedModelLabel")) {
+      $("#cmpSelectedModelLabel").textContent = data.is_override ? (data.configured_model || "Auto") : "Auto";
+    }
+
+    refreshPickerStatusRows();
+  } catch (_) {}
+}
+
+function openAgentModelModal(agentId) {
+  const menu = $("#cmpModelMenu");
+  const pill = $("#cmpModelPill");
+  if (menu && pill) {
+    refreshPickerPopover();
+    menu.hidden = false;
+    pill.classList.add("is-active");
+    pill.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
+function loadAgentModelMatrix() {
+  const matrix = $("#agentModelMatrix");
+  if (!matrix || matrix.hidden) return;
+  api("/api/agents").then((data) => {
+    const list = data.agents || [];
+    matrix.innerHTML = list.map((a) => {
+      const oid = agentOrbId(a);
+      const isOver = Boolean(a.model_provider);
+      return `
+        <div class="matrix-row">
+          <div class="matrix-agent">
+            <span class="orb orb-sm" style="${orbStyle(oid)}"></span>
+            <div>
+              <div class="matrix-nm">${esc(a.name)}</div>
+              <div class="matrix-role">${esc(a.role || "")}</div>
+            </div>
+          </div>
+          <div class="matrix-actions">
+            <span class="pc-badge ${isOver ? 'ready' : 'local'}" style="font-size:10.5px">
+              ${isOver ? esc(a.model_provider + (a.model_name ? ` · ${a.model_name}` : '')) : 'Default'}
+            </span>
+            <button class="tiny ghost matrix-btn" data-agent="${esc(a.id)}">Change</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    matrix.querySelectorAll(".matrix-btn").forEach((btn) => {
+      btn.onclick = () => openAgentModelModal(btn.dataset.agent);
+    });
+  });
+}
+
+function loadProviderCards() {
+  const box = $("#providerCards");
+  if (!box) return;
+
+  const GROUPS = [
+    {
+      id: "openai",
+      title: "OpenAI",
+      subtitle: "Choose a ChatGPT subscription or OpenAI API key.",
+      providers: ["openai"],
+    },
+    {
+      id: "anthropic",
+      title: "Anthropic",
+      subtitle: "Choose a Claude subscription or Anthropic API key.",
+      providers: ["claude"],
+    },
+    {
+      id: "xai",
+      title: "xAI",
+      subtitle: "Sign in to Grok and use the models available to your account.",
+      providers: ["xai"],
+    },
+    {
+      id: "cursor",
+      title: "Cursor",
+      subtitle: "Use a Cursor account or API key. Model access follows your Cursor plan and team settings.",
+      providers: ["cursor"],
+    },
+    {
+      id: "gemini",
+      title: "Google Gemini",
+      subtitle: "Sign in with your Google account or provide a Gemini API key.",
+      providers: ["gemini"],
+    },
+    {
+      id: "other",
+      title: "Other ways to run models",
+      subtitle: "Free models, OpenRouter, and local Ollama models.",
+      providers: ["deepseek", "openrouter", "ollama"],
+    },
+  ];
+
+  box.innerHTML = GROUPS.map((g) => {
+    return `
+      <div class="ts-provider-group" id="grp_${g.id}">
+        <div class="ts-provider-head">
+          <h3 class="ts-provider-title">${esc(g.title)}</h3>
+          <p class="ts-provider-sub">${esc(g.subtitle)}</p>
+        </div>
+        <div class="ts-group-boxes">
+          ${g.providers.map((pid) => `<div id="pbox_${pid}" style="margin-bottom:8px"></div>`).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  GROUPS.forEach((g) => {
+    g.providers.forEach((pid) => {
+      const el = $(`#pbox_${pid}`);
+      if (el) renderProviderConnectBox(el, pid);
+    });
+  });
+}
+
+async function loadProviders() {
+  try {
+    const catData = await api("/api/models/catalog");
+    if (catData && catData.catalog && catData.catalog.length) {
+      MODEL_CATALOG = catData.catalog;
+    }
+  } catch (_) {}
+
+  try {
+    const d = await api("/api/providers");
+    PROVIDERS = d.providers || [];
+    // Sync readiness and connection metadata into catalog
+    PROVIDERS.forEach((p) => {
+      const entry = MODEL_CATALOG.find((c) => c.id === p.name);
+      if (entry) {
+        entry.ready = p.ready;
+        entry.reason = p.reason;
+        entry.connection = p.connection;
+        entry.capabilities = p.capabilities;
+        entry.detected_account = p.detected_account;
+      }
+    });
+
+    const savedP = localStorage.getItem("lodestone_provider");
+    const active = savedP || d.active || "claude";
+    $("#provider").innerHTML = (MODEL_CATALOG || []).map((p) =>
+      `<option value="${p.id}" ${p.id === active ? "selected" : ""}>${p.label}${p.ready ? " (Ready)" : " (not ready)"}</option>`).join("");
+    $("#modelName").value = localStorage.getItem("lodestone_model") || "";
+    applyModelHint();
+    $("#provider").onchange = () => {
+      localStorage.setItem("lodestone_provider", $("#provider").value);
+      applyModelHint();
+    };
+    $("#modelName").onchange = () => localStorage.setItem("lodestone_model", $("#modelName").value.trim());
+
+    // Enrichment model — independent of the agent model. Empty = "same as agent".
+    const ep = $("#enrichProvider");
+    if (ep) {
+      const savedE = localStorage.getItem("lodestone_enrich_provider") || "";
+      ep.innerHTML = `<option value="">same as agent model</option>` + (MODEL_CATALOG || []).map((p) =>
+        `<option value="${p.id}" ${p.id === savedE ? "selected" : ""}>${p.label}${p.ready ? " (Ready)" : " (not ready)"}</option>`).join("");
+      $("#enrichModelName").value = localStorage.getItem("lodestone_enrich_model") || "";
+      ep.onchange = () => localStorage.setItem("lodestone_enrich_provider", ep.value);
+      $("#enrichModelName").onchange = () => localStorage.setItem("lodestone_enrich_model", $("#enrichModelName").value.trim());
+    }
+  } catch (err) {
+    console.error("loadProviders error", err);
+  }
+
   loadEnrichCap();
+  loadAgentModelMatrix();
+  loadProviderCards();
+  initComposerModelPicker();
+  if (current) updateAgentModelChip(current);
 }
 
 // Which provider/model to use for enrichment: the dedicated one if set, else the
@@ -235,6 +1410,12 @@ async function selectAgent(id) {
   $("#input").placeholder = "Message " + a.name + "…";
   document.querySelectorAll(".agent").forEach((el) => el.classList.toggle("active", el.dataset.id === id));
   loadAgents();   // refresh the active dot in the rail
+  updateAgentModelChip(id);
+  const chip = $("#agentModelChip");
+  if (chip && !chip._wired) {
+    chip._wired = 1;
+    chip.onclick = () => { if (current) openAgentModelModal(current); };
+  }
   const { history } = await api(`/api/agents/${id}/history`);
   renderHistory(history);
 }
@@ -447,12 +1628,13 @@ async function send(text) {
   setBusy(true);
   controller = new AbortController();
   addMsg("user", text);
-  const think = makeThinking($("#provider").value);
+  const curAgent = agents.find((x) => x.id === current);
+  const thinkProv = (curAgent && curAgent.model_provider) || $("#provider").value;
+  const think = makeThinking(thinkProv);
   try {
     const res = await api(`/api/agents/${current}/chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, provider: $("#provider").value,
-        model: $("#modelName").value.trim() || null }),
+      body: JSON.stringify({ message: text }),
       signal: controller.signal,
     });
     think.done();

@@ -81,6 +81,12 @@ class SyncIn(BaseModel):
 
 
 # ── agents & chat ─────────────────────────────────────────────────────────
+@app.get("/api/models/catalog")
+def models_catalog(refresh: bool = False):
+    from ..models.registry import get_model_catalog
+    return {"catalog": get_model_catalog(force_refresh=refresh)}
+
+
 @app.get("/api/agents")
 def agents():
     from ..agents.presets import PRESETS
@@ -88,13 +94,76 @@ def agents():
     return {"agents": [
         {"id": a.id, "name": a.name, "role": a.role, "tools": a.tools,
          "custom": a.id not in PRESETS,
+         "model_provider": a.model_provider,
+         "model_name": a.model_name,
          "messages": len(mem.history(a.id, limit=1000))}
         for a in list_agents()
     ]}
 
+
 @app.get("/api/agents/{agent_id}/history")
 def history(agent_id: str):
     return {"history": AgentMemory().history(agent_id, limit=100)}
+
+
+class AgentModelIn(BaseModel):
+    provider: str
+    model: str | None = None
+
+
+@app.get("/api/agents/{agent_id}/model")
+def get_agent_model_endpoint(agent_id: str):
+    from ..agents.agent_models import get_agent_model
+    from ..agents.presets import get_agent
+    try:
+        agent = get_agent(agent_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'")
+    prov, model = get_agent_model(agent_id)
+    s = get_settings()
+    is_override = prov is not None
+    effective_provider = prov or s.model_provider or "mock"
+    if prov is not None:
+        if model:
+            effective_model = model
+        else:
+            from ..models.registry import MODEL_CATALOG
+            cat = MODEL_CATALOG.get(prov, {})
+            effective_model = cat.get("default_model") or ""
+    else:
+        effective_model = model or s.model_name or ""
+    return {
+        "agent_id": agent_id,
+        "provider": effective_provider,
+        "model": effective_model,
+        "configured_provider": prov,
+        "configured_model": model,
+        "is_override": is_override,
+    }
+
+
+@app.post("/api/agents/{agent_id}/model")
+@app.put("/api/agents/{agent_id}/model")
+def set_agent_model_endpoint(agent_id: str, body: AgentModelIn):
+    from ..agents.agent_models import set_agent_model
+    from ..agents.presets import get_agent
+    try:
+        get_agent(agent_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'")
+    return set_agent_model(agent_id, body.provider, body.model)
+
+
+@app.delete("/api/agents/{agent_id}/model")
+def clear_agent_model_endpoint(agent_id: str):
+    from ..agents.agent_models import clear_agent_model
+    from ..agents.presets import get_agent
+    try:
+        get_agent(agent_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'")
+    cleared = clear_agent_model(agent_id)
+    return {"cleared": cleared}
 
 
 class NewAgent(BaseModel):
@@ -742,23 +811,305 @@ def save_connector_secret(name: str, body: SecretIn):
     return {"saved": True, "ready": ready, "reason": reason}
 
 
+@app.get("/api/providers/capabilities")
+def get_provider_capabilities_endpoint():
+    from ..models.capabilities import list_capabilities
+    return {"capabilities": list_capabilities()}
+
+
+@app.get("/api/providers/connections")
+def get_provider_connections_endpoint():
+    from ..models.connections import list_connections
+    return {"connections": [c.to_dict() for c in list_connections()]}
+
+
+@app.get("/api/providers/detected-accounts")
+def get_detected_accounts_endpoint():
+    from ..models.accounts import detect_all_accounts
+    return {"accounts": detect_all_accounts()}
+
+
+@app.post("/api/providers/{name}/connect-local")
+def connect_local_provider_endpoint(name: str):
+    from ..models.accounts import connect_local_account
+    from ..models.registry import clear_provider_cache
+    ok, msg, data = connect_local_account(name)
+    if not ok:
+        raise HTTPException(400, msg)
+    clear_provider_cache()
+    return {"ok": True, "message": msg, "connection": data}
+
+
+@app.post("/api/providers/{name}/signin")
+def signin_provider_endpoint(name: str):
+    import webbrowser
+    from ..models.accounts import connect_local_account, detect_all_accounts
+    from ..models.capabilities import get_capabilities
+    from ..models.registry import clear_provider_cache
+
+    pid = name.lower()
+    if pid in ("gemini", "google"):
+        return google_reconnect()
+
+    caps = get_capabilities(pid)
+    url = caps.official_auth_url if caps else ""
+
+    if pid in ("claude", "anthropic"):
+        from ..models.claude_auth import start_claude_login_flow
+        ok, auth_url, msg = start_claude_login_flow()
+        try:
+            webbrowser.open(auth_url)
+        except Exception:
+            pass
+        return {
+            "started": True,
+            "provider_id": "claude",
+            "auth_url": auth_url,
+            "brand_name": "Claude",
+            "requires_code": True,
+            "detail": "Opened Claude authorization in browser — sign in to your account.",
+        }
+
+    elif pid == "cursor":
+        auth_url = "https://cursor.com/login"
+        try:
+            webbrowser.open(auth_url)
+        except Exception:
+            pass
+        return {
+            "started": True,
+            "provider_id": "cursor",
+            "auth_url": auth_url,
+            "brand_name": "Cursor",
+            "detail": "Opened Cursor in browser — sign in to your Cursor account.",
+        }
+
+    elif pid == "openai":
+        from ..models.chatgpt_auth import start_chatgpt_oauth_flow
+        ok, auth_url, msg = start_chatgpt_oauth_flow()
+        try:
+            webbrowser.open(auth_url)
+        except Exception:
+            pass
+        return {
+            "started": True,
+            "provider_id": "openai",
+            "auth_url": auth_url,
+            "brand_name": "ChatGPT",
+            "detail": "Opened ChatGPT sign-in in browser — choose your account to continue to Codex.",
+        }
+
+    elif pid in ("xai", "grok"):
+        from ..models.xai_auth import start_xai_oauth_flow
+        ok, auth_url, msg = start_xai_oauth_flow()
+        try:
+            webbrowser.open(auth_url)
+        except Exception:
+            pass
+        return {
+            "started": True,
+            "provider_id": "xai",
+            "auth_url": auth_url,
+            "brand_name": "Grok",
+            "detail": "Opened Grok sign-in in browser — log in to your account.",
+        }
+
+    elif url:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
+        return {"started": True, "detail": f"Opened {caps.display_name if caps else pid} in browser."}
+
+    return {"started": True, "detail": "Please sign in to your provider."}
+
+
+@app.get("/api/providers/openai/oauth-status")
+def openai_oauth_status_endpoint():
+    from ..models.chatgpt_auth import get_oauth_flow_status
+    return get_oauth_flow_status()
+
+
+@app.get("/api/providers/xai/oauth-status")
+def xai_oauth_status_endpoint():
+    from ..models.xai_auth import get_xai_oauth_flow_status
+    return get_xai_oauth_flow_status()
+
+
+@app.get("/api/providers/claude/oauth-status")
+def claude_oauth_status_endpoint():
+    from ..models.claude_auth import get_claude_auth_status
+    return get_claude_auth_status()
+
+
+@app.post("/api/providers/claude/submit-code")
+def claude_submit_code_endpoint(payload: dict):
+    from ..models.claude_auth import submit_claude_auth_code
+    code = payload.get("code", "").strip()
+    if not code:
+        raise HTTPException(400, "code is required")
+    ok, msg = submit_claude_auth_code(code)
+    if not ok:
+        raise HTTPException(400, msg)
+    return {"ok": True, "message": msg}
+
+
+
+@app.get("/api/providers/{name}/models")
+def get_provider_models_endpoint(name: str, refresh: bool = False):
+    from ..models.discovery import get_discovered_models
+    models, meta = get_discovered_models(name, force_refresh=refresh)
+    return {"models": models, "account_meta": meta}
+
+
+@app.post("/api/providers/{name}/refresh")
+def refresh_provider_endpoint(name: str):
+    from datetime import datetime, timezone
+    from ..models.capabilities import get_capabilities
+    from ..models.connections import ConnectionStatus, get_connection, save_connection
+    from ..models.discovery import get_discovered_models
+    from ..models.registry import _REGISTRY, clear_provider_cache
+
+    cls = _REGISTRY.get(name)
+    if cls is None:
+        raise HTTPException(404, f"unknown provider '{name}'")
+    clear_provider_cache()
+    inst = cls()
+    ready, reason = inst.is_ready()
+    models, account_meta = get_discovered_models(name, force_refresh=True)
+
+    caps = get_capabilities(name)
+    conn = get_connection(name)
+    now = datetime.now(timezone.utc).isoformat()
+    conn.last_verified_at = now
+    conn.status_message = reason or ("Connected & ready" if ready else "")
+
+    if ready:
+        if conn.connection_status in (ConnectionStatus.NOT_CONNECTED, ConnectionStatus.DISCONNECTED, ConnectionStatus.ERROR):
+            conn.connection_status = ConnectionStatus.API_KEY_CONNECTED if (caps and caps.api_key_supported) else ConnectionStatus.CONNECTED
+        if not conn.connected_at:
+            conn.connected_at = now
+    else:
+        if conn.connection_status != ConnectionStatus.DISCONNECTED:
+            conn.connection_status = ConnectionStatus.NOT_CONNECTED
+
+    if account_meta.get("email"):
+        conn.email = account_meta["email"]
+    if account_meta.get("name"):
+        conn.account_display_name = account_meta["name"]
+    if account_meta.get("account_id"):
+        conn.account_id = account_meta["account_id"]
+
+    save_connection(conn)
+    return {
+        "ok": True,
+        "ready": ready,
+        "reason": reason,
+        "connection": conn.to_dict(),
+        "models": models,
+        "account_meta": account_meta,
+    }
+
+
+@app.post("/api/providers/{name}/disconnect")
+def disconnect_provider_endpoint(name: str):
+    from datetime import datetime, timezone
+    from ..models.connections import ConnectionStatus, get_connection, save_connection
+    from ..models.registry import _REGISTRY, clear_provider_cache
+
+    cls = _REGISTRY.get(name)
+    if cls is None:
+        raise HTTPException(404, f"unknown provider '{name}'")
+    key_env = getattr(cls, "key_env", None)
+    if key_env:
+        get_settings().set_secret(key_env, None)
+    clear_provider_cache()
+
+    conn = get_connection(name)
+    conn.connection_status = ConnectionStatus.DISCONNECTED
+    conn.status_message = "Disconnected by user"
+    conn.last_verified_at = datetime.now(timezone.utc).isoformat()
+    save_connection(conn)
+    return {"disconnected": True, "connection": conn.to_dict()}
+
+
 @app.post("/api/providers/{name}/key")
 def save_provider_key(name: str, body: SecretIn):
     """Save (or clear) an LLM provider's API key from the UI — stored locally in
     ~/Library/Lodestone/secrets.json and picked up by the provider on next use."""
-    from ..models.registry import _REGISTRY
+    from datetime import datetime, timezone
+    from ..models.connections import ConnectionStatus, get_connection, save_connection
+    from ..models.discovery import get_discovered_models
+    from ..models.registry import _REGISTRY, clear_provider_cache
+
     cls = _REGISTRY.get(name)
     if cls is None:
         raise HTTPException(404, f"unknown provider '{name}'")
     key_env = getattr(cls, "key_env", None)
     if not key_env:
         raise HTTPException(400, f"'{name}' does not use an API key")
-    get_settings().set_secret(key_env, body.value or None)
+
+    val = body.value.strip() if body.value else ""
+    get_settings().set_secret(key_env, val or None)
+    clear_provider_cache()
+
+    conn = get_connection(name)
+    now = datetime.now(timezone.utc).isoformat()
+    conn.last_verified_at = now
+    conn.credential_reference = key_env
+
+    if not val:
+        conn.connection_status = ConnectionStatus.DISCONNECTED
+        conn.status_message = "API key removed"
+        save_connection(conn)
+        return {"saved": True, "ready": False, "reason": f"set {key_env}", "connection": conn.to_dict()}
+
     try:
-        ready, reason = cls().is_ready()
+        inst = cls(api_key=val)
+        ready, reason = inst.is_ready()
     except Exception as exc:
         ready, reason = False, str(exc)[:120]
-    return {"saved": True, "ready": ready, "reason": reason}
+
+    if ready:
+        conn.connection_status = ConnectionStatus.API_KEY_CONNECTED
+        conn.connected_at = now
+        conn.status_message = "Connected via API key"
+        # Discover models & identity with new key
+        try:
+            _, meta = get_discovered_models(name, force_refresh=True, api_key=val)
+            if meta.get("email"):
+                conn.email = meta["email"]
+            if meta.get("name"):
+                conn.account_display_name = meta["name"]
+            if meta.get("account_id"):
+                conn.account_id = meta["account_id"]
+        except Exception:
+            pass
+    else:
+        conn.connection_status = ConnectionStatus.ERROR
+        conn.status_message = reason
+
+    save_connection(conn)
+    return {"saved": True, "ready": ready, "reason": reason, "connection": conn.to_dict()}
+
+
+@app.post("/api/providers/{name}/test")
+def test_provider_key(name: str, body: SecretIn | None = None):
+    """Test / verify an LLM provider connection with either a test key or saved key."""
+    from ..models.registry import _REGISTRY
+    cls = _REGISTRY.get(name)
+    if cls is None:
+        raise HTTPException(404, f"unknown provider '{name}'")
+    test_key = body.value if (body and body.value is not None) else None
+    try:
+        inst = cls(api_key=test_key)
+        ready, reason = inst.is_ready()
+        if not ready:
+            return {"ok": False, "message": reason}
+        return {"ok": True, "message": f"{name} is connected and ready!"}
+    except Exception as exc:
+        return {"ok": False, "message": str(exc)[:180]}
+
 
 @app.post("/api/connectors/{name}/sync")
 def sync(name: str, body: SyncIn):
@@ -776,29 +1127,67 @@ def sync(name: str, body: SyncIn):
 def google_status():
     from ..connectors.google_auth import (_token_path, connected_email,
                                            granted_services)
+    from ..models.connections import ConnectionStatus, get_connection, save_connection
     connected = _token_path().exists()
+    account = connected_email(fetch=connected) if connected else None
+    if connected and account:
+        conn = get_connection("gemini")
+        if conn.connection_status != ConnectionStatus.ACCOUNT_CONNECTED or conn.email != account:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc).isoformat()
+            conn.auth_method = "account"
+            conn.email = account
+            conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+            conn.connected_at = conn.connected_at or now
+            conn.last_verified_at = now
+            conn.status_message = "Connected Google account"
+            save_connection(conn)
     return {"client_configured": get_settings().google_client_secrets is not None,
             "connected": connected,
-            "account": connected_email(fetch=connected) if connected else None,
+            "account": account,
             "services": granted_services()}
 
 @app.post("/api/google/disconnect")
 def google_disconnect():
     from ..connectors.google_auth import disconnect
+    from ..models.connections import ConnectionStatus, get_connection, save_connection
     disconnect()
+    conn = get_connection("gemini")
+    if conn.auth_method == "account":
+        conn.connection_status = ConnectionStatus.DISCONNECTED
+        conn.status_message = "Google account disconnected"
+        save_connection(conn)
     return {"disconnected": True}
 
 # ── Google reconnect (re-consent with current scopes, from the UI) ────────
 @app.post("/api/google/reconnect")
 def google_reconnect():
     import threading
-    from ..connectors.google_auth import _token_path, get_credentials
+    from ..connectors.google_auth import _token_path, get_credentials, connected_email
+    from ..models.connections import ConnectionStatus, get_connection, save_connection
     tok = _token_path()
     if tok.exists():
         tok.unlink()
+    
+    def _run():
+        try:
+            creds = get_credentials(interactive=True)
+            email = connected_email(fetch=True)
+            conn = get_connection("gemini")
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc).isoformat()
+            conn.auth_method = "account"
+            conn.email = email
+            conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+            conn.connected_at = conn.connected_at or now
+            conn.last_verified_at = now
+            conn.status_message = "Connected Google account"
+            save_connection(conn)
+        except Exception:
+            pass
+
     # opens the Google consent browser on this machine; runs in the background
-    threading.Thread(
-        target=lambda: get_credentials(interactive=True), daemon=True).start()
+    threading.Thread(target=_run, daemon=True).start()
     return {"started": True,
             "detail": "A browser window is opening — approve the permissions."}
 

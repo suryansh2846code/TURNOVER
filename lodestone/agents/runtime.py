@@ -114,10 +114,9 @@ def run_turn(agent_id: str, user_text: str, *,
              model_name: str | None = None) -> TurnResult:
     agent = get_agent(agent_id)
     settings = get_settings()
-    provider = get_provider(
-        provider_name or agent.model_provider or settings.model_provider,
-        model_name or agent.model_name or settings.model_name,
-    )
+    p_name = (provider_name.strip() if provider_name else None) or agent.model_provider or settings.model_provider
+    m_name = (model_name.strip() if model_name else None) or agent.model_name or settings.model_name
+    provider = get_provider(p_name, m_name)
     # Fail fast with a helpful message if the chosen backend isn't usable.
     ready, why = provider.is_ready()
     if not ready:

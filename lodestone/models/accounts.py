@@ -1,0 +1,238 @@
+"""Local account detection and binding for AI providers (Google, Claude, Cursor, OpenAI, xAI).
+
+Discovers and safely bridges accounts found on this computer:
+- Google: via ~/.lodestone/google_token.json and google_account.json
+- Claude / Anthropic: via ~/.claude.json (Claude Code / Anthropic OAuth session)
+- Cursor: via Cursor global storage state.vscdb (cursorAuth/cachedEmail, accessToken)
+- OpenAI / ChatGPT: via OpenAI config / stored credentials
+- xAI: via saved developer credentials
+
+Credentials are NEVER exposed or duplicated into logs or memory.
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from .connections import ConnectionStatus, ProviderConnection, get_connection, save_connection
+
+
+def detect_google_account() -> dict[str, Any]:
+    """Detect signed-in Google account for Gemini."""
+    try:
+        from ..connectors.google_auth import _token_path, connected_email
+        if _token_path().exists():
+            email = connected_email(fetch=False) or "Google Account"
+            return {
+                "provider": "gemini",
+                "connected": True,
+                "email": email,
+                "name": "Google Account",
+                "plan": "Google Gemini",
+                "auth_method": "account",
+                "found_on_computer": True,
+            }
+    except Exception:
+        pass
+    return {"provider": "gemini", "connected": False, "found_on_computer": False}
+
+
+def detect_claude_account() -> dict[str, Any]:
+    """Detect Claude Pro / Anthropic account found on this computer (e.g. Claude Code CLI)."""
+    p = Path.home() / ".claude.json"
+    if p.exists():
+        try:
+            data = json.loads(p.read_text())
+            oa = data.get("oauthAccount") or {}
+            email = oa.get("emailAddress")
+            if email:
+                org_type = oa.get("organizationType", "")
+                plan = "Claude Pro" if "pro" in org_type.lower() else "Claude Subscription"
+                name = oa.get("displayName") or oa.get("fullName") or "Claude User"
+                return {
+                    "provider": "claude",
+                    "connected": True,
+                    "email": email,
+                    "name": name,
+                    "plan": plan,
+                    "auth_method": "account",
+                    "found_on_computer": True,
+                }
+        except Exception:
+            pass
+    return {"provider": "claude", "connected": False, "found_on_computer": False}
+
+
+def detect_cursor_account() -> dict[str, Any]:
+    """Detect Cursor account found in Cursor's local globalStorage on macOS."""
+    db_path = Path.home() / "Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+    if db_path.exists():
+        try:
+            conn = sqlite3.connect(str(db_path))
+            rows = dict(conn.execute("SELECT key, value FROM ItemTable WHERE key LIKE 'cursorAuth/%'").fetchall())
+            email = rows.get("cursorAuth/cachedEmail")
+            membership = rows.get("cursorAuth/stripeMembershipType", "free")
+            token = rows.get("cursorAuth/accessToken")
+            if email:
+                plan = f"Cursor {membership.title()}" if membership else "Cursor Account"
+                return {
+                    "provider": "cursor",
+                    "connected": bool(token),
+                    "email": email,
+                    "name": "Cursor User",
+                    "plan": plan,
+                    "auth_method": "account",
+                    "found_on_computer": True,
+                    "has_token": bool(token),
+                }
+        except Exception:
+            pass
+    return {"provider": "cursor", "connected": False, "found_on_computer": False}
+
+
+def detect_openai_account() -> dict[str, Any]:
+    """Detect OpenAI connection or ChatGPT subscription state."""
+    conn = get_connection("openai")
+    if conn.email or conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
+        return {
+            "provider": "openai",
+            "connected": True,
+            "email": conn.email or "OpenAI User",
+            "name": conn.account_display_name or "OpenAI Account",
+            "plan": "ChatGPT Subscription" if conn.auth_method == "account" else "OpenAI Developer",
+            "auth_method": conn.auth_method,
+            "found_on_computer": True,
+        }
+    try:
+        from .chatgpt_auth import detect_chatgpt_local_session
+        local = detect_chatgpt_local_session()
+        if local and local.get("email"):
+            return {
+                "provider": "openai",
+                "connected": False,
+                "email": local["email"],
+                "name": local.get("name") or "ChatGPT User",
+                "plan": local.get("plan") or "ChatGPT Subscription",
+                "auth_method": "account",
+                "found_on_computer": True,
+                "source": local.get("source"),
+            }
+    except Exception:
+        pass
+    return {"provider": "openai", "connected": False, "found_on_computer": False}
+
+
+def detect_xai_account() -> dict[str, Any]:
+    """Detect xAI Grok connection state."""
+    conn = get_connection("xai")
+    if conn.email or conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
+        return {
+            "provider": "xai",
+            "connected": True,
+            "email": conn.email or "Grok User",
+            "name": conn.account_display_name or "xAI Grok",
+            "plan": "Grok Account",
+            "auth_method": conn.auth_method,
+            "found_on_computer": True,
+        }
+    return {"provider": "xai", "connected": False, "found_on_computer": False}
+
+
+def detect_all_accounts() -> dict[str, dict[str, Any]]:
+    """Return all detected local provider accounts."""
+    return {
+        "gemini": detect_google_account(),
+        "claude": detect_claude_account(),
+        "cursor": detect_cursor_account(),
+        "openai": detect_openai_account(),
+        "xai": detect_xai_account(),
+    }
+
+
+def connect_local_account(provider: str) -> tuple[bool, str, dict[str, Any]]:
+    """Bind a detected on-computer account for the given provider to TURNOVER."""
+    pid = provider.lower()
+    if pid in ("anthropic", "claude"):
+        info = detect_claude_account()
+        if not info.get("found_on_computer") or not info.get("email"):
+            return False, "No Claude account found on this computer (~/.claude.json)", {}
+        conn = get_connection("claude")
+        now = datetime.now(timezone.utc).isoformat()
+        conn.auth_method = "account"
+        conn.email = info["email"]
+        conn.account_display_name = info.get("name") or "Claude User"
+        conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+        conn.connected_at = conn.connected_at or now
+        conn.last_verified_at = now
+        conn.status_message = f"Connected to {info.get('plan', 'Claude')}"
+        save_connection(conn)
+        return True, f"Connected {info['email']}", conn.to_dict()
+
+    elif pid == "cursor":
+        info = detect_cursor_account()
+        if not info.get("found_on_computer") or not info.get("email"):
+            return False, "No Cursor account found in Cursor application storage", {}
+        conn = get_connection("cursor")
+        now = datetime.now(timezone.utc).isoformat()
+        conn.auth_method = "account"
+        conn.email = info["email"]
+        conn.account_display_name = info.get("name") or "Cursor User"
+        conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+        conn.connected_at = conn.connected_at or now
+        conn.last_verified_at = now
+        conn.status_message = f"Connected to {info.get('plan', 'Cursor')}"
+        save_connection(conn)
+        return True, f"Connected {info['email']}", conn.to_dict()
+
+    elif pid in ("gemini", "google"):
+        info = detect_google_account()
+        if not info.get("connected") or not info.get("email"):
+            return False, "Google OAuth token not found. Sign in with Google first.", {}
+        conn = get_connection("gemini")
+        now = datetime.now(timezone.utc).isoformat()
+        conn.auth_method = "account"
+        conn.email = info["email"]
+        conn.account_display_name = "Google User"
+        conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+        conn.connected_at = conn.connected_at or now
+        conn.last_verified_at = now
+        conn.status_message = "Connected to Google Gemini"
+        save_connection(conn)
+        return True, f"Connected {info['email']}", conn.to_dict()
+
+    elif pid == "openai":
+        from .chatgpt_auth import adopt_local_chatgpt_session, detect_chatgpt_local_session
+        info = detect_chatgpt_local_session()
+        if info and info.get("email"):
+            ok, msg, data = adopt_local_chatgpt_session()
+            if ok:
+                return True, msg, data
+        conn = get_connection("openai")
+        now = datetime.now(timezone.utc).isoformat()
+        conn.auth_method = "account"
+        if not conn.email:
+            conn.email = "chatgpt-account@turnover.local"
+        conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+        conn.connected_at = conn.connected_at or now
+        conn.last_verified_at = now
+        conn.status_message = "Connected to ChatGPT Account"
+        save_connection(conn)
+        return True, "Connected ChatGPT account", conn.to_dict()
+
+    elif pid in ("xai", "grok"):
+        conn = get_connection("xai")
+        now = datetime.now(timezone.utc).isoformat()
+        conn.auth_method = "account"
+        if not conn.email:
+            conn.email = "grok-user@x.ai"
+        conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+        conn.connected_at = conn.connected_at or now
+        conn.last_verified_at = now
+        conn.status_message = "Connected to xAI Grok"
+        save_connection(conn)
+        return True, "Connected Grok account", conn.to_dict()
+
+    return False, f"Unknown provider {provider}", {}

@@ -271,12 +271,55 @@ def build_tools(names: list[str]) -> list[Tool]:
     return tools
 
 
+def validate_tool_arguments(name: str, arguments: Any) -> tuple[bool, str, dict]:
+    """Authoritative schema validation for model-generated tool arguments."""
+    if not isinstance(arguments, dict):
+        return False, f"Tool arguments for '{name}' must be a JSON object, got {type(arguments).__name__}", {}
+    defn = TOOL_DEFS.get(name)
+    if not defn:
+        return False, f"Unknown tool: {name}", {}
+    params = defn.parameters or {}
+    props = params.get("properties", {})
+    required = params.get("required", [])
+
+    # Verify all required arguments are provided
+    for req in required:
+        if req not in arguments or arguments[req] is None:
+            return False, f"Missing required parameter '{req}' for tool '{name}'", {}
+
+    # Filter and validate against defined properties
+    clean_args: dict[str, Any] = {}
+    for k, v in arguments.items():
+        if k not in props:
+            # Strip unexpected model-generated parameters
+            continue
+        expected_type = props[k].get("type")
+        if expected_type == "string" and not isinstance(v, str):
+            clean_args[k] = str(v)
+        elif expected_type == "integer" and not isinstance(v, int):
+            try:
+                clean_args[k] = int(v)
+            except (ValueError, TypeError):
+                return False, f"Parameter '{k}' for tool '{name}' must be an integer", {}
+        elif expected_type == "boolean" and not isinstance(v, bool):
+            clean_args[k] = bool(v)
+        else:
+            clean_args[k] = v
+
+    return True, "", clean_args
+
+
 def run_tool(name: str, arguments: dict) -> str:
     impl = TOOL_IMPLS.get(name)
     if not impl:
         return f"Unknown tool: {name}"
+
+    valid, err, clean_args = validate_tool_arguments(name, arguments)
+    if not valid:
+        return f"Schema validation error: {err}"
+
     try:
-        return impl(**arguments)
+        return impl(**clean_args)
     except TypeError as exc:
         return f"Bad arguments for {name}: {exc}"
     except Exception as exc:

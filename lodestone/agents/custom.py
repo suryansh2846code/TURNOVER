@@ -75,6 +75,11 @@ class CustomAgentStore:
         return self.get(aid)
 
     def delete(self, agent_id: str) -> bool:
+        try:
+            from .agent_models import clear_agent_model
+            clear_agent_model(agent_id)
+        except Exception:
+            pass
         cur = self._c.execute("DELETE FROM custom_agents WHERE id=?", (agent_id,))
         self._c.commit()
         return cur.rowcount > 0

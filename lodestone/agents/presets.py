@@ -4,7 +4,10 @@ All share one Brain; each is scoped to a domain with its own tools and voice.
 """
 from __future__ import annotations
 
+import dataclasses
+
 from .agent import Agent
+from .agent_models import get_agent_model
 
 _BASE_TOOLS = ["search_brain", "remember", "list_entities", "web_search"]
 
@@ -61,16 +64,24 @@ PRESETS: dict[str, Agent] = {
 }
 
 
+def _apply_agent_model(agent: Agent) -> Agent:
+    p, m = get_agent_model(agent.id)
+    if p:
+        return dataclasses.replace(agent, model_provider=p, model_name=m)
+    return dataclasses.replace(agent)
+
+
 def list_agents() -> list[Agent]:
     from .custom import get_custom_store
-    return list(PRESETS.values()) + get_custom_store().list()
+    raw = list(PRESETS.values()) + get_custom_store().list()
+    return [_apply_agent_model(a) for a in raw]
 
 
 def get_agent(agent_id: str) -> Agent:
     if agent_id in PRESETS:
-        return PRESETS[agent_id]
+        return _apply_agent_model(PRESETS[agent_id])
     from .custom import get_custom_store
     custom = get_custom_store().get(agent_id)
     if custom:
-        return custom
+        return _apply_agent_model(custom)
     raise KeyError(f"unknown agent '{agent_id}'")

@@ -41,6 +41,11 @@
             <div class="ch-name" id="agentName">—</div>
             <div class="ch-role" id="agentRole"></div>
           </div>
+          <button id="agentModelChip" class="agent-model-chip" title="Choose the model powering this agent">
+            <span class="chip-dot" id="agentModelDot"></span>
+            <span class="chip-label" id="agentModelLabel">Model</span>
+            <span class="chip-arrow">▾</span>
+          </button>
         </div>
         <div class="ch-right">
           <span class="tb-trust">On-device · Private · Yours</span>
@@ -52,11 +57,93 @@
       <div id="messages" class="messages"></div>
 
       <form id="composer" class="composer">
-        <button type="button" class="cmp-ic" id="attachBtn" title="Attach" tabindex="-1"></button>
-        <textarea id="input" rows="1" autocomplete="off"
-               placeholder="Message your agent… it already knows you."></textarea>
-        <button type="button" class="cmp-ic" id="micBtn" title="Voice (coming soon)" tabindex="-1"></button>
-        <button id="send" type="submit" class="cmp-send" title="Send"></button>
+        <div class="cmp-main-row">
+          <button type="button" class="cmp-ic" id="attachBtn" title="Attach" tabindex="-1"></button>
+          <textarea id="input" rows="1" autocomplete="off"
+                 placeholder="Message your agent… it already knows you."></textarea>
+        </div>
+
+        <div class="cmp-bottom-bar">
+          <div class="cmp-bar-left">
+            <button type="button" class="cmp-pill" id="cmpWorkspacePill" title="Workspace: Lodestone">
+              <span class="cmp-pill-ic">📁</span>
+              <span class="cmp-pill-label" id="cmpWorkspaceLabel">workspace</span>
+              <span class="cmp-pill-arrow">⌵</span>
+            </button>
+
+            <!-- Model & Provider Picker Pill -->
+            <div class="cmp-model-picker-wrap">
+              <button type="button" class="cmp-pill cmp-pill-model" id="cmpModelPill" title="Choose model & provider">
+                <span class="cmp-pill-label" id="cmpModelLabel">Auto</span>
+                <span class="cmp-pill-arrow">⌵</span>
+              </button>
+
+              <!-- Floating Popover Menu -->
+              <div id="cmpModelMenu" class="cmp-model-menu" hidden>
+                <!-- Row 1: Provider selector with flyout -->
+                <div class="cmp-menu-row cmp-clickable cmp-has-flyout" id="cmpProvRow">
+                  <span class="cmp-row-title">Provider</span>
+                  <div class="cmp-row-val">
+                    <span id="cmpSelectedProvLabel">Cursor</span>
+                    <span class="cmp-chevron">›</span>
+                  </div>
+
+                  <!-- Flyout submenu for Provider -->
+                  <div class="cmp-flyout" id="cmpProvFlyout" hidden>
+                    <div class="cmp-flyout-header">Provider</div>
+                    <div class="cmp-flyout-list" id="cmpProvFlyoutList"></div>
+                  </div>
+                </div>
+
+                <!-- Row 3: Model selector with flyout -->
+                <div class="cmp-menu-row cmp-clickable cmp-has-flyout" id="cmpModelRow">
+                  <span class="cmp-row-title">Model</span>
+                  <div class="cmp-row-val">
+                    <span id="cmpSelectedModelLabel">Auto</span>
+                    <span class="cmp-chevron">›</span>
+                  </div>
+
+                  <!-- Flyout submenu for Model -->
+                  <div class="cmp-flyout" id="cmpModelFlyout" hidden>
+                    <div class="cmp-flyout-header">Model</div>
+                    <div class="cmp-flyout-list" id="cmpModelFlyoutList"></div>
+                  </div>
+                </div>
+
+                <!-- Status & Plan Usage rows -->
+                <div class="cmp-menu-divider"></div>
+                <div class="cmp-menu-status" id="cmpMenuStatus">
+                  <div class="cmp-status-row" id="cmpClaudeStatusItem">
+                    <span class="cmp-status-sub" id="cmpClaudeStatusText">Sign in with Claude to see plan usage</span>
+                    <span class="cmp-chevron">›</span>
+                  </div>
+                  <div class="cmp-status-row" id="cmpChatGptStatusItem">
+                    <span class="cmp-status-label">ChatGPT plan</span>
+                    <span class="cmp-status-sub" id="cmpChatGptStatusSub">limit reached · resets in 27d 3h</span>
+                    <span class="cmp-chevron">›</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <span class="cmp-privacy-ic" id="cmpPrivacyLock" title="On-device · Private">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3">
+                <rect x="3.5" y="7" width="9" height="6" rx="1.5"/>
+                <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>
+              </svg>
+            </span>
+          </div>
+
+          <div class="cmp-bar-right">
+            <button type="button" class="cmp-bar-btn" id="micBtn" title="Voice (coming soon)" tabindex="-1"></button>
+            <button type="button" class="cmp-bar-btn" id="waveformBtn" title="Voice waveform" tabindex="-1">
+              <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+                <path d="M2 8h1M4 5.5v5M6 3.5v9M8 2v12M10 4.5v7M12 6v4M14 8h1"/>
+              </svg>
+            </button>
+            <button id="send" type="submit" class="cmp-send" title="Send"></button>
+          </div>
+        </div>
       </form>
       <div class="cmp-hints" id="cmpHints"></div>
     </main>
@@ -102,11 +189,17 @@
 
         <!-- Model -->
         <div class="dpanel" data-d="model" hidden>
-          <div class="ctx-label">AI model</div>
-          <select id="provider"></select>
-          <input id="modelName" class="ctx-input" autocomplete="off" placeholder="model name (optional)" style="margin-top:8px" />
-          <div id="modelHint" class="model-hint"></div>
-          <div id="privacyBadge" class="privacy-badge" hidden></div>
+          <div class="ctx-label">Connected Providers &amp; AI Accounts</div>
+          <p class="model-hint" style="margin-top:0">Connect Cursor, Claude, OpenAI, xAI, Google Gemini, or local Ollama. Model choice is selected directly inside the chat composer.</p>
+          <div id="providerCards" class="provider-cards"></div>
+
+          <!-- Hidden fallbacks kept so legacy scripts run without errors -->
+          <div id="agentModelMatrix" hidden></div>
+          <select id="provider" hidden></select>
+          <div id="defaultProviderConnectBox" hidden></div>
+          <input id="modelName" type="hidden" />
+          <div id="modelHint" hidden></div>
+          <div id="privacyBadge" hidden></div>
 
           <div class="ctx-label" style="margin-top:16px">Enrichment model</div>
           <select id="enrichProvider"></select>
@@ -128,6 +221,39 @@
 
       </div>
     </aside>
+  </div>
+
+  <!-- ── Modal: Agent Model Binding Popover/Dialog ──────────────────────── -->
+  <div id="agentModelModal" class="modal-bg" hidden>
+    <div class="modal agent-model-card">
+      <div class="modal-head">
+        <div>
+          <h3 id="ammTitle" style="margin:0;font-size:15px;font-weight:600">Model for Agent</h3>
+          <p class="modal-sub" style="margin:2px 0 0;font-size:12px;color:var(--text-muted)">Choose which model powers this agent's thoughts, recall, and tools.</p>
+        </div>
+        <button id="ammClose" class="ghost tiny">✕</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
+        <div>
+          <label class="ctx-label" style="margin-bottom:4px">Provider</label>
+          <select id="ammProvider" class="ctx-input"></select>
+        </div>
+        <div id="ammConnectBox" class="provider-connect-box" hidden></div>
+        <div>
+          <label class="ctx-label" style="margin-bottom:4px">Model</label>
+          <select id="ammModelSelect" class="ctx-input"></select>
+          <input id="ammCustomModel" class="ctx-input" placeholder="Or type a custom model name…" style="margin-top:6px" />
+        </div>
+        <div id="ammHint" class="model-hint" style="margin:0;font-size:11.5px"></div>
+        <div id="ammStatusBadge" class="privacy-badge" style="margin:0" hidden></div>
+      </div>
+      <div class="modal-foot" style="display:flex;align-items:center;margin-top:16px;gap:8px">
+        <button id="ammReset" class="ghost tiny" title="Clear override and use default model">Reset to Default</button>
+        <div style="flex:1"></div>
+        <button id="ammCancel" class="ghost tiny">Cancel</button>
+        <button id="ammSave" class="primary tiny">Save for this Agent</button>
+      </div>
+    </div>
   </div>
 
   <!-- hidden context hooks kept so app.js stays wired (right panel removed) -->

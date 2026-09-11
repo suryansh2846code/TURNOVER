@@ -27,13 +27,26 @@ class OpenAICompatProvider(LLMProvider):
         self.model = model or os.environ.get(
             f"{self.name.upper()}_MODEL", self.default_model
         )
-        self.api_key = api_key or os.environ.get(self.key_env, "") or _saved_key(self.key_env)
+        self.api_key = api_key if api_key is not None else (os.environ.get(self.key_env, "") or _saved_key(self.key_env))
         self.base_url = (base_url or os.environ.get(
             f"{self.name.upper()}_BASE_URL", self.default_base
         )).rstrip("/")
 
     def is_ready(self) -> tuple[bool, str]:
         if self.key_required and not self.api_key:
+            if self.name == "openai":
+                try:
+                    from .connections import ConnectionStatus, get_connection
+                    from .chatgpt_auth import detect_chatgpt_local_session
+                    conn = get_connection("openai")
+                    if conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED:
+                        return True, ""
+                    local = detect_chatgpt_local_session()
+                    if local and local.get("has_token"):
+                        return True, ""
+                except Exception:
+                    pass
+                return False, f"set {self.key_env} or Sign in with ChatGPT"
             return False, f"set {self.key_env}"
         return True, ""
 

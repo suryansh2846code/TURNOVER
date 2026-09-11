@@ -15,16 +15,26 @@ class AnthropicProvider(LLMProvider):
     key_env = "ANTHROPIC_API_KEY"
 
     def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
-        self.model = model or "claude-sonnet-5"
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "") or _saved_key("ANTHROPIC_API_KEY")
+        self.model = model or os.environ.get("ANTHROPIC_MODEL", "claude-3-7-sonnet-latest")
+        self.api_key = api_key if api_key is not None else (os.environ.get("ANTHROPIC_API_KEY", "") or _saved_key("ANTHROPIC_API_KEY"))
         self.base_url = os.environ.get(
             "ANTHROPIC_BASE_URL", "https://api.anthropic.com"
         )
 
     def is_ready(self) -> tuple[bool, str]:
-        if not self.api_key:
-            return False, "set ANTHROPIC_API_KEY"
-        return True, ""
+        if self.api_key:
+            return True, ""
+        try:
+            from .connections import ConnectionStatus, get_connection
+            conn = get_connection("claude")
+            if conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED:
+                return True, ""
+            from .claude_code import find_claude
+            if find_claude():
+                return True, ""
+        except Exception:
+            pass
+        return False, "set ANTHROPIC_API_KEY or connect Claude account"
 
     def _to_blocks(self, messages: list[Message]) -> tuple[str, list[dict]]:
         system = ""
