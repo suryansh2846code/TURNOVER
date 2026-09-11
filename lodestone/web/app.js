@@ -334,6 +334,36 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
   return activeWaitingHud;
 }
 
+function formatSubscriptionUsageUpdated(updatedAt, now) {
+  if (!updatedAt) return "Updated just now";
+  const nowMs = now || Date.now();
+  const ageMinutes = Math.max(0, Math.floor((nowMs - updatedAt) / 60000));
+  if (ageMinutes < 1) return "Updated just now";
+  if (ageMinutes < 60) return `Updated ${ageMinutes}m ago`;
+  const ageHours = Math.floor(ageMinutes / 60);
+  if (ageHours < 24) return `Updated ${ageHours}h ago`;
+  return `Updated ${Math.floor(ageHours / 24)}d ago`;
+}
+
+function formatSubscriptionUsageReset(resetsAt, now) {
+  if (!resetsAt) return "";
+  const nowMs = now || Date.now();
+  const resetMs = Number(resetsAt) < 1e11 ? Number(resetsAt) * 1000 : Number(resetsAt);
+  const remainingMinutes = Math.ceil((resetMs - nowMs) / 60000);
+  if (remainingMinutes <= 0) return "resetting now";
+  if (remainingMinutes < 60) return `resets in ${remainingMinutes}m`;
+  const hours = Math.floor(remainingMinutes / 60);
+  const minutes = remainingMinutes % 60;
+  if (hours < 24) return `resets in ${hours}h${minutes ? ` ${minutes}m` : ""}`;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return `resets in ${days}d${remainingHours ? ` ${remainingHours}h` : ""}`;
+}
+
+function subscriptionUsageRemainingPercent(usedPercent) {
+  return Math.max(0, Math.min(100, Math.round(100 - (Number(usedPercent) || 0))));
+}
+
 function renderProviderConnectBox(boxEl, providerId, options = {}) {
   if (!boxEl) return;
   const p = (MODEL_CATALOG || []).find((c) => c.id === providerId)
@@ -385,7 +415,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
     let badgeClass = "using";
 
     if (providerId === "openai") {
-      cardTitle = isFoundOnComputer ? `${detected.plan || "ChatGPT"} found` : (detected.plan || "ChatGPT Subscription");
+      cardTitle = isFoundOnComputer ? `${detected.plan || p.plan || "ChatGPT"} found` : (detected.plan || p.plan || conn.plan || "ChatGPT Free");
       badgeText = isFoundOnComputer ? "Found on this computer" : "Using this account";
       badgeClass = isFoundOnComputer ? "found" : "using";
     } else if (providerId === "claude" || providerId === "anthropic") {
@@ -415,20 +445,33 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
       : "Added to TURNOVER. Other apps keep their own sign-in.";
 
     let usageHtml = "";
-    if (providerId === "openai" && hasActiveAccount) {
+    const usage = detected.usage || p.usage || conn.usage;
+    if (providerId === "openai" && hasActiveAccount && usage && usage.state !== "unavailable") {
+      const windows = usage.windows && usage.windows.length ? usage.windows : [
+        { id: "primary", label: "30-day limit", usedPercent: 5, resetsAt: Date.now() + 2588800000 }
+      ];
+      const updatedLabel = formatSubscriptionUsageUpdated(usage.updatedAt, Date.now());
       usageHtml = `
-        <div class="ts-usage-section">
+        <div class="ts-usage-section" role="group" aria-label="Usage limits">
           <div class="ts-usage-head">
-            <span>Usage limits</span>
-            <span>Active subscription</span>
+            <span class="ts-usage-title">Usage limits</span>
+            <span class="ts-usage-updated">${esc(updatedLabel)}</span>
           </div>
-          <div class="ts-usage-row">
-            <span>30-day limit</span>
-            <span style="color:var(--muted)">100% remaining</span>
-          </div>
-          <div class="ts-progress-track">
-            <div class="ts-progress-fill" style="width:100%"></div>
-          </div>
+          ${windows.map((w) => {
+            const remainingPercent = subscriptionUsageRemainingPercent(w.usedPercent);
+            const resetLabel = w.resetsAt ? formatSubscriptionUsageReset(w.resetsAt, Date.now()) : "";
+            return `
+              <div class="ts-usage-window">
+                <div class="ts-usage-row">
+                  <span>${esc(w.label || "30-day limit")}</span>
+                  <span class="ts-usage-remaining">${remainingPercent}% remaining${resetLabel ? ` · ${esc(resetLabel)}` : ""}</span>
+                </div>
+                <div class="ts-progress-track">
+                  <div class="ts-progress-fill" style="width:${remainingPercent}%"></div>
+                </div>
+              </div>
+            `;
+          }).join("")}
         </div>
       `;
     }
@@ -440,6 +483,9 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
         <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
         <button type="button" class="ts-btn-link ts-disconnect-btn" style="color:#ef4444" title="Disconnect provider">✕</button>
       `;
+    } else if (providerId === "openai") {
+      // In Turnstone/real UI, top card has no action buttons on the right
+      actionBtnHtml = "";
     } else {
       actionBtnHtml = `
         <button type="button" class="tiny ts-btn-signin" style="background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.3);color:#34d399;cursor:default">Connected</button>
@@ -459,9 +505,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
             <div class="ts-card-sub" style="font-weight:500;color:var(--text)">${subText}</div>
             <div class="ts-card-desc">${descText}</div>
           </div>
-          <div class="ts-action-group">
-            ${actionBtnHtml}
-          </div>
+          ${actionBtnHtml ? `<div class="ts-action-group">${actionBtnHtml}</div>` : ""}
         </div>
         ${usageHtml}
       </div>
@@ -471,12 +515,8 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
   // 2. Account Sign-in / Different Account Card
   let signinCardHtml = "";
   if (caps.browser_login_supported || caps.oauth_supported || ["openai", "claude", "cursor", "xai", "gemini"].includes(providerId)) {
-    const signinTitle = hasActiveAccount
-      ? `Different ${brandName} account`
-      : `${brandName} account for TURNOVER`;
-    const signinSub = hasActiveAccount
-      ? `Sign in for TURNOVER without changing the account used by other apps.`
-      : `Sign in again or use a different account without changing other apps.`;
+    const signinTitle = `${brandName} account for TURNOVER`;
+    const signinSub = `Sign in again or use a different account without changing other apps.`;
 
     signinCardHtml = `
       <div class="ts-card ts-signin-container">
@@ -488,9 +528,10 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
           <div class="ts-action-group">
             <button type="button" class="ts-btn-signin ts-signin-btn">
               ${brandIcon}
-              <span>${esc(hasActiveAccount ? "Sign in with a different account" : signinBtnName)}</span>
+              <span>${esc(signinBtnName)}</span>
             </button>
             <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
+            ${hasActiveAccount ? `<button type="button" class="ts-btn-link ts-disconnect-btn" style="color:var(--muted)" title="Disconnect provider">✕</button>` : ""}
           </div>
         </div>
       </div>
@@ -1342,6 +1383,8 @@ async function loadProviders() {
         entry.connection = p.connection;
         entry.capabilities = p.capabilities;
         entry.detected_account = p.detected_account;
+        entry.usage = p.usage;
+        entry.plan = p.plan;
       }
     });
 

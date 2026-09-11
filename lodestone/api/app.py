@@ -1036,6 +1036,18 @@ def refresh_provider_endpoint(name: str):
     if account_meta.get("account_id"):
         conn.account_id = account_meta["account_id"]
 
+    usage = None
+    plan = None
+    if name == "openai":
+        try:
+            from ..models.chatgpt_auth import get_chatgpt_subscription_usage, detect_chatgpt_local_session
+            usage = get_chatgpt_subscription_usage(force_refresh=True)
+            sess = detect_chatgpt_local_session(fetch_usage=False)
+            if sess and sess.get("plan"):
+                plan = sess["plan"]
+        except Exception:
+            pass
+
     save_connection(conn)
     return {
         "ok": True,
@@ -1044,6 +1056,8 @@ def refresh_provider_endpoint(name: str):
         "connection": conn.to_dict(),
         "models": models,
         "account_meta": account_meta,
+        "usage": usage,
+        "plan": plan,
     }
 
 

@@ -88,26 +88,166 @@ def _decode_jwt_payload(jwt_token: str) -> dict[str, Any]:
         return {}
 
 
-def detect_chatgpt_local_session() -> dict[str, Any] | None:
+_CHATGPT_PLAN_LABELS: dict[str, str] = {
+    "free": "ChatGPT Free",
+    "go": "ChatGPT Go",
+    "plus": "ChatGPT Plus",
+    "pro": "ChatGPT Pro",
+    "prolite": "ChatGPT Pro",
+    "team": "ChatGPT Team",
+    "self_serve_business_usage_based": "ChatGPT Business",
+    "business": "ChatGPT Business",
+    "enterprise_cbp_usage_based": "ChatGPT Enterprise",
+    "enterprise": "ChatGPT Enterprise",
+    "edu": "ChatGPT Education",
+}
+
+_USAGE_CACHE: dict[str, Any] = {}
+_USAGE_CACHE_TIME: float = 0.0
+_USAGE_CACHE_TTL: float = 30.0
+
+
+def _format_chatgpt_plan(raw_plan: str | None) -> str:
+    if not raw_plan:
+        return "ChatGPT Free"
+    clean = str(raw_plan).strip().lower()
+    return _CHATGPT_PLAN_LABELS.get(clean, f"ChatGPT {clean.title()}")
+
+
+def _extract_plan_and_account_from_tokens(data: dict[str, Any]) -> tuple[str, str, str, str | None]:
+    """Extract (plan_name, email, display_name, account_id) from stored tokens/claims."""
+    tokens = data.get("tokens") or {}
+    access_tok = tokens.get("access_token") or ""
+    id_tok = tokens.get("id_token") or ""
+
+    claims = _decode_jwt_payload(access_tok) or {}
+    id_claims = _decode_jwt_payload(id_tok) or {}
+
+    auth_info = claims.get("https://api.openai.com/auth") or id_claims.get("https://api.openai.com/auth") or {}
+    raw_plan = auth_info.get("chatgpt_plan_type") or data.get("plan_type")
+    account_id = auth_info.get("chatgpt_account_id") or tokens.get("account_id")
+
+    profile_info = claims.get("https://api.openai.com/profile") or id_claims.get("https://api.openai.com/profile") or {}
+    email = data.get("email") or profile_info.get("email") or claims.get("email") or id_claims.get("email") or ""
+    name = data.get("name") or profile_info.get("name") or claims.get("name") or id_claims.get("name") or ""
+
+    plan_name = _format_chatgpt_plan(raw_plan)
+    return plan_name, email, name, account_id
+
+
+def clear_chatgpt_usage_cache() -> None:
+    global _USAGE_CACHE, _USAGE_CACHE_TIME
+    _USAGE_CACHE = {}
+    _USAGE_CACHE_TIME = 0.0
+
+
+def get_chatgpt_subscription_usage(force_refresh: bool = False) -> dict[str, Any] | None:
+    """Fetch live usage limits and rate limit windows from ChatGPT backend."""
+    global _USAGE_CACHE, _USAGE_CACHE_TIME
+    now = time.time()
+    if not force_refresh and _USAGE_CACHE and (now - _USAGE_CACHE_TIME < _USAGE_CACHE_TTL):
+        return _USAGE_CACHE
+
+    token = get_chatgpt_access_token()
+    if not token:
+        turnstone_f = _turnstone_auth_path()
+        if turnstone_f.exists():
+            try:
+                td = json.loads(turnstone_f.read_text())
+                token = td.get("tokens", {}).get("access_token")
+            except Exception:
+                pass
+    if not token:
+        return None
+
+    account_id = None
+    plan_from_jwt = "free"
+    try:
+        claims = _decode_jwt_payload(token)
+        auth_claims = claims.get("https://api.openai.com/auth") or {}
+        account_id = auth_claims.get("chatgpt_account_id")
+        plan_from_jwt = auth_claims.get("chatgpt_plan_type") or "free"
+    except Exception:
+        pass
+
+    try:
+        import urllib.request
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "codex_cli_rs/0.153.4",
+            "Accept": "application/json",
+        }
+        if account_id:
+            headers["chatgpt-account-id"] = account_id
+
+        req = urllib.request.Request("https://chatgpt.com/backend-api/wham/usage", headers=headers)
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            if resp.status == 200:
+                body = json.loads(resp.read().decode("utf-8"))
+                rate_limit = body.get("rate_limit") or {}
+                primary = rate_limit.get("primary_window") or {}
+                windows = []
+                if primary:
+                    duration_secs = primary.get("limit_window_seconds")
+                    duration_mins = (duration_secs // 60) if duration_secs else None
+                    if duration_mins is None:
+                        label = "Primary limit"
+                    elif duration_mins == 10080:
+                        label = "Weekly limit"
+                    elif duration_mins == 1440:
+                        label = "Daily limit"
+                    elif duration_mins % 1440 == 0:
+                        label = f"{duration_mins // 1440}-day limit"
+                    elif duration_mins % 60 == 0:
+                        label = f"{duration_mins // 60}-hour limit"
+                    else:
+                        label = f"{duration_mins}-minute limit"
+
+                    reset_at = primary.get("reset_at")
+                    resets_at_ms = int(reset_at * 1000) if reset_at else None
+                    windows.append({
+                        "id": "primary",
+                        "label": label,
+                        "usedPercent": primary.get("used_percent", 0),
+                        "resetsAt": resets_at_ms,
+                    })
+
+                usage_res = {
+                    "state": "available",
+                    "updatedAt": int(time.time() * 1000),
+                    "windows": windows,
+                    "plan": _format_chatgpt_plan(body.get("plan_type") or plan_from_jwt),
+                    "planType": body.get("plan_type") or plan_from_jwt,
+                }
+                _USAGE_CACHE = usage_res
+                _USAGE_CACHE_TIME = time.time()
+                return usage_res
+    except Exception as exc:
+        logger.warning(f"ChatGPT live usage query failed: {exc}")
+
+    if _USAGE_CACHE:
+        return _USAGE_CACHE
+    return None
+
+
+def detect_chatgpt_local_session(fetch_usage: bool = True) -> dict[str, Any] | None:
     """Detect existing ChatGPT / Codex authentication on this machine."""
     # 1. First check Lodestone's own stored token
     our_token = _token_storage_path()
     if our_token.exists():
         try:
             data = json.loads(our_token.read_text())
-            email = data.get("email")
-            name = data.get("name")
-            if not email and "tokens" in data:
-                id_tok = data["tokens"].get("id_token", "")
-                claims = _decode_jwt_payload(id_tok)
-                email = claims.get("email")
-                name = claims.get("name")
+            plan_name, email, name, account_id = _extract_plan_and_account_from_tokens(data)
             if email:
+                usage = get_chatgpt_subscription_usage() if fetch_usage else None
+                if usage and usage.get("plan"):
+                    plan_name = usage["plan"]
                 return {
                     "source": "turnover",
                     "email": email,
                     "name": name or "ChatGPT User",
-                    "plan": "ChatGPT Subscription",
+                    "plan": plan_name,
+                    "usage": usage,
                     "has_token": bool(data.get("tokens", {}).get("access_token")),
                 }
         except Exception:
@@ -118,18 +258,18 @@ def detect_chatgpt_local_session() -> dict[str, Any] | None:
     if codex_auth.exists():
         try:
             data = json.loads(codex_auth.read_text())
-            tokens = data.get("tokens", {})
-            id_tok = tokens.get("id_token", "")
-            claims = _decode_jwt_payload(id_tok)
-            email = claims.get("email")
-            name = claims.get("name")
+            plan_name, email, name, account_id = _extract_plan_and_account_from_tokens(data)
             if email:
+                usage = get_chatgpt_subscription_usage() if fetch_usage else None
+                if usage and usage.get("plan"):
+                    plan_name = usage["plan"]
                 return {
                     "source": "codex_cli",
                     "email": email,
                     "name": name or "ChatGPT User",
-                    "plan": "ChatGPT Subscription",
-                    "has_token": bool(tokens.get("access_token")),
+                    "plan": plan_name,
+                    "usage": usage,
+                    "has_token": bool(data.get("tokens", {}).get("access_token")),
                 }
         except Exception:
             pass
@@ -139,18 +279,18 @@ def detect_chatgpt_local_session() -> dict[str, Any] | None:
     if turnstone_auth.exists():
         try:
             data = json.loads(turnstone_auth.read_text())
-            tokens = data.get("tokens", {})
-            id_tok = tokens.get("id_token", "")
-            claims = _decode_jwt_payload(id_tok)
-            email = claims.get("email")
-            name = claims.get("name")
+            plan_name, email, name, account_id = _extract_plan_and_account_from_tokens(data)
             if email:
+                usage = get_chatgpt_subscription_usage() if fetch_usage else None
+                if usage and usage.get("plan"):
+                    plan_name = usage["plan"]
                 return {
                     "source": "turnstone",
                     "email": email,
                     "name": name or "ChatGPT User",
-                    "plan": "ChatGPT Subscription",
-                    "has_token": bool(tokens.get("access_token")),
+                    "plan": plan_name,
+                    "usage": usage,
+                    "has_token": bool(data.get("tokens", {}).get("access_token")),
                 }
         except Exception:
             pass

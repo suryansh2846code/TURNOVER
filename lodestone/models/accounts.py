@@ -101,32 +101,41 @@ def detect_openai_account() -> dict[str, Any]:
     """Detect OpenAI connection or ChatGPT subscription state."""
     conn = get_connection("openai")
     is_disconnected = (conn.connection_status == ConnectionStatus.DISCONNECTED)
+
+    local = None
+    try:
+        from .chatgpt_auth import detect_chatgpt_local_session
+        local = detect_chatgpt_local_session(fetch_usage=True)
+    except Exception:
+        pass
+
     if not is_disconnected and conn.email and conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
+        plan = (local.get("plan") if local else None) or ("ChatGPT Free" if conn.auth_method == "account" else "OpenAI Developer")
+        usage = local.get("usage") if local else None
         return {
             "provider": "openai",
             "connected": True,
-            "email": conn.email or "OpenAI User",
-            "name": conn.account_display_name or "OpenAI Account",
-            "plan": "ChatGPT Subscription" if conn.auth_method == "account" else "OpenAI Developer",
+            "email": conn.email or (local.get("email") if local else "OpenAI User"),
+            "name": conn.account_display_name or (local.get("name") if local else "OpenAI Account"),
+            "plan": plan,
+            "usage": usage,
             "auth_method": conn.auth_method,
             "found_on_computer": True,
+            "source": local.get("source") if local else "turnover",
         }
-    try:
-        from .chatgpt_auth import detect_chatgpt_local_session
-        local = detect_chatgpt_local_session()
-        if local and local.get("email"):
-            return {
-                "provider": "openai",
-                "connected": False if is_disconnected else (local.get("source") == "turnover" and conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED),
-                "email": local["email"],
-                "name": local.get("name") or "ChatGPT User",
-                "plan": local.get("plan") or "ChatGPT Subscription",
-                "auth_method": "account",
-                "found_on_computer": True,
-                "source": local.get("source"),
-            }
-    except Exception:
-        pass
+
+    if local and local.get("email"):
+        return {
+            "provider": "openai",
+            "connected": False if is_disconnected else (local.get("source") == "turnover" and conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED),
+            "email": local["email"],
+            "name": local.get("name") or "ChatGPT User",
+            "plan": local.get("plan") or "ChatGPT Free",
+            "usage": local.get("usage"),
+            "auth_method": "account",
+            "found_on_computer": True,
+            "source": local.get("source"),
+        }
     return {"provider": "openai", "connected": False, "found_on_computer": False}
 
 

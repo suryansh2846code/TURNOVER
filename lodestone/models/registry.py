@@ -330,6 +330,14 @@ def get_model_catalog(force_refresh: bool = False) -> list[dict]:
         if ready and conn.connection_status == ConnectionStatus.NOT_CONNECTED:
             conn.connection_status = ConnectionStatus.API_KEY_CONNECTED if caps and caps.api_key_supported else ConnectionStatus.CONNECTED
 
+        acct = None
+        try:
+            from .accounts import detect_openai_account
+            if pid == "openai":
+                acct = detect_openai_account()
+        except Exception:
+            pass
+
         locality, destination = _LOCALITY.get(pid, ("cloud", "Sent to model provider."))
         catalog.append({
             "id": entry["id"],
@@ -346,6 +354,9 @@ def get_model_catalog(force_refresh: bool = False) -> list[dict]:
             "capabilities": caps.to_dict() if caps else None,
             "connection": conn.to_dict(),
             "account_meta": account_meta,
+            "detected_account": acct if (acct and acct.get("found_on_computer")) else None,
+            "plan": acct.get("plan") if acct else None,
+            "usage": acct.get("usage") if acct else None,
         })
     return catalog
 
@@ -382,6 +393,9 @@ def list_providers() -> list[dict]:
                 reason = ""
 
         caps = get_capabilities(name)
+        detected_dict = acct if (acct and acct.get("found_on_computer")) else None
+        usage_data = acct.get("usage") if acct else None
+        plan_name = acct.get("plan") if acct else None
         out.append({
             "name": name,
             "ready": ready,
@@ -390,7 +404,9 @@ def list_providers() -> list[dict]:
             "destination": destination,
             "connection": conn.to_dict(),
             "capabilities": caps.to_dict() if caps else None,
-            "detected_account": acct if (acct and acct.get("found_on_computer")) else None,
+            "detected_account": detected_dict,
+            "usage": usage_data,
+            "plan": plan_name,
         })
     return out
 
