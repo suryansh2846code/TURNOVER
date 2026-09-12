@@ -127,8 +127,11 @@ def test_frontend_derives_sign_in_cards_from_capabilities():
 
 
 def test_grok_subscription_deferral_is_documented():
+    """The deferral must record the real path (xAI's official Grok Build CLI),
+    not the earlier wrong claim that it needed a private endpoint."""
     from pathlib import Path
 
     roadmap = (Path(__file__).parent.parent / "docs/ROADMAP.md").read_text()
     assert "Grok subscription support" in roadmap
     assert "personal-team-blocked:spending-limit" in roadmap
+    assert "grok -p" in roadmap, "the sanctioned CLI path is not recorded"

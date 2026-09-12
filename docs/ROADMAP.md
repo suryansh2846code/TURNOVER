@@ -41,6 +41,69 @@ or recall stops being once-per-turn.
 
 
 ### Grok subscription support (xAI)
+**Status:** not built. **Corrected 2026-09-12** — an earlier version of this
+entry was wrong on two counts.
+
+What is true: `api.x.ai` is the *developer* API, billed against credits bought
+at console.x.ai, and a SuperGrok subscription grants none. Verified against a
+real account — every request fails, including the free metadata call:
+
+```
+GET  /v1/models            403  personal-team-blocked:spending-limit
+POST /v1/chat/completions  402  personal-team-blocked:spending-limit
+```
+
+**What was wrong.** This entry claimed there is no official Grok CLI, and that
+subscription support would mean reverse-engineering grok.com's private consumer
+backend. Both are false. xAI ships **Grok Build**, an official agentic CLI
+(`curl -fsSL https://x.ai/cli/install.sh | bash`, or
+`npm i -g @xai-official/grok`) with headless support:
+
+```
+grok -p "<prompt>" --output-format json        # single-turn, prints and exits
+grok login                                      # browser sign-in
+XAI_API_KEY=...                                 # or a key for headless use
+```
+
+That is the sanctioned subscription path, and it is the same shape as the
+Claude Code and Cursor backends we already ship. The OAuth scope our own token
+already carries — `grok-cli:access` — is for exactly this.
+
+**Why competing apps work.** They bundle the vendor CLIs and shell out to them.
+A local install pins `claude` 2.1.258, `codex` 0.153.4, `cursor-agent`
+2026.08.11 and `grok` 1.0.5 under its own app-support directory, with a
+per-provider auth dir beside each. No private endpoints involved.
+
+**To ship it**: add a `grok` CLI backend mirroring `models/cursor.py`, then
+decide whether to require a user-installed CLI (simple, an extra setup step) or
+manage version-pinned binaries ourselves (better UX, meaningfully more work:
+download, verify, pin, update).
+
+**Note:** `models/xai_auth.py` currently authenticates with client id
+`b1a00492-…` and `referrer=opencode` — **not ours**. Replace it with a
+Lodestone-owned client before building on that flow.
+
+### Recall scaling
+**Status:** measured, deliberately not built. See [`SCALING.md`](SCALING.md).
+
+Recall is linear in memory count (~0.05 ms each) and runs on every agent turn.
+A real install sits at 3.3k memories / ~120 ms, which is fine; 10k is 430 ms
+and 50k is 2.5 s. The bottleneck is **not** vector search — the matmul is 0.1%
+of the time — it is the eight-factor Python scoring loop that runs over every
+row (95%). A top-K pre-filter before that loop measured **25–33× faster** (50k:
+2.3 s → 70 ms) as a contained change to one function.
+
+Not needed yet because the app is bounded by default (Gmail 600/90d, Drive 500,
+Files 2000). **The real risk is the uncapped connectors** — iMessage has no
+limit at all, and years of history would land a user at 100k+ from one
+checkbox. Capping those is cheaper than optimising recall, and should come
+first.
+
+**Reopen if:** a real brain passes ~10k memories, an uncapped connector ships,
+or recall stops being once-per-turn.
+
+
+### Grok subscription support (xAI)
 **Status:** deliberately not built. xAI is API-key-only in the app today.
 
 **Why.** xAI sells two separately-billed products that share one login:

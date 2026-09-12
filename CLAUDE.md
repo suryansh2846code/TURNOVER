@@ -154,6 +154,20 @@ derived rollup). Removing a key must never sign the user out, and connecting an
 account must never claim a key exists. `/api/providers/{name}/disconnect` takes
 `scope=account|api_key|all`.
 
+**Every subscription path is a vendor CLI.** None of these providers exposes a
+subscription inference endpoint; each ships an official headless CLI instead,
+and that is how a paid plan is reached:
+
+| provider | CLI | headless invocation |
+|---|---|---|
+| Claude | `claude` | `claude -p --output-format json --model <id>` |
+| Cursor | `agent` | `agent -p "<prompt>" --output-format json --model <id>` |
+| xAI | `grok` | `grok -p "<prompt>" --output-format json` *(not wired up yet)* |
+| ChatGPT | `codex` | (we use the Codex responses endpoint directly) |
+
+So "support provider X's subscription" almost always means "shell out to X's
+CLI", not "find X's private API". Check for an official CLI first.
+
 **A subscription is not an API key.** Per provider:
 - **Claude** — no subscription inference endpoint, so an account-connected
   Claude with no key is delegated to the local Claude CLI
@@ -172,10 +186,10 @@ account must never claim a key exists. `/api/providers/{name}/disconnect` takes
   API. An OAuth sign-in authenticates and then fails every request (including
   `GET /v1/models`) with 402 `personal-team-blocked:spending-limit`. So the
   OAuth token is NOT used as an API key: `XAIProvider._oauth_only` reports not
-  ready with an explanation instead. xAI needs an `XAI_API_KEY` from a
-  console.x.ai account with credits, and `capabilities.py` marks it
-  `api_key_only` so no sign-in button is offered. Subscription support is
-  deferred — see **docs/ROADMAP.md → "Grok subscription support"**.
+  ready with an explanation instead. Today xAI is `api_key_only` and needs an
+  `XAI_API_KEY` from console.x.ai. The subscription path is xAI's official
+  **Grok Build** CLI (`grok -p … --output-format json`) — not yet wired up; see
+  **docs/ROADMAP.md → "Grok subscription support"**.
 
 **A provider with no interactive sign-in is derived, never listed.**
 `ProviderCapabilities.api_key_only` (no oauth/browser/device/CLI login) drives
