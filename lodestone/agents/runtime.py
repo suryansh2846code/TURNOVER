@@ -9,6 +9,7 @@ from typing import Any
 from ..brain import get_brain
 from ..config import get_settings
 from ..models import Message, get_provider
+from ..models.entitlements import resolve_usable_model
 from .agent import Agent, AgentMemory
 from .presets import get_agent
 from .tools import build_tools, run_tool
@@ -204,7 +205,23 @@ def run_turn(agent_id: str, user_text: str, *,
     agent = get_agent(agent_id)
     settings = get_settings()
     p_name = (provider_name.strip() if provider_name else None) or agent.model_provider or settings.model_provider
-    m_name = (model_name.strip() if model_name else None) or agent.model_name or settings.model_name
+    m_name = (model_name.strip() if model_name else None) or agent.model_name
+    # Only fall back to settings.model_name if the active provider matches the global default provider
+    if not m_name and (p_name == settings.model_provider or not agent.model_provider):
+        m_name = settings.model_name
+    # A stored model id can outlive the provider's catalog (an agent binding or a
+    # saved preference made before a model was retired). Re-check it against what
+    # this account offers now, so we substitute instead of 400-ing mid-chat.
+    m_name, replaced_model = resolve_usable_model(p_name, m_name)
+    if (replaced_model and not model_name and replaced_model == agent.model_name):
+        # The agent's own saved binding pointed at a model that no longer works.
+        # Repair it so the picker stops showing a dead id, instead of silently
+        # substituting on every future turn.
+        try:
+            from .agent_models import set_agent_model
+            set_agent_model(agent_id, p_name, m_name)
+        except Exception:
+            pass
     provider = get_provider(p_name, m_name)
     identity = build_runtime_identity(agent, provider)
     # Fail fast with a helpful message if the chosen backend isn't usable.

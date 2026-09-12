@@ -121,8 +121,17 @@ def get_agent_model_endpoint(agent_id: str):
         raise HTTPException(404, f"unknown agent '{agent_id}'")
     prov, model = get_agent_model(agent_id)
     s = get_settings()
+
+    from ..models.entitlements import is_provider_connected
+    if prov is not None:
+        is_prov_conn, _, _ = is_provider_connected(prov)
+        if not is_prov_conn:
+            from ..agents.agent_models import clear_agent_model
+            clear_agent_model(agent_id)
+            prov, model = None, None
+
     is_override = prov is not None
-    effective_provider = prov or s.model_provider or "mock"
+    effective_provider = prov or s.model_provider or "cursor"
     if prov is not None:
         if model:
             effective_model = model
@@ -132,7 +141,6 @@ def get_agent_model_endpoint(agent_id: str):
             effective_model = cat.get("default_model") or ""
     else:
         effective_model = model or s.model_name or ""
-    from ..models.entitlements import is_provider_connected
     is_conn, _, _ = is_provider_connected(effective_provider)
     return {
         "agent_id": agent_id,
@@ -155,35 +163,39 @@ def set_agent_model_endpoint(agent_id: str, body: AgentModelIn):
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'")
 
-    from ..models.entitlements import is_provider_connected
+    from ..models.entitlements import evaluate_model_entitlement, is_provider_connected
     is_conn, user_plan, _ = is_provider_connected(body.provider)
     if not is_conn:
         raise HTTPException(
             status_code=400,
-            detail=f"Provider '{body.provider}' is not connected. Please connect it in Models & Accounts first."
+            detail=f"Provider '{body.provider}' is not connected (locked). Please connect it in Models & Accounts first."
         )
 
-    from ..models.discovery import get_discovered_models
-    discovered, _ = get_discovered_models(body.provider)
-
-    if body.model:
-        for m in discovered:
-            if m.get("id") == body.model and m.get("locked"):
-                req_plan = m.get("plan_required") or "a higher"
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Model '{body.model}' requires {req_plan} plan and is locked on your current plan."
-                )
-    else:
-        # User selected Auto: verify at least one model is unlocked for this provider
+    is_auto = not body.model or body.model.lower() == "auto"
+    if is_auto:
+        from ..models.discovery import get_discovered_models
+        discovered, _ = get_discovered_models(body.provider, force_refresh=True)
         unlocked = [m for m in discovered if not m.get("locked")]
         if not unlocked:
             raise HTTPException(
                 status_code=400,
                 detail=f"All models for provider '{body.provider}' are locked on your current plan."
             )
+    else:
+        locked, plan_req = evaluate_model_entitlement(
+            body.provider, body.model, is_connected=is_conn, user_plan=user_plan
+        )
+        if locked:
+            req_msg = f"Requires {plan_req}." if plan_req else "Locked on current plan."
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{body.model}' is not supported on your {user_plan or 'current'} plan. {req_msg}"
+            )
 
-    return set_agent_model(agent_id, body.provider, body.model)
+    from ..models.registry import clear_provider_cache
+    result = set_agent_model(agent_id, body.provider, body.model)
+    clear_provider_cache()  # invalidate cached provider instances so new model takes effect
+    return result
 
 
 @app.delete("/api/agents/{agent_id}/model")
@@ -355,8 +367,13 @@ def brain_digest(body: ChatIn | None = None):
     brain = get_brain()
     total = brain.stats().get("total", 0)
     s = get_settings()
-    provider = get_provider((body.provider if body else None) or s.model_provider,
-                            (body.model if body else None) or s.model_name)
+    p_name = (body.provider if body else None) or s.model_provider
+    m_name = (body.model if body else None)
+    # Only fall back to settings.model_name when provider matches — prevents
+    # leaking e.g. an Ollama model name into Gemini.
+    if not m_name and p_name == s.model_provider:
+        m_name = s.model_name
+    provider = get_provider(p_name, m_name)
     try:
         ready, _ = provider.is_ready()
     except Exception:
@@ -460,7 +477,11 @@ def agent_welcome(agent_id: str, body: ChatIn | None = None):
         raise HTTPException(404, f"unknown agent '{agent_id}'")
     s = get_settings()
     p_name = (body.provider if body else None) or agent.model_provider or s.model_provider
-    m_name = (body.model if body else None) or agent.model_name or s.model_name
+    m_name = (body.model if body else None) or agent.model_name
+    # Only fall back to settings.model_name when provider matches — prevents
+    # leaking e.g. an Ollama model name into Gemini.
+    if not m_name and (p_name == s.model_provider or not agent.model_provider):
+        m_name = s.model_name
     provider = get_provider(p_name, m_name)
     identity = build_runtime_identity(agent, provider)
     try:
@@ -898,139 +919,73 @@ def open_browser_endpoint(payload: dict):
         raise HTTPException(500, f"Failed to open browser: {exc}")
 
 
-@app.post("/api/providers/{name}/signin")
-def signin_provider_endpoint(name: str):
-    import webbrowser
-    from ..models.accounts import connect_local_account, detect_all_accounts
-    from ..models.capabilities import get_capabilities
-    from ..models.registry import clear_provider_cache
-
-    pid = name.lower()
-    if pid in ("gemini", "google"):
-        return google_reconnect()
-
-    caps = get_capabilities(pid)
-    url = caps.official_auth_url if caps else ""
-
-    if pid in ("claude", "anthropic"):
-        from ..models.claude_auth import start_claude_login_flow, find_claude_cli
-        ok, auth_url, msg = start_claude_login_flow()
-        has_cli = bool(find_claude_cli())
-        browser_opened = False
-        if has_cli and ok:
-            browser_opened = True
-        elif auth_url:
-            try:
-                webbrowser.open(auth_url)
-                browser_opened = True
-            except Exception:
-                pass
-        return {
-            "started": True,
-            "provider_id": "claude",
-            "auth_url": auth_url,
-            "brand_name": "Claude",
-            "requires_code": True,
-            "browser_opened": browser_opened,
-            "detail": "Opened Claude authorization in browser — sign in to your account.",
-        }
-
-    elif pid == "cursor":
-        auth_url = "https://cursor.com/login"
-        browser_opened = False
-        try:
-            webbrowser.open(auth_url)
-            browser_opened = True
-        except Exception:
-            pass
-        return {
-            "started": True,
-            "provider_id": "cursor",
-            "auth_url": auth_url,
-            "brand_name": "Cursor",
-            "browser_opened": browser_opened,
-            "detail": "Opened Cursor in browser — sign in to your Cursor account.",
-        }
-
-    elif pid == "openai":
-        from ..models.chatgpt_auth import start_chatgpt_oauth_flow
-        ok, auth_url, msg = start_chatgpt_oauth_flow()
-        browser_opened = False
-        if ok and auth_url:
-            try:
-                webbrowser.open(auth_url)
-                browser_opened = True
-            except Exception:
-                pass
-        return {
-            "started": ok,
-            "provider_id": "openai",
-            "auth_url": auth_url,
-            "brand_name": "ChatGPT",
-            "browser_opened": browser_opened,
-            "detail": "Opened ChatGPT sign-in in browser — choose your account to continue to TURNOVER." if browser_opened else msg,
-        }
-
-    elif pid in ("xai", "grok"):
-        from ..models.xai_auth import start_xai_oauth_flow
-        ok, auth_url, msg = start_xai_oauth_flow()
-        browser_opened = False
-        if ok and auth_url:
-            try:
-                webbrowser.open(auth_url)
-                browser_opened = True
-            except Exception:
-                pass
-        return {
-            "started": ok,
-            "provider_id": "xai",
-            "auth_url": auth_url,
-            "brand_name": "Grok",
-            "browser_opened": browser_opened,
-            "detail": "Opened Grok sign-in in browser — log in to your account." if browser_opened else msg,
-        }
-
-    elif url:
-        browser_opened = False
-        try:
-            webbrowser.open(url)
-            browser_opened = True
-        except Exception:
-            pass
-        return {"started": True, "auth_url": url, "browser_opened": browser_opened, "detail": f"Opened {caps.display_name if caps else pid} in browser."}
-
-    return {"started": True, "detail": "Please sign in to your provider."}
+@app.post("/api/providers/{name}/auth/start")
+def auth_start_endpoint(name: str):
+    """Begin sign-in for a provider — or explain why it has none."""
+    from ..models.auth_flows import get_flow
+    return get_flow(name).start().to_dict()
 
 
-@app.get("/api/providers/openai/oauth-status")
-def openai_oauth_status_endpoint():
-    from ..models.chatgpt_auth import get_oauth_flow_status
-    return get_oauth_flow_status()
+@app.get("/api/providers/{name}/auth/status")
+def auth_status_endpoint(name: str):
+    """Poll an in-flight sign-in: idle | waiting | success | error."""
+    from ..models.auth_flows import get_flow
+    return get_flow(name).status().to_dict()
 
 
-@app.get("/api/providers/xai/oauth-status")
-def xai_oauth_status_endpoint():
-    from ..models.xai_auth import get_xai_oauth_flow_status
-    return get_xai_oauth_flow_status()
+@app.post("/api/providers/{name}/auth/code")
+def auth_submit_code_endpoint(name: str, payload: dict):
+    """Hand an authorization code back to a flow that asked for one."""
+    from ..models.auth_flows import get_flow
 
-
-@app.get("/api/providers/claude/oauth-status")
-def claude_oauth_status_endpoint():
-    from ..models.claude_auth import get_claude_auth_status
-    return get_claude_auth_status()
-
-
-@app.post("/api/providers/claude/submit-code")
-def claude_submit_code_endpoint(payload: dict):
-    from ..models.claude_auth import submit_claude_auth_code
-    code = payload.get("code", "").strip()
+    code = (payload or {}).get("code", "").strip()
     if not code:
         raise HTTPException(400, "code is required")
-    ok, msg = submit_claude_auth_code(code)
+    flow = get_flow(name)
+    submit = getattr(flow, "submit_code", None)
+    if submit is None:
+        raise HTTPException(400, f"'{name}' sign-in does not use an authorization code")
+    ok, msg = submit(code)
     if not ok:
         raise HTTPException(400, msg)
     return {"ok": True, "message": msg}
 
+
+@app.post("/api/providers/{name}/auth/cancel")
+def auth_cancel_endpoint(name: str):
+    from ..models.auth_flows import get_flow
+
+    flow = get_flow(name)
+    cancel = getattr(flow, "cancel", None)
+    if cancel is not None:
+        cancel()
+    return {"cancelled": True, "provider_id": name}
+
+
+# ── back-compat aliases for the pre-unification routes ────────────────────
+@app.post("/api/providers/{name}/signin")
+def signin_provider_endpoint(name: str):
+    return auth_start_endpoint(name)
+
+
+@app.get("/api/providers/openai/oauth-status")
+def openai_oauth_status_endpoint():
+    return auth_status_endpoint("openai")
+
+
+@app.get("/api/providers/xai/oauth-status")
+def xai_oauth_status_endpoint():
+    return auth_status_endpoint("xai")
+
+
+@app.get("/api/providers/claude/oauth-status")
+def claude_oauth_status_endpoint():
+    return auth_status_endpoint("claude")
+
+
+@app.post("/api/providers/claude/submit-code")
+def claude_submit_code_endpoint(payload: dict):
+    return auth_submit_code_endpoint("claude", payload)
 
 
 @app.get("/api/providers/{name}/models")
@@ -1044,7 +999,7 @@ def get_provider_models_endpoint(name: str, refresh: bool = False):
 def refresh_provider_endpoint(name: str):
     from datetime import datetime, timezone
     from ..models.capabilities import get_capabilities
-    from ..models.connections import ConnectionStatus, get_connection, save_connection
+    from ..models.connections import API_KEY, ConnectionStatus, get_connection, save_connection
     from ..models.discovery import get_discovered_models
     from ..models.registry import _REGISTRY, clear_provider_cache
 
@@ -1107,50 +1062,63 @@ def refresh_provider_endpoint(name: str):
 
 
 @app.post("/api/providers/{name}/disconnect")
-def disconnect_provider_endpoint(name: str):
+def disconnect_provider_endpoint(name: str, scope: str = "all"):
+    """Disconnect one credential, or both.
+
+    `scope` is `account`, `api_key`, or `all`. An account and an API key are
+    independent: removing the key must leave the signed-in account alone, and
+    signing out must leave a saved key alone.
+    """
     from datetime import datetime, timezone
-    from ..models.connections import ConnectionStatus, get_connection, save_connection
+    from ..models.connections import (ACCOUNT, API_KEY, ConnectionStatus,
+                                      get_connection, save_connection)
     from ..models.registry import _REGISTRY, clear_provider_cache
 
     pid = name.lower()
+    if scope not in ("all", ACCOUNT, API_KEY):
+        raise HTTPException(400, f"scope must be 'account', 'api_key' or 'all' (got '{scope}')")
     cls = _REGISTRY.get(pid)
     if cls is None:
         raise HTTPException(404, f"unknown provider '{name}'")
-    key_env = getattr(cls, "key_env", None)
-    if key_env:
-        get_settings().set_secret(key_env, None)
-    clear_provider_cache()
 
+    drop_key = scope in ("all", API_KEY)
+    drop_account = scope in ("all", ACCOUNT)
     conn = get_connection(pid)
-    conn.connection_status = ConnectionStatus.DISCONNECTED
-    conn.auth_method = "none"
-    conn.email = ""
-    conn.account_display_name = ""
-    conn.account_id = ""
-    conn.status_message = "Disconnected by user"
-    conn.last_verified_at = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
+
+    if drop_key:
+        key_env = getattr(cls, "key_env", None)
+        if key_env:
+            get_settings().set_secret(key_env, None)
+        if pid in ("gemini", "google"):
+            get_settings().set_secret("GEMINI_API_KEY", None)
+            get_settings().set_secret("GOOGLE_API_KEY", None)
+        conn.set_credential(API_KEY, ConnectionStatus.DISCONNECTED)
+
+    if drop_account:
+        # Forget any stored OAuth credential and stop an in-flight sign-in.
+        if pid in ("openai", "chatgpt"):
+            from ..models.chatgpt_auth import disconnect as forget_chatgpt
+            forget_chatgpt()
+        elif pid in ("xai", "grok"):
+            from ..models.xai_auth import disconnect as forget_xai
+            forget_xai()
+        conn.set_credential(ACCOUNT, ConnectionStatus.DISCONNECTED)
+        conn.email = ""
+        conn.account_display_name = ""
+        conn.account_id = ""
+        conn.auth_method = "api_key" if conn.api_key_connected else "none"
+
+    conn.last_verified_at = now
+    conn.status_message = {
+        "all": "Disconnected by user",
+        ACCOUNT: "Account signed out",
+        API_KEY: "API key removed",
+    }[scope]
     save_connection(conn)
+    clear_provider_cache(pid)
 
-    # Clean up any local tokens or active auth sessions
-    if pid in ("openai", "chatgpt"):
-        from ..models.chatgpt_auth import _token_storage_path, _stop_server_async
-        p_tok = _token_storage_path()
-        if p_tok.exists():
-            try:
-                p_tok.unlink()
-            except Exception:
-                pass
-        _stop_server_async()
-    elif pid in ("gemini", "google"):
-        from ..connectors.google_auth import _token_path
-        gtok = _token_path()
-        if gtok.exists():
-            try:
-                gtok.unlink()
-            except Exception:
-                pass
-
-    return {"disconnected": True, "connection": conn.to_dict()}
+    return {"disconnected": True, "scope": scope, "connection": conn.to_dict()}
 
 
 @app.post("/api/providers/{name}/key")
@@ -1158,7 +1126,7 @@ def save_provider_key(name: str, body: SecretIn):
     """Save (or clear) an LLM provider's API key from the UI — stored locally in
     ~/Library/Lodestone/secrets.json and picked up by the provider on next use."""
     from datetime import datetime, timezone
-    from ..models.connections import ConnectionStatus, get_connection, save_connection
+    from ..models.connections import API_KEY, ConnectionStatus, get_connection, save_connection
     from ..models.discovery import get_discovered_models
     from ..models.registry import _REGISTRY, clear_provider_cache
 
@@ -1171,7 +1139,6 @@ def save_provider_key(name: str, body: SecretIn):
 
     val = body.value.strip() if body.value else ""
     get_settings().set_secret(key_env, val or None)
-    clear_provider_cache()
 
     conn = get_connection(name)
     now = datetime.now(timezone.utc).isoformat()
@@ -1179,10 +1146,14 @@ def save_provider_key(name: str, body: SecretIn):
     conn.credential_reference = key_env
 
     if not val:
-        conn.connection_status = ConnectionStatus.DISCONNECTED
+        # Removing the API key must NOT sign the user out of their account.
+        conn.set_credential(API_KEY, ConnectionStatus.DISCONNECTED)
         conn.status_message = "API key removed"
         save_connection(conn)
-        return {"saved": True, "ready": False, "reason": f"set {key_env}", "connection": conn.to_dict()}
+        clear_provider_cache(name)
+        return {"saved": True, "ready": conn.account_connected,
+                "reason": "" if conn.account_connected else f"set {key_env}",
+                "connection": conn.to_dict()}
 
     try:
         inst = cls(api_key=val)
@@ -1191,7 +1162,7 @@ def save_provider_key(name: str, body: SecretIn):
         ready, reason = False, str(exc)[:120]
 
     if ready:
-        conn.connection_status = ConnectionStatus.API_KEY_CONNECTED
+        conn.set_credential(API_KEY, ConnectionStatus.API_KEY_CONNECTED)
         conn.connected_at = now
         conn.status_message = "Connected via API key"
         # Discover models & identity with new key
@@ -1206,10 +1177,11 @@ def save_provider_key(name: str, body: SecretIn):
         except Exception:
             pass
     else:
-        conn.connection_status = ConnectionStatus.ERROR
+        conn.set_credential(API_KEY, ConnectionStatus.ERROR)
         conn.status_message = reason
 
     save_connection(conn)
+    clear_provider_cache(name)
     return {"saved": True, "ready": ready, "reason": reason, "connection": conn.to_dict()}
 
 
@@ -1247,21 +1219,8 @@ def sync(name: str, body: SyncIn):
 def google_status():
     from ..connectors.google_auth import (_token_path, connected_email,
                                            granted_services)
-    from ..models.connections import ConnectionStatus, get_connection, save_connection
     connected = _token_path().exists()
     account = connected_email(fetch=connected) if connected else None
-    if connected and account:
-        conn = get_connection("gemini")
-        if conn.connection_status != ConnectionStatus.ACCOUNT_CONNECTED or conn.email != account:
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc).isoformat()
-            conn.auth_method = "account"
-            conn.email = account
-            conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
-            conn.connected_at = conn.connected_at or now
-            conn.last_verified_at = now
-            conn.status_message = "Connected Google account"
-            save_connection(conn)
     return {"client_configured": get_settings().google_client_secrets is not None,
             "connected": connected,
             "account": account,
@@ -1270,13 +1229,7 @@ def google_status():
 @app.post("/api/google/disconnect")
 def google_disconnect():
     from ..connectors.google_auth import disconnect
-    from ..models.connections import ConnectionStatus, get_connection, save_connection
     disconnect()
-    conn = get_connection("gemini")
-    if conn.auth_method == "account":
-        conn.connection_status = ConnectionStatus.DISCONNECTED
-        conn.status_message = "Google account disconnected"
-        save_connection(conn)
     return {"disconnected": True}
 
 # ── Google reconnect (re-consent with current scopes, from the UI) ────────
@@ -1284,25 +1237,14 @@ def google_disconnect():
 def google_reconnect():
     import threading
     from ..connectors.google_auth import _token_path, get_credentials, connected_email
-    from ..models.connections import ConnectionStatus, get_connection, save_connection
     tok = _token_path()
     if tok.exists():
         tok.unlink()
     
     def _run():
         try:
-            creds = get_credentials(interactive=True)
-            email = connected_email(fetch=True)
-            conn = get_connection("gemini")
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc).isoformat()
-            conn.auth_method = "account"
-            conn.email = email
-            conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
-            conn.connected_at = conn.connected_at or now
-            conn.last_verified_at = now
-            conn.status_message = "Connected Google account"
-            save_connection(conn)
+            get_credentials(interactive=True)
+            connected_email(fetch=True)
         except Exception:
             pass
 
