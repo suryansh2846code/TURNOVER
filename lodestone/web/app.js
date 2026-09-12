@@ -67,12 +67,6 @@ function agentDesc(a) {
   return "Helps you with " + (a.role || "your work") + ".";
 }
 
-// which side panel / view a sidebar nav item opens
-function switchTab(tab) {
-  document.querySelectorAll(".ctx-tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
-  document.querySelectorAll(".ctx-pane").forEach((p) => p.hidden = p.dataset.pane !== tab);
-}
-
 // tiny, safe markdown renderer (escapes first, then applies a subset)
 function mdInline(s) {
   return s
@@ -138,16 +132,16 @@ async function loadAgents() {
 }
 
 const MODEL_HINTS = {
-  claude: "e.g. claude-3-7-sonnet-latest, claude-3-5-sonnet-latest, claude-3-5-haiku-latest",
-  anthropic: "e.g. claude-3-7-sonnet-latest, claude-3-5-sonnet-latest, claude-3-5-haiku-latest",
-  cursor: "e.g. cursor-fast, cursor-small, claude-3.7-sonnet, gpt-5.6-terra",
-  gemini: "e.g. gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash",
-  xai: "e.g. grok-3, grok-3-mini, grok-2-latest",
+  claude: "e.g. claude-opus-5, claude-sonnet-5, claude-haiku-4-5-20251001",
+  anthropic: "e.g. claude-opus-5, claude-sonnet-5, claude-haiku-4-5-20251001",
+  cursor: "e.g. cursor-fast, cursor-small, claude-sonnet-5, gpt-5.6-terra",
+  gemini: "e.g. gemini-3.6-flash, gemini-3.1-pro-preview, gemini-2.5-flash",
+  xai: "e.g. grok-4.6, grok-4.5, grok-4.3",
   openai: "e.g. gpt-5.6-terra, gpt-5.6-luna, gpt-5.6-sol, gpt-6-astra",
   deepseek: "e.g. deepseek-chat (V3), deepseek-reasoner (R1)",
   ollama: "e.g. llama3.3:70b, llama3.2, qwen2.5-coder:7b, deepseek-r1:8b",
   "claude-code": "uses your local Claude CLI session",
-  openrouter: "e.g. anthropic/claude-3.7-sonnet, openai/gpt-5.6-terra",
+  openrouter: "e.g. anthropic/claude-sonnet-5, openai/gpt-5.6-terra",
   subscription: "local session gateway proxy",
   mock: "offline test model",
 };
@@ -175,15 +169,15 @@ function updatePrivacyBadge() {
 }
 
 const FALLBACK_CATALOG = [
-  { id: "claude", label: "Claude (Anthropic)", key_env: "ANTHROPIC_API_KEY", key_url: "https://console.anthropic.com/settings/keys", destination: "Sent to Anthropic's API.", locality: "cloud", default_model: "claude-opus-5", models: [{ id: "claude-opus-5", name: "Claude Opus 5", desc: "Frontier intelligence & highest-capacity reasoning" }, { id: "claude-sonnet-5", name: "Claude Sonnet 5", desc: "Next-gen balanced speed, coding & agentic reasoning" }, { id: "claude-fable-5-1", name: "Claude Fable 5.1", desc: "Advanced agentic model (Requires Team / Enterprise v2.1.255+)", locked: true, plan_required: "Team / Enterprise (v2.1.255+)" }, { id: "claude-3-7-sonnet-latest", name: "Claude 3.7 Sonnet", desc: "Hybrid reasoning & coding flagship" }, { id: "claude-3-5-sonnet-latest", name: "Claude 3.5 Sonnet", desc: "High-intelligence workhorse" }, { id: "claude-3-5-haiku-latest", name: "Claude 3.5 Haiku", desc: "Fast & responsive everyday model" }] },
-  { id: "cursor", label: "Cursor", key_env: "CURSOR_API_KEY", key_url: "https://cursor.com", destination: "Connects to your local Cursor bridge or Cursor API.", locality: "local", default_model: "cursor-fast", models: [{ id: "cursor-fast", name: "Cursor Fast", desc: "Low latency reasoning & agent flow (Free tier)" }, { id: "cursor-small", name: "Cursor Small", desc: "Fast local coding & agent flow (Free tier)" }, { id: "claude-opus-5", name: "Cursor Claude Opus 5", desc: "Via Cursor session bridge", locked: true, plan_required: "Pro" }, { id: "claude-3.7-sonnet", name: "Cursor Claude 3.7 Sonnet", desc: "Via Cursor bridge", locked: true, plan_required: "Pro" }, { id: "gpt-5.6-terra", name: "Cursor GPT-5.6-Terra", desc: "Via Cursor bridge", locked: true, plan_required: "Pro" }] },
-  { id: "gemini", label: "Google Gemini", key_env: "GEMINI_API_KEY", key_url: "https://aistudio.google.com/apikey", destination: "Sent to Google Gemini API.", locality: "cloud", default_model: "gemini-2.5-flash", models: [{ id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", desc: "Deep reasoning powerhouse", locked: true, plan_required: "API Key / AI Studio" }, { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", desc: "Next-gen speed & reasoning" }, { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", desc: "Ultra-fast generation & tools" }] },
-  { id: "xai", label: "xAI (Grok)", key_env: "XAI_API_KEY", key_url: "https://console.x.ai", destination: "Sent to xAI Grok API.", locality: "cloud", default_model: "grok-3", models: [{ id: "grok-3", name: "Grok 3", desc: "Flagship reasoning & deep intelligence", locked: true, plan_required: "SuperGrok / Tier 2" }, { id: "grok-3-mini", name: "Grok 3 Mini", desc: "High-speed reasoning & code generation" }, { id: "grok-2-latest", name: "Grok 2", desc: "Advanced reasoning & tool calling" }, { id: "grok-2-vision-latest", name: "Grok 2 Vision", desc: "Multimodal reasoning & image input" }, { id: "grok-2-1212", name: "Grok 2 (1212)", desc: "Stable production snapshot" }] },
-  { id: "openai", label: "OpenAI", key_env: "OPENAI_API_KEY", key_url: "https://platform.openai.com/api-keys", destination: "Sent to OpenAI's API.", locality: "cloud", default_model: "gpt-5.6-terra", models: [{ id: "gpt-5.6-terra", name: "GPT-5.6-Terra", desc: "Balanced agentic coding model for everyday work" }, { id: "gpt-5.6-luna", name: "GPT-5.6-Luna", desc: "Fast and affordable agentic coding model" }, { id: "gpt-5.6-sol", name: "GPT-5.6-Sol", desc: "Flagship agentic coding model for complex tasks", locked: true, plan_required: "Pro" }, { id: "gpt-6-astra", name: "GPT-6-Astra", desc: "Our most capable model for complex, demanding work", locked: true, plan_required: "Pro" }, { id: "gpt-reserve", name: "GPT-Reserve", desc: "Fast backup agentic coding model" }, { id: "o3-mini", name: "o3-mini", desc: "Fast STEM & code reasoning", locked: true, plan_required: "Plus" }, { id: "gpt-5.5", name: "GPT-5.5", desc: "Proven previous-generation coding model" }] },
-  { id: "deepseek", label: "DeepSeek", key_env: "DEEPSEEK_API_KEY", key_url: "https://platform.deepseek.com/api_keys", destination: "Sent to DeepSeek's API.", locality: "cloud", default_model: "deepseek-chat", models: [{ id: "deepseek-chat", name: "DeepSeek V3", desc: "Elite coding & general intelligence" }, { id: "deepseek-reasoner", name: "DeepSeek R1", desc: "Reasoning model with chain of thought" }] },
-  { id: "ollama", label: "Ollama (Local)", key_env: "", key_url: "https://ollama.com", destination: "Runs on your Mac — your context stays on-device.", locality: "local", default_model: "llama3.2", models: [{ id: "llama3.2", name: "Llama 3.2", desc: "Compact offline local model (Installed)" }, { id: "qwen2.5:3b", name: "Qwen 2.5 (3B)", desc: "Compact multilingual & coding model (Installed)" }, { id: "llama3.3:70b", name: "Llama 3.3 (70B)", desc: "Latest flagship open weights model", locked: true, plan_required: "Pull required" }, { id: "qwen2.5-coder:7b", name: "Qwen 2.5 Coder (7B)", desc: "Strong multilingual local model", locked: true, plan_required: "Pull required" }, { id: "deepseek-r1:8b", name: "DeepSeek R1 (8B)", desc: "Local reasoning model", locked: true, plan_required: "Pull required" }] },
-  { id: "openrouter", label: "OpenRouter", key_env: "OPENROUTER_API_KEY", key_url: "https://openrouter.ai/keys", destination: "Sent to OpenRouter (and the chosen model's host).", locality: "cloud", default_model: "anthropic/claude-3.7-sonnet", models: [{ id: "anthropic/claude-3.7-sonnet", name: "Claude 3.7 Sonnet", desc: "Via OpenRouter" }, { id: "openai/gpt-5.6-terra", name: "GPT-5.6-Terra", desc: "Via OpenRouter" }, { id: "deepseek/deepseek-r1", name: "DeepSeek R1", desc: "Via OpenRouter" }, { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", desc: "Via OpenRouter" }] },
-  { id: "claude-code", label: "Claude Code CLI", key_env: "", key_url: "https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview", destination: "Sent to Anthropic through the Claude CLI.", locality: "cloud", default_model: "claude-code", models: [{ id: "claude-code", name: "Claude Code Session", desc: "Local Anthropic CLI bridge (uses active CLI model)" }, { id: "claude-opus-5", name: "Claude Opus 5", desc: "Frontier intelligence & deep reasoning (CLI session)" }, { id: "claude-sonnet-5", name: "Claude Sonnet 5", desc: "Next-gen agentic coding (CLI session)" }, { id: "claude-fable-5-1", name: "Claude Fable 5.1", desc: "Disabled in current CLI — requires v2.1.255+", locked: true, plan_required: "Team / Enterprise (v2.1.255+)" }, { id: "claude-3-7-sonnet", name: "Claude 3.7 Sonnet", desc: "Hybrid reasoning & coding flagship" }, { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", desc: "High-intelligence workhorse" }] },
+  {"id": "claude", "label": "Claude (Anthropic)", "connected": false, "key_env": "ANTHROPIC_API_KEY", "key_url": "https://console.anthropic.com/settings/keys", "destination": "Sent to Anthropic's API.", "locality": "cloud", "default_model": "claude-sonnet-5", "models": [{"id": "claude-opus-5", "name": "Claude Opus 5", "desc": "Frontier intelligence & highest-capacity reasoning"}, {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "desc": "Balanced speed, coding & agentic reasoning"}, {"id": "claude-fable-5", "name": "Claude Fable 5", "desc": "Most capable for the hardest, longest-running work"}, {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5", "desc": "Fast & responsive everyday model"}]},
+  {"id": "cursor", "label": "Cursor", "connected": false, "key_env": "CURSOR_API_KEY", "key_url": "https://cursor.com", "destination": "Connects to your local Cursor session bridge or API.", "locality": "local", "default_model": "cursor-fast", "models": [{"id": "cursor-fast", "name": "Cursor Fast", "desc": "Low latency reasoning & agent flow (Free tier)"}, {"id": "cursor-small", "name": "Cursor Small", "desc": "Fast local coding & agent flow (Free tier)"}, {"id": "claude-opus-5", "name": "Cursor Claude Opus 5", "desc": "Via Cursor session bridge", "locked": true, "plan_required": "Pro"}, {"id": "claude-sonnet-5", "name": "Cursor Claude Sonnet 5", "desc": "Via Cursor session bridge", "locked": true, "plan_required": "Pro"}, {"id": "gpt-5.6-terra", "name": "Cursor GPT-5.6-Terra", "desc": "Via Cursor session bridge", "locked": true, "plan_required": "Pro"}]},
+  {"id": "gemini", "label": "Google Gemini", "connected": false, "key_env": "GEMINI_API_KEY", "key_url": "https://aistudio.google.com/apikey", "destination": "Sent to Google Gemini API.", "locality": "cloud", "default_model": "gemini-3.6-flash", "models": [{"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash", "desc": "Latest fast reasoning & multimodal model"}, {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash", "desc": "Fast reasoning & multimodal"}, {"id": "gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro Preview", "desc": "Deep reasoning across complex domains"}, {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "desc": "Previous-generation deep reasoning"}, {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "desc": "Previous-generation speed & multimodal"}]},
+  {"id": "xai", "label": "xAI (Grok)", "connected": false, "key_env": "XAI_API_KEY", "key_url": "https://console.x.ai", "destination": "Sent to xAI Grok API.", "locality": "cloud", "default_model": "grok-4.6", "models": [{"id": "grok-4.6", "name": "Grok 4.6", "desc": "Latest flagship reasoning model"}, {"id": "grok-4.5", "name": "Grok 4.5", "desc": "Strong reasoning & tool calling"}, {"id": "grok-4.3", "name": "Grok 4.3", "desc": "Fast general-purpose reasoning"}]},
+  {"id": "openai", "label": "OpenAI", "connected": false, "key_env": "OPENAI_API_KEY", "key_url": "https://platform.openai.com/api-keys", "destination": "Sent to OpenAI's API.", "locality": "cloud", "default_model": "gpt-5.6-terra", "models": [{"id": "gpt-5.6-terra", "name": "GPT-5.6-Terra", "desc": "Balanced agentic coding model for everyday work"}, {"id": "gpt-5.6-luna", "name": "GPT-5.6-Luna", "desc": "Fast and affordable agentic coding model"}, {"id": "gpt-5.6-sol", "name": "GPT-5.6-Sol", "desc": "Flagship agentic coding model for complex tasks", "locked": true, "plan_required": "Pro"}, {"id": "gpt-6-astra", "name": "GPT-6-Astra", "desc": "Our most capable model for complex, demanding work", "locked": true, "plan_required": "Pro"}, {"id": "gpt-reserve", "name": "GPT-Reserve", "desc": "Fast and affordable backup agentic coding model"}, {"id": "o3-mini", "name": "o3-mini", "desc": "Fast STEM & code reasoning", "locked": true, "plan_required": "Plus"}, {"id": "gpt-5.5", "name": "GPT-5.5", "desc": "Proven previous-generation coding model"}, {"id": "gpt-5.4", "name": "GPT-5.4", "desc": "Earlier-generation coding model"}, {"id": "gpt-5.4-mini", "name": "GPT-5.4-Mini", "desc": "Compact, fast earlier-generation model"}]},
+  {"id": "deepseek", "label": "DeepSeek", "connected": false, "key_env": "DEEPSEEK_API_KEY", "key_url": "https://platform.deepseek.com/api_keys", "destination": "Sent to DeepSeek's API.", "locality": "cloud", "default_model": "deepseek-chat", "models": [{"id": "deepseek-chat", "name": "DeepSeek Chat", "desc": "Current chat model (alias \u2014 always the latest)"}, {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner", "desc": "Current reasoning model (alias \u2014 always the latest)"}]},
+  {"id": "ollama", "label": "Ollama (Local)", "connected": false, "key_env": "", "key_url": "https://ollama.com", "destination": "Runs on your Mac \u2014 your context stays on-device.", "locality": "local", "default_model": "llama3.2", "models": [{"id": "llama3.2", "name": "Llama 3.2", "desc": "Compact offline local model (Installed)"}, {"id": "qwen2.5:3b", "name": "Qwen 2.5 (3B)", "desc": "Compact multilingual & coding model (Installed)"}, {"id": "llama3.3:70b", "name": "Llama 3.3 (70B)", "desc": "Latest flagship open weights model", "locked": true, "plan_required": "Pull required"}, {"id": "qwen2.5-coder:7b", "name": "Qwen 2.5 Coder (7B)", "desc": "Strong multilingual & coding local model", "locked": true, "plan_required": "Pull required"}, {"id": "deepseek-r1:8b", "name": "DeepSeek R1 (8B)", "desc": "Local reasoning model", "locked": true, "plan_required": "Pull required"}]},
+  {"id": "openrouter", "label": "OpenRouter", "connected": false, "key_env": "OPENROUTER_API_KEY", "key_url": "https://openrouter.ai/keys", "destination": "Sent to OpenRouter (and the chosen model's host).", "locality": "cloud", "default_model": "anthropic/claude-sonnet-5", "models": [{"id": "anthropic/claude-sonnet-5", "name": "Claude Sonnet 5", "desc": "Via OpenRouter"}, {"id": "anthropic/claude-opus-5", "name": "Claude Opus 5", "desc": "Via OpenRouter"}, {"id": "openai/gpt-5.6-terra", "name": "GPT-5.6-Terra", "desc": "Via OpenRouter"}, {"id": "deepseek/deepseek-r1", "name": "DeepSeek R1", "desc": "Via OpenRouter"}, {"id": "meta-llama/llama-3.3-70b-instruct", "name": "Llama 3.3 70B", "desc": "Via OpenRouter"}]},
+  {"id": "claude-code", "label": "Claude Code CLI", "connected": false, "key_env": "", "key_url": "https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview", "destination": "Sent to Anthropic through the Claude CLI.", "locality": "cloud", "default_model": "claude-code", "models": [{"id": "claude-code", "name": "Claude Code Session", "desc": "Let the Claude CLI pick its active model"}, {"id": "claude-opus-5", "name": "Claude Opus 5", "desc": "Frontier intelligence & deep reasoning (CLI session)"}, {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "desc": "Balanced agentic coding (CLI session)"}, {"id": "claude-fable-5", "name": "Claude Fable 5", "desc": "Most capable for the hardest, longest-running work"}, {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5", "desc": "Fast & responsive everyday model"}]}
 ];
 
 let PROVIDERS = [];
@@ -215,7 +209,7 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
       <button type="button" class="ts-hud-close" title="Dismiss">✕</button>
     </div>
     <div class="ts-hud-title">Connect ${esc(brandName)} in your browser</div>
-    <div class="ts-hud-body">Sign in and approve access there. TURNOVER will update when the connection is ready.</div>
+    <div class="ts-hud-body">Sign in and approve access there. Lodestone will update when the connection is ready.</div>
     ${authUrl ? `<button type="button" class="ts-hud-btn"><span>↗</span> Open browser sign in</button>` : ""}
     ${requiresCode ? `
       <div class="ts-hud-code-form" style="margin-top:8px;display:flex;gap:6px">
@@ -249,7 +243,7 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
       codeSubmit.disabled = true;
       codeSubmit.innerText = "Connecting…";
       try {
-        const res = await api(`/api/providers/${providerId}/submit-code`, {
+        const res = await api(`/api/providers/${providerId}/auth/code`, {
           method: "POST",
           body: { code }
         });
@@ -293,20 +287,9 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
       return;
     }
     try {
-      if (providerId === "gemini") {
-        const st = await api("/api/google/status");
-        if (st.connected && st.account) {
-          clearInterval(pollTimer);
-          pollTimer = null;
-          await api("/api/providers/gemini/refresh", { method: "POST" });
-          dismiss();
-          toast(`✓ Google account connected (${st.account})!`);
-          if (onConnected) onConnected();
-        }
-      } else {
-        // Check dedicated oauth-status if applicable
-        if (["openai", "xai", "claude"].includes(providerId)) {
-          const st = await api(`/api/providers/${providerId}/oauth-status`).catch(() => ({}));
+      // Check dedicated oauth-status if applicable
+      if (["openai", "xai", "claude"].includes(providerId)) {
+          const st = await api(`/api/providers/${providerId}/auth/status`).catch(() => ({}));
           if (st.status === "success") {
             clearInterval(pollTimer);
             pollTimer = null;
@@ -326,7 +309,6 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
           toast(`✓ Connected ${brandName}${email ? ` (${email})` : ""}!`);
           if (onConnected) onConnected();
         }
-      }
     } catch (_) {}
   }, 1200);
 
@@ -371,19 +353,31 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
          || { id: providerId, label: providerId, ready: false };
 
   const conn = p.connection || {};
-  const isDisconnected = (conn.connection_status === "DISCONNECTED");
-  const isReady = Boolean(p.ready && !isDisconnected);
   const caps = p.capabilities || {};
   const detected = p.detected_account || {};
+  const isDisconnected = (conn.connection_status === "DISCONNECTED");
+  const isReady = Boolean(p.ready && !isDisconnected);
+
+  // An account and an API key are independent credentials — badge and
+  // disconnect each from its own state, never from provider-level readiness.
+  const creds = p.credentials || {};
+  const apiKeyCred = creds.api_key || {};
+  const hasApiKey = Boolean(apiKeyCred.connected);
+  // Some providers have no interactive sign-in at all (ProviderCapabilities
+  // .api_key_only) — never offer them an account card or a sign-in button.
+  const apiKeyOnly = Boolean(caps.api_key_only);
   const accountEmail = (!isDisconnected && (conn.email || (conn.connection_status === "ACCOUNT_CONNECTED" && detected.email) || (p.account_meta && p.account_meta.email))) || "";
-  const hasActiveAccount = Boolean(!isDisconnected && isReady && (accountEmail || conn.auth_method === "account" || conn.connection_status === "ACCOUNT_CONNECTED"));
-  const isFoundOnComputer = Boolean(!hasActiveAccount && detected.found_on_computer && detected.email);
+  const hasActiveAccount = Boolean(!apiKeyOnly && !isDisconnected && isReady && (accountEmail || conn.auth_method === "account" || conn.connection_status === "ACCOUNT_CONNECTED"));
+  const isFoundOnComputer = Boolean(!apiKeyOnly && !hasActiveAccount && detected.found_on_computer && detected.email);
   const keyEnv = p.key_env || (caps.key_env || (providerId === "openai" ? "OPENAI_API_KEY" : (providerId === "anthropic" || providerId === "claude" ? "ANTHROPIC_API_KEY" : (providerId === "gemini" ? "GEMINI_API_KEY" : (providerId === "xai" ? "XAI_API_KEY" : (providerId === "deepseek" ? "DEEPSEEK_API_KEY" : (providerId === "openrouter" ? "OPENROUTER_API_KEY" : (providerId === "cursor" ? "CURSOR_API_KEY" : ""))))))));
   const keyUrl = p.key_url || (caps.official_auth_url || "");
   const models = p.models || [];
 
-  let brandName = "Account";
-  let signinBtnName = "Sign in";
+  // Branded copy for the providers that have an icon; everything else falls
+  // back to its own label rather than a generic "Account".
+  const providerLabel = p.label || caps.display_name || providerId;
+  let brandName = providerLabel;
+  let signinBtnName = `Sign in with ${providerLabel}`;
   let brandIcon = "";
   if (providerId === "openai") {
     brandName = "ChatGPT";
@@ -401,48 +395,32 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
     brandName = "Grok";
     signinBtnName = "Sign in with Grok";
     brandIcon = BRAND_ICONS.xai;
-  } else if (providerId === "gemini") {
-    brandName = "Google";
-    signinBtnName = "Sign in with Google";
-    brandIcon = BRAND_ICONS.gemini;
   }
 
   // 1. Detected / Active Account Card
   let activeCardHtml = "";
-  if (hasActiveAccount || isFoundOnComputer) {
-    let cardTitle = "Connected Account";
-    let badgeText = "Using this account";
-    let badgeClass = "using";
-
-    if (providerId === "openai") {
-      cardTitle = isFoundOnComputer ? `${detected.plan || p.plan || "ChatGPT"} found` : (detected.plan || p.plan || conn.plan || "ChatGPT Free");
-      badgeText = isFoundOnComputer ? "Found on this computer" : "Using this account";
-      badgeClass = isFoundOnComputer ? "found" : "using";
-    } else if (providerId === "claude" || providerId === "anthropic") {
-      cardTitle = isFoundOnComputer ? `${detected.plan || "Claude Pro"} found` : "Claude connected";
-      badgeText = isFoundOnComputer ? "Found on this computer" : "Using this account";
-      badgeClass = isFoundOnComputer ? "found" : "using";
-    } else if (providerId === "cursor") {
-      cardTitle = isFoundOnComputer ? `${detected.plan || "Cursor"} found` : "Cursor connected";
-      badgeText = isFoundOnComputer ? "Found on this computer" : "Connected";
-      badgeClass = isFoundOnComputer ? "found" : "using";
-    } else if (providerId === "xai") {
-      cardTitle = isFoundOnComputer ? `${detected.plan || "Grok"} found` : "Grok connected";
-      badgeText = isFoundOnComputer ? "Found on this computer" : "Connected";
-      badgeClass = isFoundOnComputer ? "found" : "using";
-    } else if (providerId === "gemini") {
-      cardTitle = isFoundOnComputer ? "Google found" : "Google connected";
-      badgeText = isFoundOnComputer ? "Found on this computer" : "Using this account";
-      badgeClass = isFoundOnComputer ? "found" : "using";
-    }
+  if (!apiKeyOnly && (hasActiveAccount || isFoundOnComputer)) {
+    // Derived, not a per-provider chain: a provider missing from that chain
+    // (claude-code) fell through to "Connected Account / Using this account"
+    // while it was merely detected on the machine. Detection is not consent.
+    const plan = detected.plan || p.plan || conn.plan || "";
+    const cardTitle = isFoundOnComputer
+      ? `${plan || brandName} found`
+      : (plan || `${brandName} connected`);
+    const badgeText = isFoundOnComputer ? "Found on this computer" : "Using this account";
+    const badgeClass = isFoundOnComputer ? "found" : "using";
 
     const subText = isFoundOnComputer
-      ? `${esc(detected.email || accountEmail)} · Found on this computer`
-      : `${esc(accountEmail || "API Key Active")} · Added to TURNOVER`;
+      ? (providerId === "gemini"
+          ? `${esc(detected.email || accountEmail)} · Google Workspace connected · Enter GEMINI_API_KEY below for model inference`
+          : `${esc(detected.email || accountEmail)} · Found on this computer`)
+      : `${esc(accountEmail || "API Key Active")} · Added to Lodestone`;
 
     const descText = providerId === "openai"
-      ? "Your ChatGPT plan includes a limited set of models. TURNOVER automatically uses the best model available with your plan."
-      : "Added to TURNOVER. Other apps keep their own sign-in.";
+      ? "Your ChatGPT plan includes a limited set of models. Lodestone automatically uses the best model available with your plan."
+      : (providerId === "gemini" && isFoundOnComputer
+          ? "Google Workspace account is connected for Mail and Calendar. Enter a GEMINI_API_KEY below to enable Gemini models."
+          : "Added to Lodestone. Other apps keep their own sign-in.");
 
     let usageHtml = "";
     const usage = detected.usage || p.usage || conn.usage;
@@ -478,11 +456,19 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
 
     let actionBtnHtml = "";
     if (isFoundOnComputer) {
-      actionBtnHtml = `
-        <button type="button" class="tiny primary ts-continue-btn" style="padding:5px 12px">Continue</button>
-        <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
-        <button type="button" class="ts-btn-link ts-disconnect-btn" style="color:#ef4444" title="Disconnect provider">✕</button>
-      `;
+      if (providerId === "gemini") {
+        actionBtnHtml = `
+          <button type="button" class="tiny ts-btn-signin" onclick="document.getElementById('apiKeyInput')?.focus()" style="background:rgba(234,179,8,0.12);border-color:rgba(234,179,8,0.3);color:#eab308;cursor:pointer">Enter API Key</button>
+          <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
+          <button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:#ef4444" title="Sign out of this account">✕</button>
+        `;
+      } else {
+        actionBtnHtml = `
+          <button type="button" class="tiny primary ts-continue-btn" style="padding:5px 12px">Continue</button>
+          <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
+          <button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:#ef4444" title="Sign out of this account">✕</button>
+        `;
+      }
     } else if (providerId === "openai") {
       // In Turnstone/real UI, top card has no action buttons on the right
       actionBtnHtml = "";
@@ -490,7 +476,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
       actionBtnHtml = `
         <button type="button" class="tiny ts-btn-signin" style="background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.3);color:#34d399;cursor:default">Connected</button>
         <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
-        <button type="button" class="ts-btn-link ts-disconnect-btn" style="color:#ef4444" title="Disconnect provider">✕</button>
+        <button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:#ef4444" title="Sign out of this account">✕</button>
       `;
     }
 
@@ -514,8 +500,8 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
 
   // 2. Account Sign-in / Different Account Card
   let signinCardHtml = "";
-  if (caps.browser_login_supported || caps.oauth_supported || ["openai", "claude", "cursor", "xai", "gemini"].includes(providerId)) {
-    const signinTitle = `${brandName} account for TURNOVER`;
+  if (caps.has_interactive_signin) {
+    const signinTitle = `${brandName} account for Lodestone`;
     const signinSub = `Sign in again or use a different account without changing other apps.`;
 
     signinCardHtml = `
@@ -531,7 +517,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
               <span>${esc(signinBtnName)}</span>
             </button>
             <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
-            ${hasActiveAccount ? `<button type="button" class="ts-btn-link ts-disconnect-btn" style="color:var(--muted)" title="Disconnect provider">✕</button>` : ""}
+            ${hasActiveAccount ? `<button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:var(--muted)" title="Sign out of this account">✕</button>` : ""}
           </div>
         </div>
       </div>
@@ -545,11 +531,15 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
       <div class="ts-card">
         <div class="ts-card-row">
           <div class="ts-card-left">
-            <span class="ts-card-title">${esc(p.label || providerId)} API key</span>
+            <div class="ts-card-title-wrap">
+              <span class="ts-card-title">${esc(p.label || providerId)} API key</span>
+              ${hasApiKey ? `<span class="ts-badge using">Connected</span>` : ""}
+            </div>
             <span class="ts-card-sub">Used for ${esc(p.label || providerId)} runs.${keyUrl ? ` <a href="${keyUrl}" target="_blank" rel="noopener" class="pc-link" style="margin-left:4px">Get key ↗</a>` : ""}</span>
           </div>
           <div class="ts-action-group">
-            <button type="button" class="tiny ghost ts-toggle-key-btn">${isReady ? 'Update API key' : 'Add API key'}</button>
+            <button type="button" class="tiny ghost ts-toggle-key-btn">${hasApiKey ? 'Update API key' : 'Add API key'}</button>
+            ${hasApiKey ? `<button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="api_key" style="color:#ef4444" title="Remove this API key">✕</button>` : ""}
           </div>
         </div>
         <div class="ts-key-collapse" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
@@ -647,7 +637,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
           <div class="ts-spinner"></div>
           <div class="ts-waiting-body">
             <div class="ts-waiting-title">Waiting for ${esc(brandName)} sign-in…</div>
-            <div class="ts-waiting-sub">Finish signing in to ${esc(brandName)} in your browser. TURNOVER will automatically update when your account is ready.</div>
+            <div class="ts-waiting-sub">Finish signing in to ${esc(brandName)} in your browser. Lodestone will automatically update when your account is ready.</div>
           </div>
           <button type="button" class="tiny ghost ts-cancel-poll-btn">Cancel</button>
         </div>
@@ -667,7 +657,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
       if (cancelBtn) cancelBtn.onclick = stopPolling;
 
       try {
-        const res = await api(`/api/providers/${providerId}/signin`, { method: "POST" });
+        const res = await api(`/api/providers/${providerId}/auth/start`, { method: "POST" });
         toast(`Opening ${brandName} in browser…`);
 
         if (res.connected) {
@@ -729,17 +719,17 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
   });
 
   // Disconnect
-  const disconnectBtn = boxEl.querySelector(".ts-disconnect-btn");
-  if (disconnectBtn) {
+  const disconnectBtns = boxEl.querySelectorAll(".ts-disconnect-btn");
+  disconnectBtns.forEach((disconnectBtn) => {
     disconnectBtn.onclick = async () => {
       disconnectBtn.disabled = true;
       setFeedback("Disconnecting…");
       try {
-        if (providerId === "gemini") {
-          await api("/api/google/disconnect", { method: "POST" });
-        }
-        await api(`/api/providers/${providerId}/disconnect`, { method: "POST" });
-        toast(`Disconnected ${p.label || providerId}`);
+        const scope = disconnectBtn.dataset.scope || "all";
+        await api(`/api/providers/${providerId}/disconnect?scope=${scope}`, { method: "POST" });
+        toast(scope === "api_key" ? `Removed ${p.label || providerId} API key`
+            : scope === "account" ? `Signed out of ${p.label || providerId}`
+            : `Disconnected ${p.label || providerId}`);
         await loadProviders();
         if (options.onConnect) options.onConnect();
       } catch (e) {
@@ -748,7 +738,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
         disconnectBtn.disabled = false;
       }
     };
-  }
+  });
 
   // Connect via API key
   const connectBtn = boxEl.querySelector(".pc-connect-btn");
@@ -809,6 +799,8 @@ const COMPOSER_PROVIDERS = [
   { id: "xai", label: "xAI" },
   { id: "cursor", label: "Cursor" },
   { id: "gemini", label: "Google Gemini" },
+  { id: "claude-code", label: "Claude Code CLI" },
+  { id: "subscription", label: "Subscription Gateway" },
 ];
 
 let activePickerProvider = "cursor";
@@ -816,19 +808,33 @@ let activePickerModel = null;
 
 function isProviderConnected(pid) {
   if (!pid) return false;
-  const p = (MODEL_CATALOG || []).find((c) => c.id === pid);
-  if (p) {
-    if (typeof p.connected === "boolean") return p.connected;
-    if (p.connection && p.connection.connection_status === "DISCONNECTED") return false;
-    if (p.connection && (p.connection.connection_status === "ACCOUNT_CONNECTED" || p.connection.connection_status === "API_KEY_CONNECTED" || p.connection.connection_status === "CONNECTED")) return true;
-    if (p.ready) return true;
+  const rawId = String(pid).toLowerCase().trim();
+  const normId = (rawId === "anthropic" || rawId === "claude-code") ? "claude"
+               : (rawId === "google" ? "gemini"
+               : (rawId === "grok" ? "xai" : rawId));
+
+  // 1. Check MODEL_CATALOG first (by exact ID or normalized alias)
+  for (const id of [rawId, normId]) {
+    const p = (MODEL_CATALOG || []).find((c) => (c.id || "").toLowerCase() === id);
+    if (p) {
+      if (typeof p.connected === "boolean") return p.connected;
+      const conn = p.connection || {};
+      if (conn.connection_status === "ACCOUNT_CONNECTED" || conn.connection_status === "API_KEY_CONNECTED" || conn.connection_status === "CONNECTED") return true;
+      if (conn.connection_status === "DISCONNECTED" || conn.connection_status === "NOT_CONNECTED") return false;
+    }
   }
-  const prov = (PROVIDERS || []).find((x) => x.name === pid);
-  if (prov) {
-    if (typeof prov.connected === "boolean") return prov.connected;
-    if (prov.connection && prov.connection.connection_status === "DISCONNECTED") return false;
-    if (prov.ready) return true;
+
+  // 2. Check PROVIDERS array (by exact name or normalized alias)
+  for (const id of [rawId, normId]) {
+    const prov = (PROVIDERS || []).find((x) => (x.name || "").toLowerCase() === id);
+    if (prov) {
+      if (typeof prov.connected === "boolean") return prov.connected;
+      const conn = prov.connection || {};
+      if (conn.connection_status === "ACCOUNT_CONNECTED" || conn.connection_status === "API_KEY_CONNECTED" || conn.connection_status === "CONNECTED") return true;
+      if (conn.connection_status === "DISCONNECTED" || conn.connection_status === "NOT_CONNECTED") return false;
+    }
   }
+
   return false;
 }
 
@@ -848,7 +854,8 @@ function renderProviderFlyout() {
   if (!list) return;
 
   list.innerHTML = COMPOSER_PROVIDERS.map((p) => {
-    const isSel = p.id === activePickerProvider;
+    const isSel = (p.id === activePickerProvider) ||
+                  (p.id === "claude" && activePickerProvider === "claude-code");
     const isConn = isProviderConnected(p.id);
     const badgeHtml = !isConn
       ? `<span class="cmp-lock-badge">🔒 Not Connected</span>`
@@ -911,7 +918,9 @@ function renderModelFlyout() {
   if (!list) return;
 
   const isProvConn = isProviderConnected(activePickerProvider);
-  const pEntry = (MODEL_CATALOG || []).find((c) => c.id === activePickerProvider);
+  const normId = (activePickerProvider === "claude-code" || activePickerProvider === "anthropic") ? "claude" : activePickerProvider;
+  const pEntry = (MODEL_CATALOG || []).find((c) => c.id === activePickerProvider)
+              || (MODEL_CATALOG || []).find((c) => c.id === normId);
   const models = (pEntry && pEntry.models) || [];
 
   // If provider is not connected, Auto is locked too!
@@ -1016,36 +1025,42 @@ function renderModelFlyout() {
 }
 
 function formatProviderPlanInfo(providerId) {
-  const p = (MODEL_CATALOG || []).find((c) => c.id === providerId);
-  const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === providerId);
+  const normId = (providerId === "claude-code" || providerId === "anthropic") ? "claude" : providerId;
+  const p = (MODEL_CATALOG || []).find((c) => c.id === providerId) || (MODEL_CATALOG || []).find((c) => c.id === normId);
+  const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === providerId) || COMPOSER_PROVIDERS.find((x) => x.id === normId);
   const providerLabel = pSpec ? pSpec.label : (p ? p.label : providerId);
 
   const isConnected = isProviderConnected(providerId);
 
   if (!isConnected) {
+    const acct = (typeof p?.detected_account === "object" && p.detected_account !== null) ? p.detected_account : {};
     return {
       title: `${providerLabel}`,
       plan: "Not connected",
-      identity: "",
+      identity: acct.email || "",
       connected: false,
     };
   }
 
-  const conn = (typeof p.connection === "object" && p.connection !== null) ? p.connection : {};
-  const acct = (typeof p.detected_account === "object" && p.detected_account !== null) ? p.detected_account : {};
+  const conn = (typeof p?.connection === "object" && p.connection !== null) ? p.connection : {};
+  const acct = (typeof p?.detected_account === "object" && p.detected_account !== null) ? p.detected_account : {};
 
   // Extract clean string for plan
   let planLabel = "";
   if (acct.plan && typeof acct.plan === "string") {
     planLabel = acct.plan;
-  } else if (conn.auth_method === "api_key") {
-    planLabel = "API Key";
+  } else if (p?.plan && typeof p.plan === "string") {
+    planLabel = p.plan;
+  } else if (conn.auth_method === "account" || conn.connection_status === "ACCOUNT_CONNECTED") {
+    planLabel = (normId === "openai") ? "ChatGPT Subscription" : "Claude Pro";
+  } else if (conn.auth_method === "api_key" && !conn.email) {
+    planLabel = (normId === "gemini") ? "Google AI Studio API Key" : "API Key";
   } else {
-    if (providerId === "openai") planLabel = "ChatGPT Subscription";
-    else if (providerId === "claude") planLabel = "Claude Pro";
-    else if (providerId === "cursor") planLabel = "Cursor Free";
-    else if (providerId === "xai") planLabel = "Grok Account";
-    else if (providerId === "gemini") planLabel = "Google Gemini";
+    if (normId === "openai") planLabel = "ChatGPT Subscription";
+    else if (normId === "claude") planLabel = "Claude Pro";
+    else if (normId === "cursor") planLabel = "Cursor Free";
+    else if (normId === "xai") planLabel = "Grok Account";
+    else if (normId === "gemini") planLabel = "Google AI Studio API Key";
     else planLabel = "Connected Account";
   }
 
@@ -1059,6 +1074,10 @@ function formatProviderPlanInfo(providerId) {
     emailOrIdentity = acct.name;
   } else if (conn.account_display_name && typeof conn.account_display_name === "string") {
     emailOrIdentity = conn.account_display_name;
+  } else if (normId === "claude") {
+    const claudeEntry = (MODEL_CATALOG || []).find((c) => c.id === "claude");
+    if (claudeEntry?.detected_account?.email) emailOrIdentity = claudeEntry.detected_account.email;
+    else if (claudeEntry?.connection?.email) emailOrIdentity = claudeEntry.connection.email;
   }
 
   return {
@@ -1281,8 +1300,9 @@ async function updateAgentModelChip(agentId) {
     const provName = data.configured_provider || data.provider || "cursor";
     const modelName = data.configured_model || "";
 
-    const pEntry = (MODEL_CATALOG || []).find((c) => c.id === provName);
-    const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === provName);
+    const normProv = (provName === "claude-code" || provName === "anthropic") ? "claude" : provName;
+    const pEntry = (MODEL_CATALOG || []).find((c) => c.id === provName) || (MODEL_CATALOG || []).find((c) => c.id === normProv);
+    const pSpec = COMPOSER_PROVIDERS.find((x) => x.id === provName) || COMPOSER_PROVIDERS.find((x) => x.id === normProv);
     const provLabel = pSpec ? pSpec.label : (pEntry ? pEntry.label : provName);
 
     const isProvConn = isProviderConnected(provName);
@@ -1327,7 +1347,7 @@ async function updateAgentModelChip(agentId) {
     // Sync composer picker state
     activePickerProvider = data.configured_provider || data.provider || "cursor";
     activePickerModel = data.configured_model || null;
-    const activeSpec = COMPOSER_PROVIDERS.find((x) => x.id === activePickerProvider);
+    const activeSpec = COMPOSER_PROVIDERS.find((x) => x.id === activePickerProvider) || COMPOSER_PROVIDERS.find((x) => x.id === normProv);
     const activeProvConn = isProviderConnected(activePickerProvider);
     const activeProvLabel = activeSpec ? activeSpec.label : (pEntry ? pEntry.label : activePickerProvider);
 
@@ -1422,7 +1442,7 @@ function loadProviderCards() {
     {
       id: "gemini",
       title: "Google Gemini",
-      subtitle: "Sign in with your Google account or provide a Gemini API key.",
+      subtitle: "Provide a Gemini API key from Google AI Studio to run Gemini models.",
       providers: ["gemini"],
     },
     {
@@ -1457,19 +1477,23 @@ function loadProviderCards() {
 
 async function loadProviders() {
   try {
-    const catData = await api("/api/models/catalog");
+    const [catData, provData] = await Promise.all([
+      api("/api/models/catalog").catch((err) => { console.warn("catalog fetch failed", err); return null; }),
+      api("/api/providers").catch((err) => { console.warn("providers fetch failed", err); return null; }),
+    ]);
+
     if (catData && catData.catalog && catData.catalog.length) {
       MODEL_CATALOG = catData.catalog;
     }
-  } catch (_) {}
+    if (provData && provData.providers && provData.providers.length) {
+      PROVIDERS = provData.providers;
+    }
 
-  try {
-    const d = await api("/api/providers");
-    PROVIDERS = d.providers || [];
-    // Sync readiness and connection metadata into catalog
-    PROVIDERS.forEach((p) => {
+    // Sync readiness, connection status, and metadata between providers and catalog
+    (PROVIDERS || []).forEach((p) => {
       const entry = MODEL_CATALOG.find((c) => c.id === p.name);
       if (entry) {
+        if (typeof p.connected === "boolean") entry.connected = p.connected;
         entry.ready = p.ready;
         entry.reason = p.reason;
         entry.connection = p.connection;
@@ -1481,16 +1505,18 @@ async function loadProviders() {
     });
 
     const savedP = localStorage.getItem("lodestone_provider");
-    const active = savedP || d.active || "claude";
-    $("#provider").innerHTML = (MODEL_CATALOG || []).map((p) =>
-      `<option value="${p.id}" ${p.id === active ? "selected" : ""}>${p.label}${p.ready ? " (Ready)" : " (not ready)"}</option>`).join("");
-    $("#modelName").value = localStorage.getItem("lodestone_model") || "";
-    applyModelHint();
-    $("#provider").onchange = () => {
-      localStorage.setItem("lodestone_provider", $("#provider").value);
+    const active = savedP || (provData && provData.active) || "claude";
+    if ($("#provider")) {
+      $("#provider").innerHTML = (MODEL_CATALOG || []).map((p) =>
+        `<option value="${p.id}" ${p.id === active ? "selected" : ""}>${p.label}${p.ready ? " (Ready)" : " (not ready)"}</option>`).join("");
+      $("#modelName").value = localStorage.getItem("lodestone_model") || "";
       applyModelHint();
-    };
-    $("#modelName").onchange = () => localStorage.setItem("lodestone_model", $("#modelName").value.trim());
+      $("#provider").onchange = () => {
+        localStorage.setItem("lodestone_provider", $("#provider").value);
+        applyModelHint();
+      };
+      $("#modelName").onchange = () => localStorage.setItem("lodestone_model", $("#modelName").value.trim());
+    }
 
     // Enrichment model — independent of the agent model. Empty = "same as agent".
     const ep = $("#enrichProvider");
@@ -1506,12 +1532,14 @@ async function loadProviders() {
     console.error("loadProviders error", err);
   }
 
-  loadEnrichCap();
-  loadAgentModelMatrix();
-  loadProviderCards();
-  initComposerModelPicker();
+  try { loadEnrichCap(); } catch (_) {}
+  try { loadAgentModelMatrix(); } catch (_) {}
+  try { loadProviderCards(); } catch (_) {}
+  try { initComposerModelPicker(); } catch (_) {}
   if (current) updateAgentModelChip(current);
   refreshPickerPopover();
+  renderProviderFlyout();
+  renderModelFlyout();
 }
 
 // Which provider/model to use for enrichment: the dedicated one if set, else the
@@ -2608,7 +2636,7 @@ const ENRICH_TIPS = [
   "Click any entity in the list to see the facts behind it.",
   "Bounce emails, boilerplate & encoded junk are filtered out.",
   "The model types every entity — person, org, project or tool.",
-  "Extraction is simple — a small model (Haiku, gpt-4o-mini) is plenty.",
+  "Extraction is simple — a small model (Haiku 4.5, gpt-5.4-mini) is plenty.",
   "Local models (Ollama) or your Claude subscription do this for free.",
   "It runs batch by batch — you can Stop anytime and resume later.",
 ];
@@ -2698,7 +2726,7 @@ function pollEnrich() {
         + `This can use a LOT of tokens — very roughly ~${fmtTokens(estTok)} — and may cost money.\n\n`
         + `Extraction is a simple task, so this is a better fit for a FREE model:\n`
         + `  • a local model (Ollama), or your Claude subscription/CLI — free\n`
-        + `  • or a small cheap model (Haiku, gpt-4o-mini)\n\n`
+        + `  • or a small cheap model (Haiku 4.5, gpt-5.4-mini)\n\n`
         + `You can Stop anytime. Continue with ${prov}?`);
       if (!ok) return;
     }
@@ -2787,7 +2815,8 @@ window.addEventListener("keydown", (e) => {
 (async () => {
   if (await maybeOnboard()) return;   // redirecting to onboarding — stop here
   applyIcons();
-  loadAgents(); loadProviders(); loadBrain(); loadTasks(); loadReminders(); loadRoutines();
+  await loadProviders();
+  loadAgents(); loadBrain(); loadTasks(); loadReminders(); loadRoutines();
   updateBrainStatus(); maybeWelcome();
   // poll the brain status often while it's building, and keep time-based panels fresh
   setInterval(updateBrainStatus, 5000);
