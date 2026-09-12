@@ -24,6 +24,14 @@ What that means concretely, and what it has already changed:
 - **Never surface an internal.** No raw provider JSON, no stack traces, no
   internal ids in user-facing text. Errors say what happened and what to do
   (`models/errors.py`).
+- **Follow the user out of the app.** A browser sign-in leaves Lodestone, so the
+  status goes with them: `hud.py` raises a frameless always-on-top window
+  (`/signin-hud`) that sits above the browser, reports success with the account,
+  and offers a way back. Desktop only — `lodestone serve` falls back to the
+  in-app card, and `/auth/start` returns `floating_hud` so the UI never shows
+  both. Timeout is **180s** (`hud.SIGNIN_TIMEOUT_SECONDS`), deliberately
+  generous: an account switch with a password and 2FA blew past a 150s poll in
+  practice. On expiry it shows an error with **Try again**, never a dead spinner.
 - **Never make the user wait without telling them.** Long work runs as a
   background job with progress that survives a refresh — sync, brain enrich, CLI
   install. A spinner with no end state is a bug.

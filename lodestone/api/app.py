@@ -919,6 +919,12 @@ def open_browser_endpoint(payload: dict):
         raise HTTPException(500, f"Failed to open browser: {exc}")
 
 
+@app.get("/signin-hud")
+def signin_hud_page():
+    """The floating sign-in card (desktop app only)."""
+    return FileResponse(WEB / "signin_hud.html")
+
+
 @app.get("/api/providers/{name}/cli")
 def provider_cli_status(name: str):
     """Is the vendor CLI this provider needs installed, and by us?"""
@@ -961,7 +967,18 @@ def provider_cli_uninstall(name: str):
 def auth_start_endpoint(name: str):
     """Begin sign-in for a provider — or explain why it has none."""
     from ..models.auth_flows import get_flow
-    return get_flow(name).start().to_dict()
+
+    started = get_flow(name).start().to_dict()
+    if started.get("started"):
+        # The browser takes the user out of Lodestone, so the status follows
+        # them: a floating card above the browser. No-op outside the desktop app,
+        # where the in-app card handles it instead — so tell the UI which one
+        # took over and avoid showing both.
+        from .. import hud
+        started["floating_hud"] = hud.open_signin(
+            name, started.get("brand_name") or name, started.get("auth_url") or "")
+        started["timeout_seconds"] = hud.SIGNIN_TIMEOUT_SECONDS
+    return started
 
 
 @app.get("/api/providers/{name}/auth/status")

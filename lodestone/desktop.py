@@ -90,11 +90,17 @@ def run_app(dev: bool = False) -> None:
             proc.terminate()
         return
 
-    webview.create_window(
+    window = webview.create_window(
         "Lodestone" + (" (dev)" if dev else ""),
         f"http://{host}:{port}",
         width=1280, height=860, min_size=(920, 620),
     )
+
+    # Let the backend raise a floating sign-in card above the browser. Only the
+    # desktop app can do this; `lodestone serve` falls back to the in-app card.
+    from . import hud
+    hud.configure(f"http://{host}:{port}", window)
+
     try:
         webview.start()          # blocks until the window is closed
     finally:

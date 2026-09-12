@@ -793,6 +793,14 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
         }
 
         toast(`Opening ${brandName} in browser…`);
+
+        if (res.floating_hud) {
+          // The desktop app raised a floating card that follows the user to the
+          // browser and reports the result there. Don't stack a second one.
+          restore();
+          return;
+        }
+
         // Open browser tab if the backend hasn't already (e.g. no CLI available)
         if (res.auth_url && !res.browser_opened) {
           try {
