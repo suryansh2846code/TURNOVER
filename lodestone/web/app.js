@@ -707,11 +707,15 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
         // Not every provider has a browser flow. Say what the backend said
         // instead of spinning on a sign-in that will never arrive.
         if (res.started === false) {
-          restore();
+          signinBtn.disabled = false;
           if (res.cli_required) {
+            // Write into the LIVE container. Calling restore() first would
+            // re-render the whole box and detach signinContainer, so the card
+            // would be built into an orphaned node and never appear.
             showCliInstructions(signinContainer, res, brandName, () =>
               renderProviderConnectBox(boxEl, providerId, options));
           } else {
+            restore();
             toast(res.detail || `${brandName} has no browser sign-in.`);
             if (res.api_key_only) boxEl.querySelector(".ts-toggle-key-btn")?.click();
           }

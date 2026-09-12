@@ -101,3 +101,59 @@ def test_a_disconnected_provider_shows_no_connected_badge(rendered):
         if not (creds.get("api_key", {}).get("connected")
                 or creds.get("account", {}).get("connected")):
             assert not r["connectedBadge"], f"{pid} rendered a Connected badge while disconnected"
+
+
+# ── clicking "Sign in" must actually put something on screen ─────────────
+CLICK_HARNESS = ROOT / "tests/js/click_signin.mjs"
+
+
+@pytest.fixture(scope="module")
+def catalog_json():
+    from lodestone.models.registry import get_model_catalog
+
+    return get_model_catalog()
+
+
+def _click_signin(provider: str, catalog=None) -> dict:
+    """Run the real click handler for a provider and report what the sign-in
+    container ends up containing.
+
+    The stub models DOM detachment: reassigning innerHTML clears the subtree, so
+    a card written into a container that a preceding re-render replaced comes
+    back empty — which is exactly the bug that made "Sign in with Cursor" do
+    nothing. Asserting on source order does not catch that.
+    """
+    from lodestone.models.auth_flows import get_flow
+    from lodestone.models.registry import get_model_catalog
+
+    payload = json.dumps({
+        "catalog": catalog if catalog is not None else get_model_catalog(),
+        "authStartResponse": get_flow(provider).start().to_dict(),
+    })
+    proc = subprocess.run(["node", str(CLICK_HARNESS), str(APP_JS), provider],
+                          input=payload, capture_output=True, text=True, timeout=90)
+    assert proc.returncode == 0, f"click harness failed: {proc.stderr[:400]}"
+    return json.loads(proc.stdout)
+
+
+@pytest.mark.parametrize("provider", ["cursor", "claude-code", "xai"])
+def test_cli_providers_show_instructions_when_sign_in_is_clicked(provider, catalog_json):
+    """These have no browser flow — the button must explain what to run."""
+    r = _click_signin(provider, catalog_json)
+    assert r["clicked"], f"{provider} sign-in button has no handler"
+    assert r["error"] is None, r["error"]
+    assert r["containerHtml"], f"{provider}: clicking produced nothing on screen"
+    assert "ts-cli-cmd" in r["containerHtml"], "no copyable command shown"
+    assert "ts-cli-recheck" in r["containerHtml"], "no way to re-check after signing in"
+
+
+def test_the_click_actually_asks_the_backend(catalog_json):
+    r = _click_signin("cursor", catalog_json)
+    assert any("/auth/start" in c for c in r["calls"]), "never called the auth endpoint"
+
+
+def test_a_browser_provider_still_starts_a_browser_flow(catalog_json):
+    """The CLI branch must not swallow providers that do have a real flow."""
+    r = _click_signin("openai", catalog_json)
+    assert r["error"] is None
+    assert "ts-cli-cmd" not in r["containerHtml"], "OpenAI wrongly took the CLI branch"

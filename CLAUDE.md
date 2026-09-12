@@ -212,13 +212,20 @@ its own flow, otherwise `BrowserFlow`. **Adding a provider means registering a
 flow, never adding a route or a UI branch.** A flow must always return a reason
 rather than raise.
 
-**The Models drawer is executed in tests, not just parsed.**
-`tests/test_models_drawer_render.py` runs `renderProviderConnectBox` in node
-(`tests/js/render_provider_box.mjs`, minimal DOM stub) against a real
-`/api/models/catalog` payload and asserts each provider renders the right cards.
-`node --check` only catches syntax — a temporal-dead-zone `ReferenceError`
-(reading a `const` above its declaration) passes it and blanks the entire
-drawer at runtime. Any new render function should be covered the same way.
+**The Models drawer is executed in tests, not just parsed.** Two node harnesses
+under `tests/js/`, driven by `tests/test_models_drawer_render.py`:
+- `render_provider_box.mjs` runs `renderProviderConnectBox` against a real
+  `/api/models/catalog` payload and checks each provider's cards.
+- `click_signin.mjs` runs the actual **click handler** and checks what lands on
+  screen. Its DOM stub deliberately models detachment — reassigning `innerHTML`
+  clears the subtree — because the bug it exists to catch was a card written
+  into a container a preceding re-render had already replaced.
+
+Neither `node --check` nor source-order assertions catch these: a temporal
+dead-zone `ReferenceError` blanked the whole drawer and still passed
+`node --check`, and the detached-container bug passed a source-order test. **If
+you add a render path or a click handler, execute it in a test** — and when you
+write the harness, verify it fails with the bug reintroduced before trusting it.
 
 **Derive UI from capabilities, never from a provider-id chain.** Which cards a
 provider gets comes from `api_key_only` / `has_interactive_signin`; badge text
