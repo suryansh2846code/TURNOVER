@@ -162,7 +162,7 @@ and that is how a paid plan is reached:
 |---|---|---|
 | Claude | `claude` | `claude -p --output-format json --model <id>` |
 | Cursor | `agent` | `agent -p "<prompt>" --output-format json --model <id>` |
-| xAI | `grok` | `grok -p "<prompt>" --output-format json` *(not wired up yet)* |
+| xAI | `grok` | `grok -p "<prompt>" --output-format json -m <id>` |
 | ChatGPT | `codex` | (we use the Codex responses endpoint directly) |
 
 So "support provider X's subscription" almost always means "shell out to X's

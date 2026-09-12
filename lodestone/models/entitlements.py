@@ -352,12 +352,13 @@ def _detect_account(pid: str) -> dict[str, Any]:
         return {}
 
     if pid == "xai":
-        from .xai_auth import get_xai_access_token
-        try:
-            if get_xai_access_token():
-                return {"email": conn.email or "xAI Grok", "plan": "xAI Grok"}
-        except Exception:
-            pass
+        # An OAuth token is deliberately NOT an account credential here: it
+        # authenticates at api.x.ai and is then refused for billing. The
+        # subscription runs through xAI's CLI instead.
+        from .grok_cli import find_grok_cli
+
+        if find_grok_cli():
+            return {"email": conn.email or "Grok CLI", "plan": "Grok subscription"}
         return {}
 
     return {}
@@ -386,7 +387,7 @@ def provider_credentials(provider_id: str, api_key: str | None = None) -> dict[s
     # credits, so counting it as "connected" would unlock models that fail on
     # the first message.
     account_supported = bool(caps and not caps.api_key_only) and (
-        pid in _DUAL_CREDENTIAL_PROVIDERS or pid == "claude-code")
+        pid in _DUAL_CREDENTIAL_PROVIDERS or pid in ("claude-code", "xai"))
 
     key = _stored_api_key(pid, api_key)
     account = _detect_account(pid) if account_supported else {}

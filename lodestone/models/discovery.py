@@ -335,6 +335,20 @@ def discover_gemini_models(api_key: str | None = None) -> list[DiscoveredModel]:
 def discover_xai_models(api_key: str | None = None) -> list[DiscoveredModel]:
     key = api_key or os.environ.get("XAI_API_KEY") or _saved_key("XAI_API_KEY")
     if not key:
+        # No key: a subscription runs through xAI's CLI, and `grok models`
+        # reports exactly what this account can use.
+        from .grok_cli import grok_cli_models
+
+        try:
+            cli_models = grok_cli_models()
+        except Exception:
+            cli_models = []
+        if cli_models:
+            return [DiscoveredModel(
+                m, m.replace("-", " ").title(),
+                "Runs on your Grok subscription via the Grok CLI",
+                256_000, vision=True, reasoning=True,
+            ) for m in cli_models]
         return _fallback_xai()
 
     headers = {"Authorization": f"Bearer {key}"}

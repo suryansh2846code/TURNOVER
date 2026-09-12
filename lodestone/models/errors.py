@@ -230,8 +230,10 @@ def classify_cli(provider: str, returncode: int, stdout: str, stderr: str, *,
     cli_name = name if name.lower().endswith("cli") else f"{name} CLI"
     low = blob.lower()
     if kind is ErrorKind.UNKNOWN:
+        # Stem-match: CLIs say "not authenticated", "authentication required",
+        # "please authenticate" — matching the noun alone missed most of them.
         if any(k in low for k in ("not logged in", "unauthorized", "please log in",
-                                  "authentication", "sign in")):
+                                  "authenticat", "sign in", "log in to", "login required")):
             kind = ErrorKind.AUTH
         elif any(k in low for k in ("issue with the selected model", "does not support")):
             kind = ErrorKind.MODEL_NOT_FOUND

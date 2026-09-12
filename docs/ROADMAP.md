@@ -40,6 +40,55 @@ first.
 or recall stops being once-per-turn.
 
 
+### Grok subscription support (xAI) — **shipped**
+Built 2026-09-12 via xAI's official Grok Build CLI (`models/grok_cli.py`).
+
+`api.x.ai` is the *developer* API, billed from console.x.ai credits, and a
+SuperGrok subscription grants none — verified against a real account, where even
+the free metadata call fails:
+
+```
+GET  /v1/models            403  personal-team-blocked:spending-limit
+POST /v1/chat/completions  402  personal-team-blocked:spending-limit
+```
+
+An earlier version of this entry wrongly claimed there is no official Grok CLI
+and that subscription support would need grok.com's private backend. xAI ships
+**Grok Build** (`curl -fsSL https://x.ai/cli/install.sh | bash`, or
+`npm i -g @xai-official/grok`), with `-p/--single`, `--output-format json`,
+`-m/--model`, `grok models` and `grok login`. That is the same sanctioned shape
+as the Claude Code and Cursor backends, and what the `grok-cli:access` scope on
+our OAuth token is for.
+
+**Still open:** users must install the CLI themselves. Competing apps bundle
+version-pinned vendor binaries (`claude`, `codex`, `cursor-agent`, `grok`) under
+their own app-support directory. Doing the same is better UX but real work —
+download, checksum, pin, update — and is a separate decision.
+
+**Note:** `models/xai_auth.py` still authenticates with client id `b1a00492-…`
+and `referrer=opencode` — **not ours**. That OAuth flow is unreachable now
+(GrokFlow replaced it); delete it or replace the client id.
+
+### Recall scaling
+**Status:** measured, deliberately not built. See [`SCALING.md`](SCALING.md).
+
+Recall is linear in memory count (~0.05 ms each) and runs on every agent turn.
+A real install sits at 3.3k memories / ~120 ms, which is fine; 10k is 430 ms
+and 50k is 2.5 s. The bottleneck is **not** vector search — the matmul is 0.1%
+of the time — it is the eight-factor Python scoring loop that runs over every
+row (95%). A top-K pre-filter before that loop measured **25–33× faster** (50k:
+2.3 s → 70 ms) as a contained change to one function.
+
+Not needed yet because the app is bounded by default (Gmail 600/90d, Drive 500,
+Files 2000). **The real risk is the uncapped connectors** — iMessage has no
+limit at all, and years of history would land a user at 100k+ from one
+checkbox. Capping those is cheaper than optimising recall, and should come
+first.
+
+**Reopen if:** a real brain passes ~10k memories, an uncapped connector ships,
+or recall stops being once-per-turn.
+
+
 ### Grok subscription support (xAI)
 **Status:** not built. **Corrected 2026-09-12** — an earlier version of this
 entry was wrong on two counts.

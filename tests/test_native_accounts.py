@@ -135,7 +135,7 @@ def test_signin_endpoints():
             # Cursor signs in through its own CLI (`agent login`), so the app
             # reports what to run instead of opening a useless browser page.
             assert data.get("started") is False
-            assert "agent" in data.get("detail", "")
+            assert data.get("detail"), "a CLI-required provider must say what to run"
         else:
             assert data.get("started") is True
 

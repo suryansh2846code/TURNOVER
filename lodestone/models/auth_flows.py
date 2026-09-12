@@ -205,6 +205,30 @@ class ClaudeCodeFlow:
                           status="success" if find_claude() else "idle")
 
 
+class GrokFlow:
+    """xAI's CLI owns sign-in; api.x.ai has no subscription path."""
+
+    provider_id = "xai"
+
+    def start(self) -> AuthStart:
+        from .grok_cli import INSTALL_HINT, find_grok_cli
+
+        cli = find_grok_cli()
+        return AuthStart(
+            provider_id=self.provider_id, started=False, brand_name="Grok",
+            cli_required=True, cli_found=bool(cli),
+            auth_url="https://x.ai/news/grok-build-cli",
+            detail=("Grok CLI found — run `grok login` in a terminal, then press "
+                    "Refresh." if cli else INSTALL_HINT),
+        )
+
+    def status(self) -> AuthStatus:
+        from .grok_cli import find_grok_cli
+
+        return AuthStatus(provider_id=self.provider_id,
+                          status="success" if find_grok_cli() else "idle")
+
+
 class BrowserFlow:
     """Generic: open the provider's documented auth page."""
 
@@ -225,12 +249,13 @@ class BrowserFlow:
 
 # xAI's OAuth flow (models/xai_auth.py) is intentionally NOT registered: it
 # authenticates but grants no api.x.ai credits, so it can never yield a usable
-# credential. See docs/ROADMAP.md -> "Grok subscription support".
+# credential. The subscription path is the Grok CLI — see GrokFlow.
 _FLOWS: dict[str, AuthFlow] = {
     "openai": ChatGPTFlow(),
     "claude": ClaudeFlow(),
     "cursor": CursorFlow(),
     "claude-code": ClaudeCodeFlow(),
+    "xai": GrokFlow(),
 }
 
 

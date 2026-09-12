@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 
-from .base import _saved_key
+from .base import ChatResult, _saved_key
 from .openai_compat import OpenAICompatProvider
 
 
@@ -30,6 +30,7 @@ class XAIProvider(OpenAICompatProvider):
     def __init__(self, model: str | None = None, api_key: str | None = None,
                  base_url: str | None = None) -> None:
         self._oauth_only = False
+        self._cli = None
         if api_key is not None:
             resolved_key = api_key
         else:
@@ -59,9 +60,35 @@ class XAIProvider(OpenAICompatProvider):
     def is_ready(self) -> tuple[bool, str]:
         if self.api_key:
             return True, ""
+        backend = self._subscription_backend()
+        if backend is not None:
+            return backend.is_ready()
         if self._oauth_only:
             return False, self._SUBSCRIPTION_ONLY
-        return False, "set XAI_API_KEY or sign in with xAI"
+        from .grok_cli import INSTALL_HINT
+        return False, f"set XAI_API_KEY, or run Grok on your subscription — {INSTALL_HINT}"
+
+    def _subscription_backend(self):
+        """xAI's own CLI, which is how a SuperGrok subscription runs."""
+        if self._cli is None:
+            from .grok_cli import GrokCliProvider, find_grok_cli
+            if not find_grok_cli():
+                return None
+            self._cli = GrokCliProvider(model=self.model)
+        return self._cli
+
+    def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
+        if not self.api_key:
+            # Subscription, not an API key — api.x.ai would 402.
+            backend = self._subscription_backend()
+            if backend is not None:
+                return backend.chat(messages, tools=tools, temperature=temperature,
+                                    max_tokens=max_tokens)
+            from .grok_cli import INSTALL_HINT
+            return ChatResult(text=(
+                f"⚠️ No xAI API key, and {INSTALL_HINT[0].lower()}{INSTALL_HINT[1:]}"))
+        return super().chat(messages, tools=tools, temperature=temperature,
+                            max_tokens=max_tokens)
 
     def _refine_error(self, err):
         """Name the actual cause: a Grok sign-in and API credits are not the

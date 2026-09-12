@@ -85,18 +85,21 @@ def test_other_providers_get_a_generic_billing_message():
 
 
 # ── xAI is offered as API-key-only ───────────────────────────────────────
-def test_xai_offers_no_sign_in():
-    """A Grok sign-in can never produce a usable credential, so don't offer it."""
+def test_xai_offers_a_cli_sign_in_not_a_browser_one():
+    """An OAuth/browser sign-in can never produce a usable api.x.ai credential.
+    The subscription path is xAI's official Grok CLI instead."""
     from lodestone.models.capabilities import get_capabilities
 
     caps = get_capabilities("xai")
-    assert caps.api_key_only is True
     assert caps.oauth_supported is False
     assert caps.browser_login_supported is False
+    assert caps.local_cli_auth_supported is True
+    assert caps.api_key_only is False
 
 
 @pytest.mark.parametrize("pid,key_env", [
-    ("xai", "XAI_API_KEY"), ("gemini", "GEMINI_API_KEY"), ("deepseek", "DEEPSEEK_API_KEY"),
+    ("gemini", "GEMINI_API_KEY"), ("deepseek", "DEEPSEEK_API_KEY"),
+    ("openrouter", "OPENROUTER_API_KEY"),
 ])
 def test_signin_endpoint_explains_key_only_providers(pid, key_env):
     from fastapi.testclient import TestClient

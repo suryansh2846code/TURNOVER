@@ -119,18 +119,18 @@ CAPABILITIES_REGISTRY: dict[str, ProviderCapabilities] = {
     "xai": ProviderCapabilities(
         provider_id="xai",
         display_name="xAI (Grok)",
-        # API key only. A Grok sign-in authenticates but grants no credits on
-        # api.x.ai — SuperGrok and the developer API are separately billed
-        # products — so offering it would promise something that cannot work.
-        # See docs/ROADMAP.md "Grok subscription support".
-        description="xAI's Grok models via an xAI developer API key (console.x.ai).",
+        # Two paths: a console.x.ai API key, or a SuperGrok subscription via
+        # xAI's official Grok CLI (which owns its own sign-in). No browser flow
+        # here — an OAuth token authenticates at api.x.ai and is then refused
+        # for billing, so offering one would promise what cannot work.
+        description="xAI's Grok models via the Grok CLI (your subscription) or a console.x.ai API key.",
         api_key_supported=True,
         oauth_supported=False,
         browser_login_supported=False,
         device_login_supported=False,
-        local_cli_auth_supported=False,
+        local_cli_auth_supported=True,
         enterprise_sso_supported=False,
-        account_identity_supported=False,
+        account_identity_supported=True,
         model_discovery_supported=True,
         refresh_supported=True,
         disconnect_supported=True,

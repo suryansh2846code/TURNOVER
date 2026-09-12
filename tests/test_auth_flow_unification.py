@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from lodestone.api.app import app
 from lodestone.models.auth_flows import (ApiKeyOnlyFlow, AuthStart, AuthStatus,
                                          BrowserFlow, ChatGPTFlow, ClaudeFlow,
-                                         CursorFlow, get_flow)
+                                         CursorFlow, GrokFlow, get_flow)
 
 PROVIDERS = ["openai", "claude", "cursor", "xai", "gemini", "deepseek", "ollama"]
 
@@ -44,7 +44,7 @@ def _no_real_sign_in():
 # ── the protocol ─────────────────────────────────────────────────────────
 @pytest.mark.parametrize("pid,expected", [
     ("openai", ChatGPTFlow), ("anthropic", ClaudeFlow), ("claude", ClaudeFlow),
-    ("cursor", CursorFlow), ("xai", ApiKeyOnlyFlow), ("grok", ApiKeyOnlyFlow),
+    ("cursor", CursorFlow), ("xai", GrokFlow), ("grok", GrokFlow),
     ("gemini", ApiKeyOnlyFlow), ("google", ApiKeyOnlyFlow),
     ("deepseek", ApiKeyOnlyFlow), ("ollama", BrowserFlow),
 ])
@@ -69,12 +69,16 @@ def test_a_flow_never_raises(pid):
     assert isinstance(flow.status(), AuthStatus)
 
 
-def test_xai_oauth_is_deliberately_not_registered():
-    """It authenticates but yields no usable credential — see ROADMAP."""
+def test_xai_signs_in_through_its_cli_not_oauth():
+    """The OAuth flow in models/xai_auth.py authenticates at api.x.ai and is
+    then refused for billing, so it can never yield a usable credential. The
+    subscription path is xAI's own CLI."""
     from lodestone.models.auth_flows import _FLOWS
 
-    assert "xai" not in _FLOWS
-    assert isinstance(get_flow("xai"), ApiKeyOnlyFlow)
+    assert isinstance(_FLOWS["xai"], GrokFlow)
+    start = get_flow("xai").start()
+    assert start.cli_required is True
+    assert start.started is False, "there is no browser flow to start"
 
 
 # ── code submission ──────────────────────────────────────────────────────
