@@ -18,6 +18,51 @@
 3. [ ] **Custom agents** — let users create their own agent (name, focus, tools),
        not just the 4 presets. Turnstone feature.
 
+## Deferred — needs a product decision
+
+### Grok subscription support (xAI)
+**Status:** deliberately not built. xAI is API-key-only in the app today.
+
+**Why.** xAI sells two separately-billed products that share one login:
+
+| | SuperGrok subscription | xAI developer API |
+|---|---|---|
+| Bought at | grok.com | console.x.ai |
+| Endpoint | `grok.com/rest/…` (private) | `api.x.ai/v1/…` (documented) |
+| Billing | monthly subscription | per-token credit balance |
+
+A subscription grants **no** credits on `api.x.ai`. Signing in with Grok
+therefore authenticates successfully and then fails every request — verified
+against a real account on 2026-09-12, including the free metadata call:
+
+```
+GET  /v1/models            403  personal-team-blocked:spending-limit
+POST /v1/chat/completions  402  personal-team-blocked:spending-limit
+```
+
+Team-id headers make no difference; the OAuth token carries `api:access` scope,
+so this is billing refusing, not auth failing. Competing apps that do run Grok
+on a subscription are talking to grok.com's consumer backend instead.
+
+**What shipping it would require, and cost:**
+- Capturing grok.com's request shape — it is undocumented, so it cannot be
+  inferred, only observed from a client that already speaks it.
+- Presenting as a first-party client. Note `models/xai_auth.py` already uses
+  client id `b1a00492-…` with `referrer=opencode` — **not ours**. Any real
+  implementation should start by replacing that with a Lodestone-owned client.
+- Accepting that a private consumer API can change without notice and break
+  every user at once, and that this sits in a grey area of xAI's terms.
+
+**Until then** the app is honest about it: `XAIProvider._oauth_only` reports
+not-ready with an explanation instead of authenticating, looking connected, and
+failing on the first message. The OAuth plumbing in `models/xai_auth.py` is left
+in place but unreachable — `capabilities.py` marks xAI `api_key_only`, so no
+sign-in button is offered.
+
+**Reopen if:** xAI publishes a subscription-backed API or an official CLI (there
+is none as of Sept 2026), or the team decides the private-endpoint trade-off is
+worth it.
+
 ## Should do
 4. [ ] **Test Notion + iMessage connectors with real data** — built, never
        verified end-to-end (Notion needs a token; iMessage needs Full Disk Access).

@@ -92,6 +92,147 @@ own model. Everything runs and stays on the user's machine.
   `claude-code`, `subscription`, `mock`) behind `LLMProvider`. `get_provider(name, model)`.
 - `lodestone/scheduler.py` — background sync loop; `sync_all` is cooperative-cancelable.
 
+## Model availability is resolved per user, never hardcoded
+This is the rule that makes every user's experience match their own account
+instead of whatever was true on a developer's machine when the code was written.
+
+**Authority order** (`entitlements.evaluate_model_entitlement`, first answer wins):
+1. **Connection.** Provider not connected → everything locked, `"Connect in Models"`.
+2. **The provider's own answer** (`provider_reported=`): what *this account*
+   says it can run — a live `/v1/models` query made with the user's credential,
+   `~/.codex/models_cache.json` (ChatGPT plan), `~/.claude.json`
+   `additionalModelOptionsCache` (Claude CLI), the installed Ollama tags. **This
+   is the truth and the tables below never override it.**
+3. **Static tier tables** (`_MODEL_TIER_REQUIREMENTS`) — a conservative guess
+   used ONLY when step 2 has nothing to say: the user isn't connected, or
+   discovery failed and a hardcoded fallback row is being shown.
+
+So two users on different plans see different selectable models from the same
+build: a ChatGPT Free account gets its slugs selectable and the Pro ones greyed
+with a reason; a Pro account gets the opposite. Locked models stay **visible**
+with a `plan_required` reason — never hidden.
+
+**Hardcoded model lists are fallbacks, not truth.** `registry.MODEL_CATALOG`,
+`discovery._fallback_*()` and `app.js::FALLBACK_CATALOG` exist only to render
+something before a credential exists. Everything they produce is flagged
+`is_fallback=True`, which is precisely what tells step 2 it has no provider
+answer. The moment a credential is present, live discovery replaces them.
+- Never add a model id to a fallback list without verifying it resolves.
+  Retired ids are worse than a short list: they render as selectable and then
+  fail at send time. (Audited 2026-09-12: 4 of 6 Claude ids, all 5 xAI ids, and
+  the OpenRouter + Cursor defaults were dead.)
+- `app.js::FALLBACK_CATALOG` is **generated** from `registry.MODEL_CATALOG` —
+  regenerate it rather than hand-editing, so the two cannot drift.
+- Never read another product's files (a competitor's app-support directory) to
+  discover models or credentials.
+
+**A stored model id is a request, not a guarantee.** Model choices persist (an
+agent binding in `agent_model_configs`, `lodestone_model` in localStorage) while
+provider catalogs move underneath them. `entitlements.resolve_usable_model()`
+re-checks every request against what the account offers *now* and substitutes
+the best model the user can run; `run_turn` calls it on the way to
+`get_provider`, and repairs the agent's saved binding when that binding was the
+stale one. A discovery failure never blocks a turn — the request is honoured.
+Never send an id straight from storage to a provider.
+
+**Detection is not consent.** Finding a CLI, a config file or a session on the
+machine means we may *offer* it (`detected_account.found_on_computer` → a
+"Continue" button). It never means connected: no code path may promote a
+credential to CONNECTED, or treat a provider as `ready`, because a binary
+happens to be installed.
+
+**Credentials are independent.** A provider's account and its API key connect
+and disconnect separately (`ProviderConnection.account_status` /
+`api_key_status`, `set_credential(kind, status)`; `connection_status` is a
+derived rollup). Removing a key must never sign the user out, and connecting an
+account must never claim a key exists. `/api/providers/{name}/disconnect` takes
+`scope=account|api_key|all`.
+
+**A subscription is not an API key.** Per provider:
+- **Claude** — no subscription inference endpoint, so an account-connected
+  Claude with no key is delegated to the local Claude CLI
+  (`AnthropicProvider._subscription_backend`).
+- **ChatGPT** — no key → the Codex responses path.
+- **Cursor** — has **no chat-completions API**. `api.cursor.com` is the
+  admin/agent surface (`GET /v1/models` → 401 "Invalid User API Key"), but
+  `POST /v1/chat/completions` → **404 Route not found**. Models run through the
+  headless CLI, `agent -p "<prompt>" --output-format json --model <id>`
+  (install: `curl https://cursor.com/install -fsS | bash`). `CURSOR_API_KEY`
+  authenticates *that CLI* via env — it is not a REST credential, so a key
+  alone cannot run anything. `find_cursor_cli()` verifies the binary really is
+  Cursor's: `agent` is a generic name and a bare PATH hit is not trusted.
+- **xAI** — a SuperGrok subscription covers grok.com and the mobile apps, and
+  grants **no** credits on `api.x.ai`, which is the separately-billed developer
+  API. An OAuth sign-in authenticates and then fails every request (including
+  `GET /v1/models`) with 402 `personal-team-blocked:spending-limit`. So the
+  OAuth token is NOT used as an API key: `XAIProvider._oauth_only` reports not
+  ready with an explanation instead. xAI needs an `XAI_API_KEY` from a
+  console.x.ai account with credits, and `capabilities.py` marks it
+  `api_key_only` so no sign-in button is offered. Subscription support is
+  deferred — see **docs/ROADMAP.md → "Grok subscription support"**.
+
+**A provider with no interactive sign-in is derived, never listed.**
+`ProviderCapabilities.api_key_only` (no oauth/browser/device/CLI login) drives
+both `/api/providers/{name}/signin` and whether the UI renders account and
+sign-in cards. Don't reintroduce `providerId === "gemini"`-style checks in
+`app.js` — add the capability and every surface follows.
+
+Never send a subscription request to an API-key endpoint, and never let a
+credential that merely *authenticates* be reported as ready.
+
+**One sign-in protocol.** `models/auth_flows.py` is the single seam for every
+provider sign-in: `get_flow(provider)` returns an `AuthFlow` with
+`start() -> AuthStart` and `status() -> AuthStatus` (plus optional
+`submit_code` / `cancel`). Routes are `POST /api/providers/{name}/auth/start`,
+`GET …/auth/status`, `POST …/auth/code`, `POST …/auth/cancel`; the old
+per-provider routes (`/signin`, `/{provider}/oauth-status`,
+`/claude/submit-code`) are thin aliases. Which flow a provider gets is derived
+from its capabilities — `api_key_only` → `ApiKeyOnlyFlow`, CLI-owned sign-in →
+its own flow, otherwise `BrowserFlow`. **Adding a provider means registering a
+flow, never adding a route or a UI branch.** A flow must always return a reason
+rather than raise.
+
+**The Models drawer is executed in tests, not just parsed.**
+`tests/test_models_drawer_render.py` runs `renderProviderConnectBox` in node
+(`tests/js/render_provider_box.mjs`, minimal DOM stub) against a real
+`/api/models/catalog` payload and asserts each provider renders the right cards.
+`node --check` only catches syntax — a temporal-dead-zone `ReferenceError`
+(reading a `const` above its declaration) passes it and blanks the entire
+drawer at runtime. Any new render function should be covered the same way.
+
+**Derive UI from capabilities, never from a provider-id chain.** Which cards a
+provider gets comes from `api_key_only` / `has_interactive_signin`; badge text
+comes from `isFoundOnComputer`; brand copy falls back to the provider's label.
+Every `providerId === "x"` branch in a render path is a latent bug for the
+provider that isn't in the chain — that is exactly how `claude-code` ended up
+badged "Using this account" while it was only detected on the machine.
+
+**macOS is the only supported platform.** Don't invest in Windows/Linux paths
+or fallbacks; assume the Mac layout (`~/Library/…`, Homebrew, `security` for the
+Keychain). Existing cross-platform branches can stay, but new work targets Mac.
+
+**Provider errors are translated, never dumped.** `models/errors.py` holds one
+taxonomy for every backend — `ErrorKind` (auth · billing · rate_limit ·
+model_not_found · model_not_entitled · context_too_long · content_filtered ·
+bad_request · server · network · timeout) and a `ProviderError` carrying an
+actionable message, a redacted detail, and `retryable`.
+
+- Classify at the boundary: `classify_http(provider, status, body, model=, key_env=)`
+  for HTTP, `classify_exception(...)` for transport failures,
+  `classify_cli(...)` for CLI-backed providers. Return `err.as_reply()`.
+- **Status alone is not enough** — a 400 can be a bad model, an over-long
+  context, a content filter or a billing block, so the body is inspected first.
+- **Never surface raw provider JSON**, and never a credential: `redact()` strips
+  `sk-…`, `xai-…`, `AIza…` and bearer tokens from anything user-visible.
+- Messages name the provider's `display_name`, never its internal id.
+- A model-level failure suggests models this user can actually run (via the live
+  catalog, locked ones excluded).
+- Providers sharpen a classified error by overriding `_refine_error(err)` —
+  that is how xAI explains the subscription/API-credit split rather than saying
+  a generic "out of credits".
+- A `chat()` must **return** a `ChatResult`, never raise: an uncaught
+  `raise_for_status()` is what turned a Claude 401 into a 500.
+
 ## Keep everything general / device-independent
 This app ships to many users on many machines. Do **not** bake in anything specific
 to one person or one computer:
@@ -151,7 +292,7 @@ Order: **Hero → Connect → Build → Digest → Workspace (welcome + lead age
 - **The workspace** (`index.html`/`styles.css`/`app.js`) is a 3-column layout —
   agent rail (gradient **orb** avatars per agent, `orbStyle()`), chat (serif hero
   empty-state with quick-action cards + orb-avatar assistant messages + pill
-  composer), and a right **Context / Tools** panel (`switchTab`). The header brain
+  composer), and a right **Context / Tools** panel. The header brain
   pill and the sidebar **Brain** nav open the full-screen **Your Brain** screen
   (`openBrainScreen`, a self-contained canvas neural viz whose density tracks the
   memory count). Keep every element id — `app.js` injects into many of them
@@ -164,3 +305,8 @@ Order: **Hero → Connect → Build → Digest → Workspace (welcome + lead age
 `POST /api/brain/reset` · `POST /api/brain/digest` · `POST /api/agents/lead` ·
 `POST /api/agents/{id}/welcome` · `POST /api/providers/{name}/key` ·
 `POST /api/sync/cancel`.
+
+Model/provider API: `GET /api/models/catalog` · `GET /api/providers` ·
+`POST /api/providers/{name}/auth/{start,status,code,cancel}` ·
+`POST /api/providers/{name}/disconnect?scope=account|api_key|all` ·
+`POST /api/providers/{name}/connect-local` · `POST /api/providers/{name}/refresh`.
