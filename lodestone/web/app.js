@@ -824,13 +824,17 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
           return;
         }
 
-        if (!floating) toast(`Opening ${brandName} in browser…`);
-
         // In the desktop app a floating card also follows the user to the
         // browser. The in-app row stays either way, so the Models panel still
         // shows what is happening and offers Cancel.
+        // Declare BEFORE any read: `if (!floating)` above this line threw a
+        // temporal-dead-zone ReferenceError, which the catch below turned into
+        // "Sign in error" and tore the whole card down the moment the browser
+        // opened. `node --check` does not catch TDZ.
         const floating = await raiseFloatingSigninCard(
           providerId, brandName, res.auth_url || "");
+
+        if (!floating) toast(`Opening ${brandName} in browser…`);
 
         // Open browser tab if the backend hasn't already (e.g. no CLI available)
         if (res.auth_url && !res.browser_opened) {
