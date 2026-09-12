@@ -335,6 +335,18 @@ dead-zone `ReferenceError` blanked the whole drawer and still passed
 you add a render path or a click handler, execute it in a test** — and when you
 write the harness, verify it fails with the bug reintroduced before trusting it.
 
+Two more ways these harnesses go blind, both learned the hard way:
+- **Clicking is not covering.** `click_signin.mjs` existed and clicked the
+  button, but every fixture short-circuited into the CLI branch — so the
+  browser branch, where a second TDZ read of `floating` lived, never ran.
+  Feed the harness an **explicit** `authStartResponse` per branch (see
+  `BROWSER_FLOW`) instead of whatever `get_flow().start()` happens to return
+  on this machine; one provider's real flow does not exercise the others.
+- **Read the write, not the aftermath.** A handler's own `catch` calls
+  `stopPolling()`, which re-renders the box and wipes the error it just set,
+  so asserting on the final DOM sees a clean screen. The stub records every
+  `textContent` write (`textWrites`); assert against that.
+
 **Derive UI from capabilities, never from a provider-id chain.** Which cards a
 provider gets comes from `api_key_only` / `has_interactive_signin`; badge text
 comes from `isFoundOnComputer`; brand copy falls back to the provider's label.
