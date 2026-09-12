@@ -37,6 +37,7 @@ class AuthStart:
     key_env: str = ""
     cli_required: bool = False
     cli_found: bool = False
+    cli_installable: bool = False      # we can fetch it for the user
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -183,14 +184,16 @@ class CursorFlow:
     provider_id = "cursor"
 
     def start(self) -> AuthStart:
-        from .cursor import INSTALL_HINT, cursor_cli_auth_status, start_cursor_cli_login
+        from .cursor import cursor_cli_auth_status, start_cursor_cli_login
 
         st = cursor_cli_auth_status()
         if not st["installed"]:
             return AuthStart(
                 provider_id=self.provider_id, started=False, brand_name="Cursor",
-                cli_required=True, cli_found=False,
-                auth_url="https://cursor.com/docs/cli/overview", detail=INSTALL_HINT)
+                cli_required=True, cli_found=False, cli_installable=True,
+                auth_url="https://cursor.com/docs/cli/overview",
+                detail="Cursor runs through its CLI. "
+                       "Lodestone can install it for you.")
 
         ok, msg = start_cursor_cli_login()
         return AuthStart(
@@ -219,14 +222,16 @@ class GrokFlow:
     provider_id = "xai"
 
     def start(self) -> AuthStart:
-        from .grok_cli import INSTALL_HINT, grok_cli_auth_status, start_grok_cli_login
+        from .grok_cli import grok_cli_auth_status, start_grok_cli_login
 
         st = grok_cli_auth_status()
         if not st["installed"]:
             return AuthStart(
                 provider_id=self.provider_id, started=False, brand_name="Grok",
-                cli_required=True, cli_found=False,
-                auth_url="https://x.ai/news/grok-build-cli", detail=INSTALL_HINT)
+                cli_required=True, cli_found=False, cli_installable=True,
+                auth_url="https://x.ai/news/grok-build-cli",
+                detail="Grok runs through its CLI. "
+                       "Lodestone can install it for you.")
 
         ok, msg = start_grok_cli_login()
         return AuthStart(

@@ -919,6 +919,44 @@ def open_browser_endpoint(payload: dict):
         raise HTTPException(500, f"Failed to open browser: {exc}")
 
 
+@app.get("/api/providers/{name}/cli")
+def provider_cli_status(name: str):
+    """Is the vendor CLI this provider needs installed, and by us?"""
+    from ..models.cli_manager import PROVIDER_CLI, install_status
+
+    vendor = PROVIDER_CLI.get(name.lower())
+    if not vendor:
+        return {"installable": False, "vendor": None}
+    return install_status(vendor)
+
+
+@app.post("/api/providers/{name}/cli/install")
+def provider_cli_install(name: str):
+    """Download and pin the vendor CLI. Runs in the background so a UI refresh
+    cannot kill it; poll GET /api/providers/{name}/cli for progress."""
+    from ..models.cli_manager import PROVIDER_CLI, start_install
+
+    vendor = PROVIDER_CLI.get(name.lower())
+    if not vendor:
+        raise HTTPException(400, f"'{name}' does not use a managed CLI")
+    from ..models.registry import clear_provider_cache
+    clear_provider_cache(name)
+    return start_install(vendor)
+
+
+@app.post("/api/providers/{name}/cli/uninstall")
+def provider_cli_uninstall(name: str):
+    from ..models.cli_manager import PROVIDER_CLI, uninstall_cli
+
+    vendor = PROVIDER_CLI.get(name.lower())
+    if not vendor:
+        raise HTTPException(400, f"'{name}' does not use a managed CLI")
+    removed = uninstall_cli(vendor)
+    from ..models.registry import clear_provider_cache
+    clear_provider_cache(name)
+    return {"removed": removed, "vendor": vendor}
+
+
 @app.post("/api/providers/{name}/auth/start")
 def auth_start_endpoint(name: str):
     """Begin sign-in for a provider — or explain why it has none."""

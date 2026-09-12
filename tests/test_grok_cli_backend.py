@@ -189,7 +189,8 @@ def test_signin_explains_installation_when_the_cli_is_missing():
          patch("webbrowser.open", side_effect=AssertionError("opened a useless page")):
         body = TestClient(app).post("/api/providers/xai/auth/start").json()
     assert body["started"] is False and body["cli_required"] is True
-    assert "x.ai/cli/install.sh" in body["detail"]
+    assert body["cli_installable"] is True, "we can fetch the CLI — offer to"
+    assert "install it for you" in body["detail"]
 
 
 def test_status_reports_waiting_then_success():

@@ -60,6 +60,14 @@ def find_cursor_cli() -> str | None:
     `agent` on PATH, or the `cursor` editor launcher, neither of which speaks
     the headless protocol.
     """
+    # Our own managed copy wins: it is version-pinned and we installed it, so a
+    # user never has to install anything by hand.
+    from .cli_manager import managed_binary
+
+    pinned = managed_binary("cursor")
+    if pinned:
+        return str(pinned)
+
     candidates: list[str] = []
     which = shutil.which("cursor-agent", path=_augmented_path())
     if which:

@@ -136,15 +136,24 @@ def _click_signin(provider: str, catalog=None) -> dict:
     return json.loads(proc.stdout)
 
 
-@pytest.mark.parametrize("provider", ["cursor", "claude-code", "xai"])
-def test_cli_providers_show_instructions_when_sign_in_is_clicked(provider, catalog_json):
-    """These have no browser flow — the button must explain what to run."""
+@pytest.mark.parametrize("provider", ["cursor", "xai"])
+def test_managed_cli_providers_offer_a_one_click_install(provider, catalog_json):
+    """We can fetch these CLIs, so the button installs rather than telling the
+    user to open a terminal."""
     r = _click_signin(provider, catalog_json)
     assert r["clicked"], f"{provider} sign-in button has no handler"
     assert r["error"] is None, r["error"]
     assert r["containerHtml"], f"{provider}: clicking produced nothing on screen"
+    assert "ts-cli-install" in r["containerHtml"], "no install button"
+    assert "ts-cli-progress" in r["containerHtml"], "no progress indicator"
+
+
+def test_unmanaged_cli_providers_still_show_the_command(catalog_json):
+    """Claude Code is not fetched by us, so it falls back to the exact command."""
+    r = _click_signin("claude-code", catalog_json)
+    assert r["error"] is None, r["error"]
     assert "ts-cli-cmd" in r["containerHtml"], "no copyable command shown"
-    assert "ts-cli-recheck" in r["containerHtml"], "no way to re-check after signing in"
+    assert "ts-cli-recheck" in r["containerHtml"], "no way to re-check"
 
 
 def test_the_click_actually_asks_the_backend(catalog_json):

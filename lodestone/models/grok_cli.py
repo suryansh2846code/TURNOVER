@@ -54,6 +54,14 @@ def _augmented_path() -> str:
 
 def find_grok_cli() -> str | None:
     """Locate xAI's `grok` binary, verifying it is actually theirs."""
+    # Our own managed copy wins: it is version-pinned and we installed it, so a
+    # user never has to install anything by hand.
+    from .cli_manager import managed_binary
+
+    pinned = managed_binary("grok")
+    if pinned:
+        return str(pinned)
+
     candidates = []
     which = shutil.which("grok", path=_augmented_path())
     if which:

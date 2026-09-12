@@ -128,7 +128,8 @@ def test_signin_points_at_the_cli_instead_of_a_dead_browser_flow():
         body = TestClient(app).post("/api/providers/cursor/signin").json()
     assert body["started"] is False
     assert body["cli_required"] is True
-    assert "cursor.com/install" in body["detail"]
+    assert body["cli_installable"] is True, "we can fetch the CLI — offer to"
+    assert "install it for you" in body["detail"]
 
 
 def test_signin_runs_the_cli_browser_login_when_installed():
@@ -205,5 +206,6 @@ def test_cli_instructions_surface_the_command():
     src = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
     fn = src[src.index("function showCliInstructions"):]
     fn = fn[:fn.index("\nfunction ")]
-    assert "ts-cli-cmd" in fn and "clipboard" in fn, "command is not copyable"
+    assert "ts-cli-install" in fn, "no one-click install path"
+    assert "ts-cli-cmd" in fn and "clipboard" in fn, "no copyable-command fallback"
     assert "ts-cli-recheck" in fn, "no way to re-check after signing in"

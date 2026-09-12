@@ -4,6 +4,39 @@ Local-first AI **agent workspace**: a team of agents share one on-device "brain"
 (memories + a knowledge graph) built from the user's connected sources. Bring your
 own model. Everything runs and stays on the user's machine.
 
+## This is a product, not a developer tool
+Lodestone ships to people who did not build it. **Every decision is a product
+decision** — when there is a trade-off between "correct for an engineer" and
+"works for the person who installed this", choose the second and make it
+correct underneath.
+
+What that means concretely, and what it has already changed:
+
+- **Never ask the user to open a terminal.** The vendor CLIs that back
+  subscription sign-in (Cursor, Grok, and Claude Code) are downloaded, pinned
+  and managed by us — `models/cli_manager.py`, into
+  `~/Library/Lodestone/agent-binaries/` with symlinks in `bin/`. One button,
+  with progress. A copyable command is the fallback, never the plan.
+- **Never show a control that cannot work.** A sign-in button that opens a page
+  we learn nothing from, a model that 404s when selected, a "Connected" badge
+  with no credential — each of these shipped here and each read as "the app is
+  broken". If a path cannot succeed, say why, in the place the user is looking.
+- **Never surface an internal.** No raw provider JSON, no stack traces, no
+  internal ids in user-facing text. Errors say what happened and what to do
+  (`models/errors.py`).
+- **Never make the user wait without telling them.** Long work runs as a
+  background job with progress that survives a refresh — sync, brain enrich, CLI
+  install. A spinner with no end state is a bug.
+- **Never lose the user's state to our mistakes.** A stored model id that a
+  provider retired is repaired, not fatal. A connection that cannot be used is
+  reported, not silently dropped.
+- **Assume nothing is installed and nothing is configured.** First launch, no
+  keys, no CLIs, no accounts — the app must still open, explain itself, and
+  offer a way forward.
+
+When in doubt: would a non-technical user understand what just happened, and
+what to do next? If not, it is not finished.
+
 ## Run it
 - `lodestone serve` → FastAPI on a browser tab.
 - `lodestone app` → native desktop window (**pywebview / WKWebView**), server on a
@@ -153,6 +186,16 @@ and disconnect separately (`ProviderConnection.account_status` /
 derived rollup). Removing a key must never sign the user out, and connecting an
 account must never claim a key exists. `/api/providers/{name}/disconnect` takes
 `scope=account|api_key|all`.
+
+**We install the vendor CLIs ourselves** (`models/cli_manager.py`). Artifacts
+are fetched **directly** — a vendor's install script is read as a *manifest*
+(it names a version and a plain artifact URL) and never piped into a shell, so
+the install is auditable, lands in our own directory, and cannot run arbitrary
+code as the user. Downloads run as a background job with progress; a verify step
+(`--version`) must pass before the binary is linked, and a failed download is
+never linked. `find_*_cli()` prefers our pinned copy over anything on PATH.
+Managed today: `cursor` (agent), `grok`. Adding one means adding a `CliSpec` and
+a resolver.
 
 **Vendor CLIs own sign-in too, not just inference.** Each ships a `login`
 command that opens the vendor's own consent page, because the OAuth client

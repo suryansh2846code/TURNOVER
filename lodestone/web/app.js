@@ -346,9 +346,58 @@ function subscriptionUsageRemainingPercent(usedPercent) {
   return Math.max(0, Math.min(100, Math.round(100 - (Number(usedPercent) || 0))));
 }
 
-function showCliInstructions(containerEl, res, brandName, onRefresh) {
-  // Providers whose sign-in lives in their own CLI (Cursor, Claude Code). There
-  // is nothing to open — show the command and let the user re-check.
+function showCliInstructions(containerEl, res, brandName, providerId, onRefresh) {
+  // Cursor, Grok and Claude Code sign in through their own CLI. If we can fetch
+  // that CLI ourselves, offer one button — a product shouldn't ask someone to
+  // open a terminal. Otherwise fall back to the exact command.
+  if (res.cli_installable) {
+    containerEl.innerHTML = `
+      <div class="ts-card">
+        <div class="ts-card-left">
+          <span class="ts-card-title">Set up ${esc(brandName)}</span>
+          <span class="ts-card-sub">${esc((res.detail || "").replace(/`/g, ""))}</span>
+        </div>
+        <div class="ts-cli-progress" hidden>
+          <div class="ts-progress-track"><div class="ts-progress-fill" style="width:0%"></div></div>
+          <span class="ts-cli-progress-label">Starting…</span>
+        </div>
+        <div class="ts-action-group" style="margin-top:10px">
+          <button type="button" class="tiny primary ts-cli-install">Install &amp; sign in</button>
+          ${res.auth_url ? `<a class="pc-link" href="${esc(res.auth_url)}" target="_blank" rel="noopener">Docs ↗</a>` : ""}
+        </div>
+      </div>`;
+
+    const btn = containerEl.querySelector(".ts-cli-install");
+    const box = containerEl.querySelector(".ts-cli-progress");
+    const bar = containerEl.querySelector(".ts-progress-fill");
+    const label = containerEl.querySelector(".ts-cli-progress-label");
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = "Installing…";
+      box.hidden = false;
+      try {
+        await api(`/api/providers/${providerId}/cli/install`, { method: "POST" });
+        const done = await pollCliInstall(providerId, (st) => {
+          bar.style.width = `${st.percent || 0}%`;
+          label.textContent = st.message || "Working…";
+        });
+        if (done.state === "error") {
+          label.textContent = done.error || "Install failed.";
+          btn.disabled = false;
+          btn.textContent = "Try again";
+          return;
+        }
+        label.textContent = "Installed — opening sign-in…";
+        onRefresh(true);            // re-run sign-in now that the CLI exists
+      } catch (e) {
+        label.textContent = `Install failed: ${e.message || e}`;
+        btn.disabled = false;
+        btn.textContent = "Try again";
+      }
+    };
+    return;
+  }
+
   const cmds = (res.detail || "").match(/`([^`]+)`/g) || [];
   const commands = cmds.map((c) => c.replace(/`/g, ""));
   containerEl.innerHTML = `
@@ -374,8 +423,18 @@ function showCliInstructions(containerEl, res, brandName, onRefresh) {
   const recheck = containerEl.querySelector(".ts-cli-recheck");
   if (recheck) recheck.onclick = async () => {
     recheck.disabled = true;
-    try { await loadProviders(); } finally { onRefresh(); }
+    try { await loadProviders(); } finally { onRefresh(false); }
   };
+}
+
+async function pollCliInstall(providerId, onTick) {
+  for (let i = 0; i < 600; i++) {
+    const st = await api(`/api/providers/${providerId}/cli`).catch(() => ({ state: "error", error: "lost connection" }));
+    onTick(st);
+    if (st.state === "done" || st.state === "error") return st;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return { state: "error", error: "Install timed out." };
 }
 
 function renderProviderConnectBox(boxEl, providerId, options = {}) {
@@ -712,8 +771,14 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
             // Write into the LIVE container. Calling restore() first would
             // re-render the whole box and detach signinContainer, so the card
             // would be built into an orphaned node and never appear.
-            showCliInstructions(signinContainer, res, brandName, () =>
-              renderProviderConnectBox(boxEl, providerId, options));
+            showCliInstructions(signinContainer, res, brandName, providerId,
+              async (retry) => {
+                await loadProviders();
+                renderProviderConnectBox(boxEl, providerId, options);
+                // The CLI now exists, so the same button can start the real
+                // browser sign-in without a second click.
+                if (retry) boxEl.querySelector(".ts-signin-btn")?.click();
+              });
           } else {
             restore();
             toast(res.detail || `${brandName} has no browser sign-in.`);

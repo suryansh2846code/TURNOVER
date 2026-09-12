@@ -60,10 +60,9 @@ and that subscription support would need grok.com's private backend. xAI ships
 as the Claude Code and Cursor backends, and what the `grok-cli:access` scope on
 our OAuth token is for.
 
-**Still open:** users must install the CLI themselves. Competing apps bundle
-version-pinned vendor binaries (`claude`, `codex`, `cursor-agent`, `grok`) under
-their own app-support directory. Doing the same is better UX but real work —
-download, checksum, pin, update — and is a separate decision.
+**Bundling shipped** — `models/cli_manager.py` downloads and pins the CLI, so
+users install nothing by hand. Artifacts are fetched directly; the vendor's
+install script is read as a manifest, never executed.
 
 **Note:** `models/xai_auth.py` still authenticates with client id `b1a00492-…`
 and `referrer=opencode` — **not ours**. That OAuth flow is unreachable now
