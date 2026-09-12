@@ -136,6 +136,17 @@ def open_signin(provider: str, brand: str, auth_url: str = "") -> bool:
             return False
 
 
+def diagnostics() -> dict:
+    """Why the floating card is or isn't available — for support, not for flow
+    control. Silence here is what made this hard to diagnose."""
+    return {
+        "origin_set": _origin is not None,
+        "main_window": _main_window is not None,
+        "hud_window_prepared": _hud_window is not None,
+        "available": available(),
+    }
+
+
 def close() -> None:
     """Hide the card. The window is reused, never destroyed — tearing one down
     from a worker thread is exactly the cross-thread work we are avoiding."""

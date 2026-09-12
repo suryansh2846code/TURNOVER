@@ -196,11 +196,19 @@ let activeWaitingHud = null;
 async function raiseFloatingSigninCard(providerId, brandName, authUrl) {
   // Only the desktop app has a window to create; in a browser tab this is
   // absent and the in-app card handles the wait instead.
-  const bridge = window.pywebview?.api?.open_signin_hud;
-  if (!bridge) return false;
+  const api = window.pywebview && window.pywebview.api;
+  if (!api || typeof api.open_signin_hud !== "function") {
+    console.info("[lodestone] no native window bridge — using the in-app card");
+    return false;
+  }
   try {
-    return Boolean(await bridge(providerId, brandName, authUrl));
-  } catch (_) {
+    const ok = Boolean(await api.open_signin_hud(providerId, brandName, authUrl));
+    // Silence here is what made this hard to diagnose: the bridge existed but
+    // the window never appeared, and nothing said so.
+    if (!ok) console.warn("[lodestone] native sign-in window could not be shown");
+    return ok;
+  } catch (e) {
+    console.warn("[lodestone] native sign-in window failed:", e);
     return false;
   }
 }
