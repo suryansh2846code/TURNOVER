@@ -193,6 +193,15 @@ const BRAND_ICONS = {
 
 let activeWaitingHud = null;
 
+// Report which sign-in branch ran, so "the card showed up in the wrong place"
+// is answerable. Fire-and-forget: this must never affect the sign-in itself.
+function noteSigninBranch(providerId, branch, detail = "") {
+  try {
+    api("/api/hud/note", { method: "POST",
+      body: { provider: providerId, branch, detail: String(detail) } });
+  } catch (_) {}
+}
+
 async function raiseFloatingSigninCard(providerId, brandName, authUrl) {
   // Only the desktop app has a window to create; in a browser tab this is
   // absent and the in-app card handles the wait instead.
@@ -793,6 +802,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
         const res = await api(`/api/providers/${providerId}/auth/start`, { method: "POST" });
 
         if (res.connected) {
+          noteSigninBranch(providerId, "already-connected", res.detail || "");
           toast(`✓ ${res.detail || 'Connected!'}`);
           stopPolling();
           await loadProviders();
@@ -805,6 +815,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
         if (res.started === false) {
           signinBtn.disabled = false;
           if (res.cli_required) {
+            noteSigninBranch(providerId, "cli-required", res.detail || "");
             // Write into the LIVE container. Calling restore() first would
             // re-render the whole box and detach signinContainer, so the card
             // would be built into an orphaned node and never appear.
@@ -817,6 +828,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
                 if (retry) boxEl.querySelector(".ts-signin-btn")?.click();
               });
           } else {
+            noteSigninBranch(providerId, "no-browser-signin", res.detail || "");
             restore();
             toast(res.detail || `${brandName} has no browser sign-in.`);
             if (res.api_key_only) boxEl.querySelector(".ts-toggle-key-btn")?.click();
@@ -833,6 +845,8 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
         // opened. `node --check` does not catch TDZ.
         const floating = await raiseFloatingSigninCard(
           providerId, brandName, res.auth_url || "");
+
+        noteSigninBranch(providerId, floating ? "floating-card" : "in-app-card");
 
         if (!floating) toast(`Opening ${brandName} in browser…`);
 
