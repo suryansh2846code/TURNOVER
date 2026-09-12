@@ -45,6 +45,13 @@ What that means concretely, and what it has already changed:
   Poll the cheap endpoint and call the expensive one **once**, on success. CLI
   sign-in checks shell out, so they are cached for a few seconds
   (`reset_auth_cache()` on login and cancel).
+- **A re-sign-in is not the old session.** Completion is the CLI's login
+  *process exiting* (or the account visibly changing), never "the account looks
+  authenticated" — which is already true when switching accounts and reported
+  success on the first poll, before the user had touched the browser.
+  `login_progress()` records who was signed in at start and compares.
+  `AuthStatus`: **idle** = nothing in flight, **waiting** = a sign-in we started
+  is running, **success** = it finished.
 - **Anything the user starts, they can stop.** Sign-in is cancellable from both
   the floating card and the Models card: `/auth/cancel` → `AuthFlow.cancel()`
   terminates the CLI's login process. Dismissing the floating card cancels too —

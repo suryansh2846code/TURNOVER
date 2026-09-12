@@ -199,11 +199,25 @@ def test_status_reports_waiting_then_success():
     from lodestone.api.app import app
     from lodestone.models.connections import ProviderConnection, get_connection, save_connection
 
+    from lodestone.models import grok_cli as mod
+
     save_connection(ProviderConnection(provider="xai"))
     client = TestClient(app)
+
+    # Nothing in flight -> idle; "waiting" means a sign-in we started is running.
     with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
          patch("subprocess.run", return_value=_cp(0, MODELS_OUT)):   # "not authenticated"
+        assert client.get("/api/providers/xai/auth/status").json()["status"] == "idle"
+
+    class _Running:
+        def poll(self): return None
+
+    mod._login_proc, mod._login_baseline = _Running(), {"authenticated": False}
+    mod.reset_auth_cache()
+    with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
+         patch("subprocess.run", return_value=_cp(0, MODELS_OUT)):
         assert client.get("/api/providers/xai/auth/status").json()["status"] == "waiting"
+    mod.reset_login_state()
 
     # Cached for a few seconds so polling is cheap; a completed login is
     # noticed once that lapses.

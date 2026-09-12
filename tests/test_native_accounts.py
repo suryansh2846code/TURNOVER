@@ -266,12 +266,18 @@ def test_openai_oauth_callback_handler(monkeypatch):
     import httpx
     monkeypatch.setattr(httpx, "post", lambda *args, **kwargs: DummyResp())
 
+    # Bind an ephemeral port rather than the registered 1455: the fixed port is
+    # regularly held by a running Lodestone mid-sign-in, and a test that fails
+    # for that reason teaches nothing.
+    monkeypatch.setattr("lodestone.models.chatgpt_auth.REDIRECT_PORT", 0)
+
     ok, auth_url, msg = start_chatgpt_oauth_flow()
-    assert ok is True
+    assert ok is True, msg
+    port = _GLOBAL_AUTH_STATE.server.server_address[1]
 
     # Call callback with valid state
     state = _GLOBAL_AUTH_STATE.state
-    callback_url = f"http://127.0.0.1:1455/auth/callback?code=ac_test_code_123&state={state}"
+    callback_url = f"http://127.0.0.1:{port}/auth/callback?code=ac_test_code_123&state={state}"
 
     req = urllib.request.Request(callback_url)
     with urllib.request.urlopen(req) as resp:

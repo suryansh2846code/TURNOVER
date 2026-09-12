@@ -21,6 +21,14 @@ from lodestone.models.base import Message, parse_cli_json
 from lodestone.models.cursor import CursorProvider, find_cursor_cli
 
 HELLO = [Message(role="user", content="hi")]
+
+
+class _Running:
+    def poll(self): return None
+
+
+class _Exited:
+    def poll(self): return 0
 AGENT = "/Users/me/.local/bin/agent"
 
 
@@ -154,12 +162,23 @@ def test_signin_runs_the_cli_browser_login_when_installed():
 
 
 def test_status_polls_the_cli_and_connects_on_success():
+    from lodestone.models import cursor as mod
     from lodestone.models.connections import ProviderConnection, get_connection, save_connection
 
     save_connection(ProviderConnection(provider="cursor"))
+
+    # Nothing in flight and not signed in -> idle. "waiting" means a sign-in we
+    # started is still running.
+    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+         patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')):
+        assert TestClient(app).get("/api/providers/cursor/auth/status").json()["status"] == "idle"
+
+    mod._login_proc, mod._login_baseline = _Running(), {"authenticated": False, "email": None}
+    mod.reset_auth_cache()
     with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')):
         assert TestClient(app).get("/api/providers/cursor/auth/status").json()["status"] == "waiting"
+    mod.reset_login_state()
 
     # Sign-in state is cached for a few seconds so polling doesn't spawn a
     # subprocess per tick; a completed login is noticed once that lapses.
@@ -277,3 +296,54 @@ def test_the_waiting_hud_polls_every_provider():
     assert "/auth/status" in hud
     assert "MAX_ATTEMPTS" in hud, "no explicit wait budget"
     assert "press Refresh" in hud, "a timeout must say what to do next"
+
+
+# ── a re-sign-in must not be satisfied by the existing session ───────────
+def _flow_status(proc, baseline, cli_json):
+    from lodestone.models import cursor as mod
+    from lodestone.models.auth_flows import get_flow
+
+    mod._login_proc, mod._login_baseline = proc, baseline
+    mod.reset_auth_cache()
+    try:
+        with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+             patch("subprocess.run", return_value=_proc(cli_json)):
+            return get_flow("cursor").status().status
+    finally:
+        mod._login_proc, mod._login_baseline = None, None
+        mod.reset_auth_cache()
+
+
+SAME = '{"isAuthenticated": true, "userInfo": {"email": "me@example.com"}}'
+OTHER = '{"isAuthenticated": true, "userInfo": {"email": "new@example.com"}}'
+BASE = {"authenticated": True, "email": "me@example.com"}
+
+
+def test_signing_in_again_waits_instead_of_reporting_the_old_session():
+    """Clicking Sign in while already signed in used to report success on the
+    first poll — before the user had touched the browser — tearing down the
+    waiting row and the floating card immediately."""
+    assert _flow_status(_Running(), BASE, SAME) == "waiting"
+
+
+def test_switching_to_a_different_account_is_noticed():
+    assert _flow_status(_Running(), BASE, OTHER) == "success"
+
+
+def test_finishing_in_the_browser_completes_it():
+    """The CLI's login process exiting is the real completion signal."""
+    assert _flow_status(_Exited(), BASE, SAME) == "success"
+
+
+def test_no_sign_in_running_just_reports_the_current_state():
+    assert _flow_status(None, None, SAME) == "success"
+    assert _flow_status(None, None, '{"isAuthenticated": false}') == "idle"
+
+
+def test_cancelling_clears_the_in_flight_state():
+    from lodestone.models import cursor as mod
+
+    mod._login_proc, mod._login_baseline = _Running(), BASE
+    with patch.object(_Running, "terminate", create=True):
+        mod.cancel_cli_login()
+    assert mod.login_progress()["in_flight"] is False

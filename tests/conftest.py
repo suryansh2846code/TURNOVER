@@ -42,8 +42,10 @@ def _no_stale_cli_auth_cache():
     subprocess per tick. That cache must not leak between tests."""
     from lodestone.models import cursor, grok_cli
 
-    cursor.reset_auth_cache()
-    grok_cli.reset_auth_cache()
+    for mod in (cursor, grok_cli):
+        mod.reset_auth_cache()
+        mod.reset_login_state()
     yield
-    cursor.reset_auth_cache()
-    grok_cli.reset_auth_cache()
+    for mod in (cursor, grok_cli):
+        mod.reset_auth_cache()
+        mod.reset_login_state()

@@ -208,16 +208,29 @@ class CursorFlow:
         cancel_cli_login()
 
     def status(self) -> AuthStatus:
-        from .cursor import cursor_cli_auth_status
+        from .cursor import cursor_cli_auth_status, login_progress
 
         st = cursor_cli_auth_status()
+        if not st["installed"]:
+            return AuthStatus(provider_id=self.provider_id, status="idle")
+
+        progress = login_progress()
+        if progress["in_flight"]:
+            # A sign-in we started. Completion is the CLI's process exiting or
+            # the account changing — NOT the session merely looking
+            # authenticated, which is already true when switching accounts and
+            # would report success before the user touched the browser.
+            if not progress["done"]:
+                return AuthStatus(provider_id=self.provider_id, status="waiting")
+            _mark_account_connected("cursor", progress.get("email"), "Cursor")
+            return AuthStatus(provider_id=self.provider_id, status="success",
+                              email=progress.get("email") or "")
+
         if st.get("authenticated"):
             _mark_account_connected("cursor", st.get("email"), "Cursor")
             return AuthStatus(provider_id=self.provider_id, status="success",
                               email=st.get("email") or "")
-        if not st["installed"]:
-            return AuthStatus(provider_id=self.provider_id, status="idle")
-        return AuthStatus(provider_id=self.provider_id, status="waiting")
+        return AuthStatus(provider_id=self.provider_id, status="idle")
 
 
 class GrokFlow:
@@ -250,15 +263,23 @@ class GrokFlow:
         cancel_cli_login()
 
     def status(self) -> AuthStatus:
-        from .grok_cli import grok_cli_auth_status
+        from .grok_cli import grok_cli_auth_status, login_progress
 
         st = grok_cli_auth_status()
+        if not st["installed"]:
+            return AuthStatus(provider_id=self.provider_id, status="idle")
+
+        progress = login_progress()
+        if progress["in_flight"]:
+            if not progress["done"]:
+                return AuthStatus(provider_id=self.provider_id, status="waiting")
+            _mark_account_connected("xai", None, "Grok subscription")
+            return AuthStatus(provider_id=self.provider_id, status="success")
+
         if st.get("authenticated"):
             _mark_account_connected("xai", None, "Grok subscription")
             return AuthStatus(provider_id=self.provider_id, status="success")
-        if not st["installed"]:
-            return AuthStatus(provider_id=self.provider_id, status="idle")
-        return AuthStatus(provider_id=self.provider_id, status="waiting")
+        return AuthStatus(provider_id=self.provider_id, status="idle")
 
 
 class ClaudeCodeFlow:

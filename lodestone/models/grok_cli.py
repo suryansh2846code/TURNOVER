@@ -151,6 +151,13 @@ def grok_cli_auth_status(*, fresh: bool = False) -> dict:
 
 
 _login_proc: subprocess.Popen | None = None
+_login_baseline: dict | None = None      # who was signed in when it started
+
+
+def reset_login_state() -> None:
+    """Forget any in-flight login (used on disconnect, and by tests)."""
+    global _login_proc, _login_baseline
+    _login_proc, _login_baseline = None, None
 
 
 def reset_auth_cache() -> None:
@@ -159,13 +166,41 @@ def reset_auth_cache() -> None:
     _auth_cache = None
 
 
+def login_progress() -> dict:
+    """How an in-flight `login` is going.
+
+    Completion is the CLI's process exiting, not the account merely looking
+    authenticated: re-signing in while already signed in would otherwise report
+    success on the first poll, before the user had touched the browser.
+    """
+    def _still_running(proc) -> bool:
+        poll = getattr(proc, "poll", None)
+        return callable(poll) and poll() is None
+
+    baseline = _login_baseline or {}
+    current = grok_cli_auth_status(fresh=_login_proc is not None and not _still_running(_login_proc))
+    running = _still_running(_login_proc)
+    changed_account = (
+        bool(current.get("email")) and current.get("email") != baseline.get("email"))
+    newly_authed = bool(current.get("authenticated")) and not baseline.get("authenticated")
+    return {
+        "in_flight": _login_proc is not None,
+        "running": running,
+        "authenticated": bool(current.get("authenticated")),
+        "email": current.get("email"),
+        # Either the process finished, or the account visibly changed under us.
+        "done": bool(current.get("authenticated")) and (not running or changed_account or newly_authed),
+    }
+
+
 def cancel_cli_login() -> bool:
     """Stop an in-progress `login`. The browser tab stays open; the user simply
     never finishes, and nothing is recorded."""
-    global _login_proc, _auth_cache
+    global _login_proc, _auth_cache, _login_baseline
     proc, _login_proc = _login_proc, None
+    _login_baseline = None
     _auth_cache = None
-    if proc is None or proc.poll() is not None:
+    if proc is None or not callable(getattr(proc, "poll", None)) or proc.poll() is not None:
         return False
     try:
         proc.terminate()
@@ -183,7 +218,10 @@ def start_grok_cli_login() -> tuple[bool, str]:
     cli = find_grok_cli()
     if not cli:
         return False, INSTALL_HINT
-    global _login_proc, _auth_cache
+    global _login_proc, _auth_cache, _login_baseline
+    # Remember who was signed in before, so an existing session is not mistaken
+    # for the sign-in we are about to start.
+    _login_baseline = grok_cli_auth_status(fresh=True)
     _auth_cache = None      # the answer is about to change
     try:
         _login_proc = subprocess.Popen([cli, "login", "--oauth"],
