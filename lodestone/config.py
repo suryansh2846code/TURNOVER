@@ -23,6 +23,17 @@ def _default_home() -> Path:
     return Path.home() / ".lodestone"
 
 
+# Every Keychain read spawns `security`. Building the model catalog asks for
+# ~50 secrets, which cost most of a second in subprocess spawns alone — so reads
+# are memoised briefly and flushed whenever a secret is written.
+_SECRET_CACHE: dict[str, tuple[float, str | None]] = {}
+_SECRET_TTL = 5.0
+
+
+def forget_cached_secrets() -> None:
+    _SECRET_CACHE.clear()
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="LODESTONE_", env_file=".env", extra="ignore"
@@ -127,15 +138,25 @@ class Settings(BaseSettings):
         env = os.environ.get(key)
         if env:
             return env
+
+        import time
+
+        hit = _SECRET_CACHE.get(key)
+        if hit and (time.monotonic() - hit[0]) < _SECRET_TTL:
+            return hit[1]
+
+        value = None
         if self._keychain_ok():
-            v = self._kc_get(key)
-            if v:
-                return v
-        return self._load_secrets().get(key) or None   # legacy plaintext fallback
+            value = self._kc_get(key) or None
+        if value is None:
+            value = self._load_secrets().get(key) or None   # legacy plaintext fallback
+        _SECRET_CACHE[key] = (time.monotonic(), value)
+        return value
 
     def set_secret(self, key: str, value: str | None) -> None:
         """Store a secret encrypted at rest in the Keychain when available, else
         in the local file. Any plaintext copy in the file is migrated out."""
+        forget_cached_secrets()
         if self._keychain_ok():
             if value:
                 if self._kc_set(key, value.strip()):

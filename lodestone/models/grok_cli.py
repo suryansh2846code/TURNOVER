@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 
 from .base import ChatResult, LLMProvider, Message, parse_cli_json
+from .cache import ttl_cached
 from .errors import ErrorKind, ProviderError, classify_cli
 
 # GUI-launched apps get a minimal PATH; the installer uses ~/.local/bin.
@@ -84,6 +85,7 @@ def find_grok_cli() -> str | None:
     return None
 
 
+@ttl_cached(120.0)
 def grok_cli_models() -> list[str]:
     """Ask the CLI what this account can run — `grok models` prints e.g.
 

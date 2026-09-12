@@ -473,8 +473,11 @@ def clear_provider_cache(provider: str | None = None) -> None:
     serving the disconnected snapshot.
     """
     get_provider.cache_clear()
+    from .cache import clear_all
     from .discovery import clear_model_cache
+
     clear_model_cache(provider)
+    clear_all()          # account detection and CLI listings are cached too
 
 
 # ── model-provider compatibility ──────────────────────────────────────────

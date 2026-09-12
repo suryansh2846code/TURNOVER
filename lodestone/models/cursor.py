@@ -28,6 +28,7 @@ import time
 from pathlib import Path
 
 from .base import ChatResult, LLMProvider, Message, _saved_key, parse_cli_json
+from .cache import ttl_cached
 from .errors import ErrorKind, ProviderError, classify_cli
 
 # The installer puts `agent` here; GUI-launched apps get a minimal PATH.
@@ -246,6 +247,7 @@ def get_cursor_cli_status() -> tuple[bool, str, str | None]:
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
+@ttl_cached(120.0)
 def cursor_cli_models() -> list[tuple[str, str]]:
     """(id, label) pairs from `agent --list-models` — the account's own list.
 

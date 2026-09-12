@@ -18,9 +18,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .cache import ttl_cached
 from .connections import ACCOUNT, API_KEY, ConnectionStatus, get_connection, save_connection
 
 
+# Not cached: it costs ~60ms, and it is the one detector whose answer can change
+# from an env var rather than a write we control.
 def detect_google_account() -> dict[str, Any]:
     """Detect Gemini API key configuration."""
     conn = get_connection("gemini")
@@ -65,6 +68,7 @@ def _claude_plan_label(raw: str | None) -> str:
     return "Claude Free"
 
 
+@ttl_cached(4.0)
 def detect_claude_account() -> dict[str, Any]:
     """Detect Claude Pro / Anthropic account found on this computer via official Claude CLI.
 
@@ -194,6 +198,7 @@ def _cursor_plan_from_storage() -> str | None:
     return None
 
 
+@ttl_cached(4.0)
 def detect_cursor_account() -> dict[str, Any]:
     """Detect Cursor account found on this computer via official CLI or non-secret metadata.
 
@@ -288,6 +293,7 @@ def detect_cursor_account() -> dict[str, Any]:
     return {"provider": "cursor", "connected": False, "found_on_computer": False}
 
 
+@ttl_cached(4.0)
 def detect_openai_account() -> dict[str, Any]:
     """Detect OpenAI connection or ChatGPT subscription state."""
     conn = get_connection("openai")
@@ -347,6 +353,7 @@ def detect_xai_account() -> dict[str, Any]:
     return {"provider": "xai", "connected": False, "found_on_computer": False}
 
 
+@ttl_cached(4.0)
 def detect_all_accounts() -> dict[str, dict[str, Any]]:
     """Return all detected local provider accounts."""
     claude_acct = detect_claude_account()

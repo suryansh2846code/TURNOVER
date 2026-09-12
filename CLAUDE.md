@@ -38,6 +38,18 @@ What that means concretely, and what it has already changed:
   the page for the same reason. Timeout is **180s** (`hud.SIGNIN_TIMEOUT_SECONDS`), deliberately
   generous: an account switch with a password and 2FA blew past a 150s poll in
   practice. On expiry it shows an error with **Try again**, never a dead spinner.
+- **Opening a panel must not block on subprocesses.** Building the model
+  catalog shells out to vendor CLIs and probes local daemons; `/api/providers`
+  and `/api/models/catalog` are *both* fetched every time the Models drawer
+  opens. Measured uncached: **5.7s + 4.4s**, and the app had to be force-quit.
+  The costs were ~50 Keychain reads (each spawning `security`),
+  `detect_all_accounts()`, and `agent --list-models` (223 rows, 3.1s).
+  `models/cache.py::ttl_cached` memoises the expensive probes — seconds for
+  detection, minutes for CLI model lists — and `clear_provider_cache()` flushes
+  the lot when a credential changes, so connecting is still instant. Warm drawer
+  open: **0.05s**. Cheap probes (Gemini, ~60ms) stay uncached so nothing goes
+  stale for no gain. **Profile before optimising** — SQLite and the window layer
+  both looked guilty here and neither was.
 - **Polling must be cheap.** `/auth/status` is polled every 2s during sign-in;
   `/refresh` re-runs discovery and takes **1.6-6.4s per provider**, so calling it
   each tick queued requests faster than the server could finish them, saturated
