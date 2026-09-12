@@ -15,6 +15,10 @@ const { catalog, authStartResponse } = JSON.parse(fs.readFileSync(0, "utf8"));
 
 // Elements remember their children by selector, so querySelector returns the
 // same object twice — which is what makes onclick reachable.
+// Error text set during the click is wiped by the re-render that follows it,
+// so reading the DOM afterwards shows nothing. Record every write instead.
+const textWrites = [];
+
 const makeEl = (tag = "div") => {
   const el = {
     tag, value: "", hidden: false, disabled: false, title: "",
@@ -27,6 +31,9 @@ const makeEl = (tag = "div") => {
     // container that a later re-render replaced is invisible to the user.
     get innerHTML() { return this._html; },
     set innerHTML(v) { this._html = v; this._kids.clear(); },
+    _text: "",
+    get textContent() { return this._text; },
+    set textContent(v) { this._text = String(v); textWrites.push(this._text); },
     querySelector(sel) {
       if (!this._kids.has(sel)) this._kids.set(sel, makeEl());
       return this._kids.get(sel);
@@ -43,8 +50,15 @@ globalThis.document = {
   getElementById: () => makeEl(), createElement: () => makeEl(),
   addEventListener() {}, body: makeEl(), documentElement: makeEl(),
 };
+// The desktop app exposes a native-window bridge here. Recording the calls is
+// how we prove the floating sign-in card was actually raised.
+const hudCalls = [];
 globalThis.window = { location: { pathname: "/", href: "/" }, addEventListener() {},
-                      matchMedia: () => ({ matches: false, addEventListener() {} }), open() {} };
+                      matchMedia: () => ({ matches: false, addEventListener() {} }), open() {},
+                      pywebview: { api: {
+                        async open_signin_hud(...a) { hudCalls.push(["open", ...a]); return true; },
+                        async close_signin_hud() { hudCalls.push(["close"]); },
+                      } } };
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 globalThis.sessionStorage = { getItem: () => null, setItem() {} };
 const calls = [];
@@ -82,6 +96,8 @@ process.stdout.write(JSON.stringify({
   containerHtml: box.querySelector(".ts-signin-container").innerHTML || "",
   feedback: box.querySelector(".pc-feedback").textContent || "",
   calls,
+  hudCalls,
+  textWrites,
 }));
 
 // The browser branch starts a polling HUD whose timers would keep node alive.

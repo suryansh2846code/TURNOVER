@@ -114,7 +114,7 @@ def catalog_json():
     return get_model_catalog()
 
 
-def _click_signin(provider: str, catalog=None) -> dict:
+def _click_signin(provider: str, catalog=None, auth_start=None) -> dict:
     """Run the real click handler for a provider and report what the sign-in
     container ends up containing.
 
@@ -128,7 +128,8 @@ def _click_signin(provider: str, catalog=None) -> dict:
 
     payload = json.dumps({
         "catalog": catalog if catalog is not None else get_model_catalog(),
-        "authStartResponse": get_flow(provider).start().to_dict(),
+        "authStartResponse": (auth_start if auth_start is not None
+                              else get_flow(provider).start().to_dict()),
     })
     proc = subprocess.run(["node", str(CLICK_HARNESS), str(APP_JS), provider],
                           input=payload, capture_output=True, text=True, timeout=90)
@@ -166,3 +167,44 @@ def test_a_browser_provider_still_starts_a_browser_flow(catalog_json):
     r = _click_signin("openai", catalog_json)
     assert r["error"] is None
     assert "ts-cli-cmd" not in r["containerHtml"], "OpenAI wrongly took the CLI branch"
+
+
+# ── the browser branch ───────────────────────────────────────────────────
+# Every test above drives a provider whose flow short-circuits into the CLI
+# branch, so the code that runs once a browser really opens was never
+# executed. That is where a temporal-dead-zone read of `floating` lived: it
+# threw, the handler's own catch turned it into "Sign in error", and the card
+# was torn down the instant the browser appeared. `node --check` passes on TDZ
+# and the handler never rethrows, so only running this branch catches it.
+BROWSER_FLOW = {
+    "started": True,
+    "connected": False,
+    "auth_url": "https://example.invalid/authorize",
+    "browser_opened": False,
+    "requires_code": False,
+}
+
+
+def test_the_browser_branch_runs_without_erroring(catalog_json):
+    # Read every text write, not the final DOM: the handler's catch calls
+    # stopPolling(), which re-renders the box and wipes the error it just set.
+    r = _click_signin("cursor", catalog_json, auth_start=BROWSER_FLOW)
+    assert r["error"] is None, r["error"]
+    threw = [w for w in r["textWrites"] if "Sign in error" in w]
+    assert not threw, f"the browser sign-in branch threw: {threw}"
+
+
+def test_the_browser_branch_raises_the_floating_card(catalog_json):
+    """In the desktop app the native card must actually be asked for."""
+    r = _click_signin("cursor", catalog_json, auth_start=BROWSER_FLOW)
+    opened = [c for c in r["hudCalls"] if c[0] == "open"]
+    assert opened, f"never raised the floating sign-in card; feedback={r['feedback']!r}"
+    assert opened[0][1] == "cursor"
+    assert opened[0][3] == BROWSER_FLOW["auth_url"], "card got no auth URL"
+
+
+def test_the_browser_branch_keeps_the_cancel_row_on_screen(catalog_json):
+    """Cancel must survive the browser opening — it vanishing was the symptom."""
+    r = _click_signin("cursor", catalog_json, auth_start=BROWSER_FLOW)
+    assert "ts-cancel-poll-btn" in r["containerHtml"], (
+        "the cancel row was torn down when the browser opened")
