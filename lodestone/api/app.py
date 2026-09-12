@@ -970,13 +970,9 @@ def auth_start_endpoint(name: str):
 
     started = get_flow(name).start().to_dict()
     if started.get("started"):
-        # The browser takes the user out of Lodestone, so the status follows
-        # them: a floating card above the browser. No-op outside the desktop app,
-        # where the in-app card handles it instead — so tell the UI which one
-        # took over and avoid showing both.
+        # The floating card is raised by the page, not here: under --dev this
+        # process is a separate uvicorn with no handle on the webview.
         from .. import hud
-        started["floating_hud"] = hud.open_signin(
-            name, started.get("brand_name") or name, started.get("auth_url") or "")
         started["timeout_seconds"] = hud.SIGNIN_TIMEOUT_SECONDS
     return started
 

@@ -7,6 +7,12 @@ browser while they authorise, then tells them it worked and offers a way back.
 It only exists in the desktop app. `lodestone serve` has no window to create,
 so every call here is a no-op and the in-app card handles it instead — the
 product must work in both modes.
+
+**The window is opened from the page, not from the API.** Under
+`lodestone app --dev` the backend runs as a separate uvicorn process, which has
+no handle on the webview at all — a backend-initiated window silently did
+nothing there. The frontend always runs inside the webview, so it calls
+`window.pywebview.api.open_signin_hud(...)` and this module does the rest.
 """
 from __future__ import annotations
 
@@ -22,7 +28,8 @@ logger = logging.getLogger(__name__)
 # the app being broken.
 SIGNIN_TIMEOUT_SECONDS = 180
 
-_WINDOW_SIZE = (440, 300)
+_WINDOW_SIZE = (420, 290)
+_SCREEN_MARGIN = 18          # gap from the screen edge, like a system notification
 
 # Set by desktop.run_app; absent when running as a plain server.
 _origin: str | None = None
@@ -39,6 +46,18 @@ def configure(origin: str, main_window) -> None:
 
 def available() -> bool:
     return _origin is not None and _main_window is not None
+
+
+def _corner_position(width: int, height: int) -> tuple[int | None, int | None]:
+    """Top-right of the primary screen, where system notifications appear."""
+    try:
+        import webview
+
+        screen = webview.screens[0]
+        return (screen.x + screen.width - width - _SCREEN_MARGIN,
+                screen.y + _SCREEN_MARGIN)
+    except Exception:
+        return None, None
 
 
 class _Bridge:
@@ -76,9 +95,10 @@ def open_signin(provider: str, brand: str, auth_url: str = "") -> bool:
         try:
             global _hud_window
             width, height = _WINDOW_SIZE
+            x, y = _corner_position(width, height)
             _hud_window = webview.create_window(
                 f"Connect {brand}", url,
-                width=width, height=height,
+                width=width, height=height, x=x, y=y,
                 frameless=True, easy_drag=True, on_top=True,
                 resizable=False, shadow=True, transparent=True,
                 focus=True, js_api=_Bridge(),

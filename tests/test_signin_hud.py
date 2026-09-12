@@ -35,21 +35,45 @@ def test_no_window_outside_the_desktop_app():
     assert hud.open_signin("xai", "Grok", "https://x") is False
 
 
-def test_auth_start_reports_which_card_took_over():
-    """Both would otherwise appear at once in the desktop app."""
+def test_auth_start_publishes_the_timeout():
     with patch("lodestone.models.cursor.find_cursor_cli", return_value="/x/agent"), \
          patch("lodestone.models.cursor.cursor_cli_auth_status",
                return_value={"installed": True, "authenticated": False}), \
          patch("lodestone.models.cursor.start_cursor_cli_login", return_value=(True, "opened")):
         body = TestClient(app).post("/api/providers/cursor/auth/start").json()
     assert body["started"] is True
-    assert body["floating_hud"] is False, "no desktop window, so the in-app card runs"
     assert body["timeout_seconds"] == hud.SIGNIN_TIMEOUT_SECONDS
 
 
-def test_the_frontend_stands_down_when_the_floating_card_opened():
+def test_the_api_does_not_try_to_open_the_window():
+    """Under `lodestone app --dev` the backend is a separate uvicorn process
+    with no handle on the webview, so a backend-raised window silently did
+    nothing. The page raises it instead."""
+    src = (ROOT / "lodestone/api/app.py").read_text()
+    assert "hud.open_signin(" not in src
+
+
+def test_the_frontend_raises_the_card_and_stands_down():
     src = (ROOT / "lodestone/web/app.js").read_text()
-    assert "res.floating_hud" in src, "in-app card would stack on top of the floating one"
+    assert "open_signin_hud" in src, "the page never asks the webview for a window"
+    assert "raiseFloatingSigninCard" in src
+    # and it must degrade when there is no webview bridge (browser mode)
+    fn = src[src.index("async function raiseFloatingSigninCard"):]
+    fn = fn[:fn.index("\nfunction ")]
+    assert "return false" in fn
+
+
+def test_card_opens_in_the_screen_corner():
+    """Like a system notification, not centred over the app."""
+    created = {}
+    hud.configure("http://127.0.0.1:9999", MagicMock())
+    screen = MagicMock(x=0, y=0, width=1470, height=956)
+    fake_webview = MagicMock(screens=[screen])
+    fake_webview.create_window = lambda *a, **kw: created.update(kw) or MagicMock()
+    with patch.dict("sys.modules", {"webview": fake_webview}):
+        hud.open_signin("xai", "Grok")
+    assert created["x"] > 900, "not anchored to the right edge"
+    assert created["y"] < 60, "not anchored to the top edge"
 
 
 # ── the window itself ────────────────────────────────────────────────────

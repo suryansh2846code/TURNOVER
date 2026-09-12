@@ -25,11 +25,17 @@ What that means concretely, and what it has already changed:
   internal ids in user-facing text. Errors say what happened and what to do
   (`models/errors.py`).
 - **Follow the user out of the app.** A browser sign-in leaves Lodestone, so the
-  status goes with them: `hud.py` raises a frameless always-on-top window
-  (`/signin-hud`) that sits above the browser, reports success with the account,
-  and offers a way back. Desktop only — `lodestone serve` falls back to the
-  in-app card, and `/auth/start` returns `floating_hud` so the UI never shows
-  both. Timeout is **180s** (`hud.SIGNIN_TIMEOUT_SECONDS`), deliberately
+  status goes with them: `hud.py` raises a frameless, always-on-top window
+  (`/signin-hud`) in the **top-right corner of the screen**, like a system
+  notification — it sits above the browser, reports success with the account,
+  and offers a way back. Desktop only; `lodestone serve` falls back to the
+  in-app card.
+  **It is raised by the page, never by the API**: under `lodestone app --dev`
+  the backend is a separate uvicorn process with no handle on the webview, so a
+  backend-initiated window silently did nothing. The frontend always runs inside
+  the webview, so it calls `window.pywebview.api.open_signin_hud(...)`
+  (`desktop._AppBridge`). Anything that needs a native window must be driven from
+  the page for the same reason. Timeout is **180s** (`hud.SIGNIN_TIMEOUT_SECONDS`), deliberately
   generous: an account switch with a password and 2FA blew past a 150s poll in
   practice. On expiry it shows an error with **Try again**, never a dead spinner.
 - **Never make the user wait without telling them.** Long work runs as a

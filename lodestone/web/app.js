@@ -193,6 +193,18 @@ const BRAND_ICONS = {
 
 let activeWaitingHud = null;
 
+async function raiseFloatingSigninCard(providerId, brandName, authUrl) {
+  // Only the desktop app has a window to create; in a browser tab this is
+  // absent and the in-app card handles the wait instead.
+  const bridge = window.pywebview?.api?.open_signin_hud;
+  if (!bridge) return false;
+  try {
+    return Boolean(await bridge(providerId, brandName, authUrl));
+  } catch (_) {
+    return false;
+  }
+}
+
 function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, onCancel, onConnected }) {
   if (activeWaitingHud) {
     activeWaitingHud.dismiss();
@@ -794,9 +806,10 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
 
         toast(`Opening ${brandName} in browser…`);
 
-        if (res.floating_hud) {
-          // The desktop app raised a floating card that follows the user to the
-          // browser and reports the result there. Don't stack a second one.
+        // In the desktop app, hand off to a floating card that sits above the
+        // browser and reports the result there. Raised from here because under
+        // --dev the backend is a separate process with no handle on the window.
+        if (await raiseFloatingSigninCard(providerId, brandName, res.auth_url || "")) {
           restore();
           return;
         }

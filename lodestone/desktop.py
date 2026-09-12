@@ -90,15 +90,28 @@ def run_app(dev: bool = False) -> None:
             proc.terminate()
         return
 
+    from . import hud
+
+    class _AppBridge:
+        """Reachable from the page as `window.pywebview.api`.
+
+        The floating sign-in card is raised from here rather than from the API,
+        because under --dev the backend is a separate process with no handle on
+        the webview.
+        """
+
+        def open_signin_hud(self, provider: str, brand: str, auth_url: str = "") -> bool:
+            return hud.open_signin(provider, brand, auth_url)
+
+        def close_signin_hud(self) -> None:
+            hud.close()
+
     window = webview.create_window(
         "Lodestone" + (" (dev)" if dev else ""),
         f"http://{host}:{port}",
         width=1280, height=860, min_size=(920, 620),
+        js_api=_AppBridge(),
     )
-
-    # Let the backend raise a floating sign-in card above the browser. Only the
-    # desktop app can do this; `lodestone serve` falls back to the in-app card.
-    from . import hud
     hud.configure(f"http://{host}:{port}", window)
 
     try:
