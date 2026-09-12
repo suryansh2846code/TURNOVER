@@ -346,6 +346,38 @@ function subscriptionUsageRemainingPercent(usedPercent) {
   return Math.max(0, Math.min(100, Math.round(100 - (Number(usedPercent) || 0))));
 }
 
+function showCliInstructions(containerEl, res, brandName, onRefresh) {
+  // Providers whose sign-in lives in their own CLI (Cursor, Claude Code). There
+  // is nothing to open — show the command and let the user re-check.
+  const cmds = (res.detail || "").match(/`([^`]+)`/g) || [];
+  const commands = cmds.map((c) => c.replace(/`/g, ""));
+  containerEl.innerHTML = `
+    <div class="ts-card">
+      <div class="ts-card-left">
+        <span class="ts-card-title">${esc(brandName)} signs in from your terminal</span>
+        <span class="ts-card-sub">${esc((res.detail || "").replace(/`/g, ""))}</span>
+      </div>
+      ${commands.length ? `<div class="ts-cli-cmds">${commands.map((c) =>
+        `<code class="ts-cli-cmd" data-cmd="${esc(c)}" title="Click to copy">${esc(c)}</code>`
+      ).join("")}</div>` : ""}
+      <div class="ts-action-group" style="margin-top:10px">
+        <button type="button" class="tiny primary ts-cli-recheck">I've signed in — check again</button>
+        ${res.auth_url ? `<a class="pc-link" href="${esc(res.auth_url)}" target="_blank" rel="noopener">Docs ↗</a>` : ""}
+      </div>
+    </div>`;
+  containerEl.querySelectorAll(".ts-cli-cmd").forEach((el) => {
+    el.onclick = () => {
+      navigator.clipboard?.writeText(el.dataset.cmd || "");
+      toast("Copied");
+    };
+  });
+  const recheck = containerEl.querySelector(".ts-cli-recheck");
+  if (recheck) recheck.onclick = async () => {
+    recheck.disabled = true;
+    try { await loadProviders(); } finally { onRefresh(); }
+  };
+}
+
 function renderProviderConnectBox(boxEl, providerId, options = {}) {
   if (!boxEl) return;
   const p = (MODEL_CATALOG || []).find((c) => c.id === providerId)
@@ -631,6 +663,11 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
     signinBtn.onclick = async () => {
       signinBtn.disabled = true;
       const originalHtml = signinContainer.innerHTML;
+      const restore = () => {
+        signinContainer.innerHTML = originalHtml;
+        signinBtn.disabled = false;
+        renderProviderConnectBox(boxEl, providerId, options);
+      };
 
       signinContainer.innerHTML = `
         <div class="ts-waiting-card">
@@ -658,7 +695,6 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
 
       try {
         const res = await api(`/api/providers/${providerId}/auth/start`, { method: "POST" });
-        toast(`Opening ${brandName} in browser…`);
 
         if (res.connected) {
           toast(`✓ ${res.detail || 'Connected!'}`);
@@ -668,6 +704,21 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
           return;
         }
 
+        // Not every provider has a browser flow. Say what the backend said
+        // instead of spinning on a sign-in that will never arrive.
+        if (res.started === false) {
+          restore();
+          if (res.cli_required) {
+            showCliInstructions(signinContainer, res, brandName, () =>
+              renderProviderConnectBox(boxEl, providerId, options));
+          } else {
+            toast(res.detail || `${brandName} has no browser sign-in.`);
+            if (res.api_key_only) boxEl.querySelector(".ts-toggle-key-btn")?.click();
+          }
+          return;
+        }
+
+        toast(`Opening ${brandName} in browser…`);
         // Open browser tab if the backend hasn't already (e.g. no CLI available)
         if (res.auth_url && !res.browser_opened) {
           try {

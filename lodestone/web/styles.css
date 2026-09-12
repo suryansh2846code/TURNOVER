@@ -1516,3 +1516,19 @@ button.tiny.running:hover { background: linear-gradient(to right,
   .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .sidebar, .ctx { display: none; }
 }
+
+/* CLI sign-in instructions (Cursor, Claude Code) — the command is the action,
+   so make it look clickable and copyable. */
+.ts-cli-cmds { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ts-cli-cmd {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  user-select: all;
+}
+.ts-cli-cmd:hover { background: rgba(255, 255, 255, 0.11); }

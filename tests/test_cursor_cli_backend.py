@@ -145,3 +145,34 @@ def test_signin_detects_an_installed_cli():
 ])
 def test_shared_cli_json_parser(stdout, expect):
     assert parse_cli_json(stdout).get("result") == expect
+
+
+# ── the button must explain itself ───────────────────────────────────────
+def test_signin_handler_branches_on_the_backend_answer():
+    """The handler used to show "Waiting for Cursor sign-in… finish in your
+    browser" and toast "Opening Cursor in browser…" regardless of the response.
+    For a CLI-only provider that is a spinner waiting for something that never
+    happens."""
+    from pathlib import Path
+
+    src = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
+    handler = src[src.index("const signinBtn = boxEl.querySelector"):]
+    handler = handler[:handler.index("// Connect via API key")] if "// Connect via API key" in handler else handler
+
+    assert "res.started === false" in handler, "handler ignores a flow that did not start"
+    assert "res.cli_required" in handler, "handler has no CLI-required branch"
+    assert "showCliInstructions" in handler
+    # the browser toast must be gated behind an actually-started flow
+    opening = handler.index("Opening ${brandName} in browser")
+    branch = handler.index("res.started === false")
+    assert branch < opening, "still claims to open a browser before checking"
+
+
+def test_cli_instructions_surface_the_command():
+    from pathlib import Path
+
+    src = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
+    fn = src[src.index("function showCliInstructions"):]
+    fn = fn[:fn.index("\nfunction ")]
+    assert "ts-cli-cmd" in fn and "clipboard" in fn, "command is not copyable"
+    assert "ts-cli-recheck" in fn, "no way to re-check after signing in"
