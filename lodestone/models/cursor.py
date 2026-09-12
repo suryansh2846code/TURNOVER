@@ -21,6 +21,7 @@ tools themselves.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -161,9 +162,39 @@ def get_cursor_cli_status() -> tuple[bool, str, str | None]:
     return st["authenticated"], st.get("message") or "", st.get("email")
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def cursor_cli_models() -> list[tuple[str, str]]:
+    """(id, label) pairs from `agent --list-models` — the account's own list.
+
+    The hardcoded catalog here was invented (`cursor-fast`, `cursor-small`,
+    `claude-sonnet-5`); none of those exist, and the CLI rejects them.
+    """
+    cli = find_cursor_cli()
+    if not cli:
+        return []
+    try:
+        res = subprocess.run([cli, "--list-models"], capture_output=True, text=True,
+                             timeout=30.0, env={**os.environ, "PATH": _augmented_path()})
+    except Exception:
+        return []
+
+    out = []
+    for line in _ANSI.sub("", res.stdout or "").splitlines():
+        line = line.strip()
+        if not line or line.lower().startswith("available models"):
+            continue
+        mid, _, label = line.partition(" - ")
+        mid = mid.strip()
+        if mid and " " not in mid:
+            out.append((mid, label.strip() or mid))
+    return out
+
+
 class CursorProvider(LLMProvider):
     name = "cursor"
-    model = "cursor-fast"
+    model = "auto"
     key_env = "CURSOR_API_KEY"
 
     _INSTALL_HINT = INSTALL_HINT
@@ -207,16 +238,26 @@ class CursorProvider(LLMProvider):
         if system:
             prompt = f"{system}\n\n---\n\n{prompt}"
 
-        cmd = [self._bin, "-p", prompt, "--output-format", "json"]
-        if self.model and self.model not in ("cursor", "cursor-small"):
-            cmd += ["--model", self.model]
+        from .cli_manager import agent_workspace
+
+        workspace = agent_workspace()
+        # --trust: the prompt "Do you trust the contents of this directory?"
+        #   blocks on stdin and hangs a headless call. The workspace is ours and
+        #   empty, so trusting it grants nothing.
+        # No --force/--yolo: we want an answer, not shell access.
+        # Always pass --model, including "auto": the CLI persists the last model
+        # selected, so omitting the flag does NOT mean Auto — it means whatever
+        # was chosen last, which a Free plan then refuses.
+        cmd = [self._bin, "-p", prompt, "--output-format", "json",
+               "--trust", "--workspace", str(workspace),
+               "--model", self.model or "auto"]
 
         env = {**os.environ, "PATH": _augmented_path()}
         if self.api_key:
             env["CURSOR_API_KEY"] = self.api_key
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True,
-                                  timeout=180, env=env)
+                                  timeout=180, env=env, cwd=str(workspace))
         except subprocess.TimeoutExpired:
             return ChatResult(text=ProviderError(
                 ErrorKind.TIMEOUT, "cursor", model=self.model, retryable=True,
@@ -228,10 +269,16 @@ class CursorProvider(LLMProvider):
         if proc.returncode != 0 or data.get("is_error"):
             if text:
                 return ChatResult(text=text, finish_reason="stop")
+            blob = f"{proc.stdout} {proc.stderr}"
             err = classify_cli("cursor", proc.returncode,
                                proc.stdout or str(data.get("subtype") or ""),
                                proc.stderr or "", model=self.model)
-            if err.kind is ErrorKind.AUTH:
+            if "Named models unavailable" in blob or "can only use Auto" in blob:
+                err.kind = ErrorKind.MODEL_NOT_ENTITLED
+                err.message = (f"`{self.model}` isn't included in your Cursor plan — "
+                               "free plans can only use **Auto**. Pick Auto in the "
+                               "model selector, or upgrade your Cursor plan.")
+            elif err.kind is ErrorKind.AUTH:
                 err.message = "The Cursor CLI isn't signed in. Run `agent login`, then retry."
             return ChatResult(text=err.as_reply())
         return ChatResult(text=text or proc.stdout.strip(), finish_reason="stop")

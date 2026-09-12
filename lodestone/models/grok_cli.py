@@ -188,12 +188,19 @@ class GrokCliProvider(LLMProvider):
         if not self._bin:
             return ChatResult(text=f"⚠️ {INSTALL_HINT}")
 
-        cmd = [self._bin, "-p", self._prompt(messages), "--output-format", "json"]
+        from .cli_manager import agent_workspace
+
+        workspace = agent_workspace()
+        # Run in our own empty workspace: this is a coding agent and we only
+        # want text back, so nothing of the user's is in reach.
+        cmd = [self._bin, "-p", self._prompt(messages), "--output-format", "json",
+               "--cwd", str(workspace)]
         if self.model:
             cmd += ["-m", self.model]
         env = {**os.environ, "PATH": _augmented_path()}
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180, env=env)
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180,
+                                  env=env, cwd=str(workspace))
         except subprocess.TimeoutExpired:
             return ChatResult(text=ProviderError(
                 ErrorKind.TIMEOUT, "xai", model=self.model, retryable=True,

@@ -68,6 +68,20 @@ def managed_bin_dir() -> Path:
     return get_settings().home / "bin"
 
 
+def agent_workspace() -> Path:
+    """An empty directory the agent CLIs run in.
+
+    These are coding agents: in print mode they have file and shell tools. We
+    only want text back, so they run here rather than in the user's home or a
+    project — nothing of theirs is in reach, and the workspace-trust prompt
+    (which blocks on stdin and hangs a headless call) has somewhere safe to
+    apply to.
+    """
+    path = get_settings().home / "agent-workspace"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def managed_binary(vendor: str) -> Path | None:
     """Our pinned copy, if we have installed one."""
     spec = SPECS.get(vendor)

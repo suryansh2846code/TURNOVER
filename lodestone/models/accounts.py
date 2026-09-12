@@ -166,6 +166,34 @@ def detect_claude_account() -> dict[str, Any]:
     }
 
 
+def _cursor_plan_from_storage() -> str | None:
+    """Cursor's tier, read from the app's non-secret local storage.
+
+    Only `stripeMembershipType` is queried — never a token."""
+    candidates = [
+        Path.home() / "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+        Path.home() / ".config/Cursor/User/globalStorage/state.vscdb",
+    ]
+    for db_path in candidates:
+        if not db_path.exists():
+            continue
+        try:
+            db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            row = db.execute(
+                "SELECT value FROM ItemTable WHERE key = 'cursorAuth/stripeMembershipType'"
+            ).fetchone()
+            if row and row[0]:
+                tier = str(row[0]).strip().lower()
+                if "pro" in tier:
+                    return "Cursor Pro"
+                if any(k in tier for k in ("business", "enterprise", "team")):
+                    return "Cursor Business"
+                return "Cursor Free"
+        except Exception:
+            pass
+    return None
+
+
 def detect_cursor_account() -> dict[str, Any]:
     """Detect Cursor account found on this computer via official CLI or non-secret metadata.
 
@@ -191,12 +219,14 @@ def detect_cursor_account() -> dict[str, Any]:
         pass
 
     if cli_signed_in and cli_email:
+        # Identity from the CLI (it is what we run); plan from the Cursor app's
+        # non-secret sqlite, which is the only place the tier is recorded.
         return {
             "provider": "cursor",
             "connected": False if is_disconnected else conn.account_connected,
             "email": cli_email,
             "name": cli_name or "Cursor User",
-            "plan": "Cursor (CLI)",
+            "plan": _cursor_plan_from_storage() or "Cursor",
             "auth_method": "cli",
             "found_on_computer": True,
             "signed_in": True,

@@ -127,27 +127,27 @@ def test_claude_plan_entitlements_for_any_user():
 
 
 def test_cursor_plan_entitlements_for_any_user():
-    """Verify Cursor models lock and unlock strictly according to any user's membership."""
-    # Free membership
-    locked, req = evaluate_model_entitlement("cursor", "cursor-fast", is_connected=True, user_plan="Cursor Free")
-    assert locked is False
+    """A free Cursor plan can run only `auto`; the CLI refuses named models
+    ("Named models unavailable. Free plans can only use Auto").
 
-    locked, req = evaluate_model_entitlement("cursor", "claude-opus-5", is_connected=True, user_plan="Cursor Free")
-    assert locked is True
-    assert req == "Pro"
+    Ids are the ones `agent --list-models` reports — cursor-fast, cursor-small
+    and claude-sonnet-5 never existed.
+    """
+    locked, req = evaluate_model_entitlement("cursor", "auto",
+                                             is_connected=True, user_plan="Cursor Free")
+    assert locked is False and req is None
 
-    locked, req = evaluate_model_entitlement("cursor", "gpt-5.6-terra", is_connected=True, user_plan="Cursor Free")
-    assert locked is True
-    assert req == "Pro"
+    for model in ("claude-opus-5-high", "gpt-5.3-codex", "composer-2.5"):
+        locked, req = evaluate_model_entitlement("cursor", model,
+                                                 is_connected=True, user_plan="Cursor Free")
+        assert locked is True, f"{model} should be gated on a free plan"
+        assert req == "Pro"
 
-    # Pro membership
-    locked, req = evaluate_model_entitlement("cursor", "claude-opus-5", is_connected=True, user_plan="Cursor Pro")
-    assert locked is False
-    assert req is None
-
-    locked, req = evaluate_model_entitlement("cursor", "gpt-5.6-terra", is_connected=True, user_plan="Cursor Pro")
-    assert locked is False
-    assert req is None
+    # Pro lifts the gate.
+    for model in ("auto", "claude-opus-5-high", "gpt-5.3-codex"):
+        locked, req = evaluate_model_entitlement("cursor", model,
+                                                 is_connected=True, user_plan="Cursor Pro")
+        assert locked is False and req is None
 
 
 def test_get_best_unlocked_model_auto_selection():

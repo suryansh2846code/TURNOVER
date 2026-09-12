@@ -158,15 +158,18 @@ MODEL_CATALOG = {
         "id": "cursor",
         "label": "Cursor",
         "icon": "terminal",
-        "default_model": "cursor-fast",
+        "default_model": "auto",
         "key_env": "CURSOR_API_KEY",
-        "key_url": "https://cursor.com",
+        "key_url": "https://cursor.com/docs/cli/overview",
+        # Verified against `agent --list-models` (2026-09-12). The earlier list
+        # here — cursor-fast, cursor-small, claude-sonnet-5 — was invented; the
+        # CLI rejects all of it. The CLI's own list replaces this once installed.
         "models": [
-            {"id": "cursor-fast", "name": "Cursor Fast", "desc": "Low latency reasoning & agent flow (Free tier)"},
-            {"id": "cursor-small", "name": "Cursor Small", "desc": "Fast local coding & agent flow (Free tier)"},
-            {"id": "claude-opus-5", "name": "Cursor Claude Opus 5", "desc": "Via Cursor session bridge", "locked": True, "plan_required": "Pro"},
-            {"id": "claude-sonnet-5", "name": "Cursor Claude Sonnet 5", "desc": "Via Cursor session bridge", "locked": True, "plan_required": "Pro"},
-            {"id": "gpt-5.6-terra", "name": "Cursor GPT-5.6-Terra", "desc": "Via Cursor session bridge", "locked": True, "plan_required": "Pro"},
+            {"id": "auto", "name": "Auto", "desc": "Let Cursor pick the best model for each turn"},
+            {"id": "claude-opus-5-high", "name": "Claude Opus 5", "desc": "Frontier reasoning via Cursor", "locked": True, "plan_required": "Cursor Pro"},
+            {"id": "claude-sonnet-5-thinking-high", "name": "Claude Sonnet 5 Thinking", "desc": "Balanced agentic coding via Cursor", "locked": True, "plan_required": "Cursor Pro"},
+            {"id": "gpt-5.3-codex", "name": "Codex 5.3", "desc": "OpenAI Codex via Cursor", "locked": True, "plan_required": "Cursor Pro"},
+            {"id": "composer-2.5", "name": "Composer 2.5", "desc": "Cursor's own fast model", "locked": True, "plan_required": "Cursor Pro"},
         ],
     },
     "gemini": {

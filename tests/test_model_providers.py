@@ -49,7 +49,7 @@ def test_model_catalog_structure():
     # Check Cursor catalog entry
     cursor_entry = next(c for c in catalog if c["id"] == "cursor")
     assert cursor_entry["label"] == "Cursor"
-    assert "cursor-fast" in [m["id"] for m in cursor_entry["models"]]
+    assert "auto" in [m["id"] for m in cursor_entry["models"]]
 
 
 def test_model_catalog_shows_only_latest_models_for_all_providers():
@@ -83,12 +83,12 @@ def test_model_catalog_shows_only_latest_models_for_all_providers():
     assert "grok-3" not in catalog["xai"]
     assert "grok-2-1212" not in catalog["xai"]
 
-    # Cursor: current Claude/GPT generation only
-    assert "claude-sonnet-5" in catalog["cursor"]
-    assert "gpt-5.6-terra" in catalog["cursor"]
-    assert "claude-3.7-sonnet" not in catalog["cursor"]
-    assert "claude-3.5-sonnet" not in catalog["cursor"]
-    assert "gpt-4o" not in catalog["cursor"]
+    # Cursor: ids must be ones its CLI accepts (`agent --list-models`).
+    # cursor-fast / cursor-small / claude-sonnet-5 were invented and rejected.
+    assert "auto" in catalog["cursor"]
+    assert "cursor-fast" not in catalog["cursor"]
+    assert "cursor-small" not in catalog["cursor"]
+    assert "claude-sonnet-5" not in catalog["cursor"]
 
     # OpenRouter: current Claude & GPT generation
     assert "anthropic/claude-sonnet-5" in catalog["openrouter"]
@@ -199,7 +199,7 @@ def test_cursor_provider_runs_through_the_cli():
 
     with patch("lodestone.models.cursor.find_cursor_cli", return_value=None):
         p = CursorProvider()
-        assert p.model == "cursor-fast"
+        assert p.model == "auto"
         ready, reason = p.is_ready()
         # An API key alone cannot help: there is no endpoint to send it to.
         assert ready is False

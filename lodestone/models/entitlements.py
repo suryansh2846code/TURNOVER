@@ -137,11 +137,9 @@ _MODEL_TIER_REQUIREMENTS: dict[str, dict[str, PlanTier]] = {
         "claude-fable-5": CLAUDE_TIER_PRO,
     },
     "cursor": {
-        "cursor-fast": CURSOR_TIER_FREE,
-        "cursor-small": CURSOR_TIER_FREE,
-        "claude-opus-5": CURSOR_TIER_PRO,
-        "claude-sonnet-5": CURSOR_TIER_PRO,
-        "gpt-5.6-terra": CURSOR_TIER_PRO,
+        # A free Cursor plan can run ONLY `auto`; every named model is refused
+        # by the CLI ("Named models unavailable").
+        "auto": CURSOR_TIER_FREE,
     },
     "gemini": {
         "gemini-3.7-flash": GEMINI_TIER_FREE,
@@ -161,6 +159,15 @@ _MODEL_TIER_REQUIREMENTS: dict[str, dict[str, PlanTier]] = {
         "claude-sonnet-5": PlanTier("Standard", 10),
         "claude-fable-5": PlanTier("Standard", 10),
     },
+}
+
+
+# Some providers gate by exception rather than by list: Cursor's free plan runs
+# ONLY `auto`, so anything not named above needs Pro. Without this an unlisted
+# model falls through to "no restriction" and is offered, then refused by the
+# CLI.
+_PROVIDER_DEFAULT_TIER: dict[str, PlanTier] = {
+    "cursor": CURSOR_TIER_PRO,
 }
 
 
@@ -239,6 +246,8 @@ def evaluate_model_entitlement(
                 break
 
     if not req_tier:
+        req_tier = _PROVIDER_DEFAULT_TIER.get(pid)
+    if not req_tier:
         # Model has no special tier restriction -> available once connected
         return False, None
 
@@ -275,7 +284,7 @@ def get_best_unlocked_model(
         "gpt-6-astra", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna",
         "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.1-pro-preview",
         "gemini-2.5-flash", "gemini-2.5-pro",
-        "cursor-fast", "cursor-small",
+        "auto",
         "grok-4.6", "grok-4.5", "grok-4.3",
         "deepseek-chat", "deepseek-reasoner",
         "llama3.2", "qwen2.5",

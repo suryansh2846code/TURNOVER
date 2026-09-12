@@ -226,27 +226,20 @@ def test_claude_code_respects_a_cli_reported_disablement():
     assert "Update to 2.1.255+" in res.text
 
 
-def test_cursor_locking_matches_plan():
-    """Verify Cursor Free tier keeps cursor-fast unlocked while locking Pro models."""
-    from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
-    conn = get_connection("cursor")
-    prev_status = conn.connection_status
-    prev_email = conn.email
-    try:
-        conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
-        conn.email = "free@cursor.com"
-        save_connection(conn)
-        models, _ = get_discovered_models("cursor", force_refresh=True)
-        model_map = {m["id"]: m for m in models}
+def test_cursor_locking_matches_plan(monkeypatch):
+    """A free Cursor plan can run only `auto` — the CLI refuses named models."""
+    from lodestone.models import discovery
 
-        assert "cursor-fast" in model_map
-        assert model_map["cursor-fast"].get("locked") is False
+    monkeypatch.setattr("lodestone.models.cursor.cursor_cli_models",
+                        lambda: [("auto", "Auto"), ("claude-opus-5-high", "Claude Opus 5")])
+    monkeypatch.setattr("lodestone.models.accounts.detect_cursor_account",
+                        lambda: {"plan": "Cursor Free"})
+    models = {m.id: m for m in discovery._discover_raw("cursor", None)[0]}
+    assert models["auto"].locked is False
+    assert models["claude-opus-5-high"].locked is True
+    assert models["claude-opus-5-high"].plan_required == "Cursor Pro"
 
-        assert "claude-opus-5" in model_map
-        assert model_map["claude-opus-5"].get("locked") is True
-        assert model_map["claude-opus-5"].get("plan_required") == "Pro"
-    finally:
-        conn.connection_status = prev_status
-        conn.email = prev_email
-        save_connection(conn)
-
+    monkeypatch.setattr("lodestone.models.accounts.detect_cursor_account",
+                        lambda: {"plan": "Cursor Pro"})
+    models = {m.id: m for m in discovery._discover_raw("cursor", None)[0]}
+    assert models["claude-opus-5-high"].locked is False

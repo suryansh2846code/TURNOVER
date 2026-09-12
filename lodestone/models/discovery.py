@@ -613,12 +613,14 @@ def _fallback_cursor() -> list[DiscoveredModel]:
     except Exception:
         pass
 
+    # Ids verified against `agent --list-models` on 2026-09-12. Shown only
+    # before the CLI exists; its own list replaces these once installed.
     return _mark_fallback([
-        DiscoveredModel("cursor-fast", "Cursor Fast", "Low latency reasoning & agent flow", 128_000, locked=False),
-        DiscoveredModel("cursor-small", "Cursor Small", "Fast local coding & agent flow", 128_000, locked=False),
-        DiscoveredModel("claude-opus-5", "Cursor Claude Opus 5", "Via Cursor session bridge", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
-        DiscoveredModel("claude-sonnet-5", "Cursor Claude Sonnet 5", "Via Cursor session bridge", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
-        DiscoveredModel("gpt-5.6-terra", "Cursor GPT-5.6-Terra", "Via Cursor session bridge", 272_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
+        DiscoveredModel("auto", "Auto", "Let Cursor pick the best model", 200_000, vision=True, reasoning=True),
+        DiscoveredModel("claude-opus-5-high", "Claude Opus 5", "Frontier reasoning via Cursor", 1_000_000, vision=True, reasoning=True, locked=is_free, plan_required="Cursor Pro" if is_free else None),
+        DiscoveredModel("claude-sonnet-5-thinking-high", "Claude Sonnet 5 Thinking", "Balanced agentic coding via Cursor", 1_000_000, vision=True, reasoning=True, locked=is_free, plan_required="Cursor Pro" if is_free else None),
+        DiscoveredModel("gpt-5.3-codex", "Codex 5.3", "OpenAI Codex via Cursor", 272_000, vision=True, reasoning=True, locked=is_free, plan_required="Cursor Pro" if is_free else None),
+        DiscoveredModel("composer-2.5", "Composer 2.5", "Cursor's own fast model", 200_000, reasoning=True, locked=is_free, plan_required="Cursor Pro" if is_free else None),
     ])
 
 
@@ -644,7 +646,30 @@ def _discover_raw(pid: str, api_key: str | None) -> tuple[list[DiscoveredModel],
     if pid == "ollama":
         return discover_ollama_models(), discovery_meta
     if pid == "cursor":
-        return _fallback_cursor(), discovery_meta
+        # Cursor has no models API — its CLI is the only source, and that list
+        # is the account's real one. A free plan can run ONLY `auto`; the CLI
+        # refuses every named model, so listing them selectable would be a
+        # control that cannot work.
+        from .accounts import detect_cursor_account
+        from .cursor import cursor_cli_models
+
+        try:
+            listed = cursor_cli_models()
+        except Exception:
+            listed = []
+        if not listed:
+            return _fallback_cursor(), discovery_meta
+
+        try:
+            free_only = "free" in (detect_cursor_account().get("plan") or "").lower()
+        except Exception:
+            free_only = False
+        return [DiscoveredModel(
+            mid, label, "Runs on your Cursor plan via the Cursor CLI",
+            200_000, vision=True, reasoning=True,
+            locked=free_only and mid != "auto",
+            plan_required="Cursor Pro" if (free_only and mid != "auto") else None,
+        ) for mid, label in listed], discovery_meta
     if pid == "claude-code":
         return [
             DiscoveredModel("claude-code", "Claude Code (Auto)", "Let the Claude CLI pick its active model", 200_000),
