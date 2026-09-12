@@ -925,6 +925,36 @@ def signin_hud_page():
     return FileResponse(WEB / "signin_hud.html")
 
 
+class HudNoteIn(BaseModel):
+    """What the page decided to do with a sign-in click."""
+    provider: str = ""
+    branch: str = ""
+    detail: str = ""
+
+
+@app.post("/api/hud/note")
+def hud_note(body: HudNoteIn):
+    """The page reports which sign-in branch it took.
+
+    Only the frontend knows whether the floating card was skipped because the
+    provider was already connected, or asked for and refused. Without that, the
+    two are indistinguishable from the backend.
+    """
+    from .. import hud
+
+    hud.note("branch", provider=body.provider, branch=body.branch,
+             detail=body.detail[:200])
+    return {"ok": True}
+
+
+@app.get("/api/hud/diagnostics")
+def hud_diagnostics():
+    """Whether the floating sign-in window exists, and what the last click did."""
+    from .. import hud
+
+    return hud.diagnostics()
+
+
 @app.get("/api/providers/{name}/cli")
 def provider_cli_status(name: str):
     """Is the vendor CLI this provider needs installed, and by us?"""

@@ -40,6 +40,10 @@ _SCREEN_MARGIN = 18          # gap from the screen edge, like a system notificat
 _origin: str | None = None
 _main_window = None
 _hud_window = None
+# What the last sign-in click actually did. Without this, "the card showed up in
+# the wrong place" is unanswerable: the branch that never reached the floating
+# card and the branch that reached it and failed look identical from outside.
+_trail: list[dict] = []
 _lock = threading.Lock()
 
 
@@ -113,9 +117,17 @@ def prepare(create_window) -> None:
         _hud_window = None
 
 
+def note(event: str, **fields) -> None:
+    """Record a step of the sign-in path. Bounded; support signal, not a log."""
+    _trail.append({"event": event, **fields})
+    del _trail[:-12]
+
+
 def open_signin(provider: str, brand: str, auth_url: str = "") -> bool:
     """Show the floating card for an in-progress sign-in. False if unavailable."""
     if not available() or _hud_window is None:
+        note("open_signin", provider=provider, ok=False,
+             reason="no native window in this process")
         return False
 
     query = urllib.parse.urlencode({
@@ -130,9 +142,11 @@ def open_signin(provider: str, brand: str, auth_url: str = "") -> bool:
             if x is not None:
                 _hud_window.move(x, y)
             _hud_window.show()
+            note("open_signin", provider=provider, ok=True)
             return True
         except Exception:
             logger.warning("could not show the sign-in window", exc_info=True)
+            note("open_signin", provider=provider, ok=False, reason="show failed")
             return False
 
 
@@ -144,6 +158,7 @@ def diagnostics() -> dict:
         "main_window": _main_window is not None,
         "hud_window_prepared": _hud_window is not None,
         "available": available(),
+        "trail": list(_trail),
     }
 
 
