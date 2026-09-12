@@ -35,18 +35,20 @@ def test_capabilities_registry_values():
     assert ds_caps.api_key_supported is True
     assert ds_caps.oauth_supported is False
 
-    # Gemini: API key and OAuth supported
+    # Gemini: API key only, no OAuth
     gem_caps = get_capabilities("gemini")
     assert gem_caps is not None
     assert gem_caps.api_key_supported is True
-    assert gem_caps.oauth_supported is True
-    assert gem_caps.account_identity_supported is True
+    assert gem_caps.oauth_supported is False
+    assert gem_caps.account_identity_supported is False
 
-    # OpenRouter: API key and OAuth PKCE supported
+    # OpenRouter: API key only — no OAuth flow is implemented, and claiming one
+    # rendered a "Sign in with OpenRouter" button that did nothing.
     or_caps = get_capabilities("openrouter")
     assert or_caps is not None
     assert or_caps.api_key_supported is True
-    assert or_caps.oauth_supported is True
+    assert or_caps.oauth_supported is False
+    assert or_caps.api_key_only is True
 
     # Ollama: Local daemon, no account or API key required
     ollama_caps = get_capabilities("ollama")
@@ -81,3 +83,27 @@ def test_capabilities_api_endpoint():
     pids = [c["provider_id"] for c in caps]
     for p in ("claude", "cursor", "gemini", "xai", "openai", "deepseek", "ollama", "openrouter"):
         assert p in pids
+
+
+# ── a capability may not advertise a flow that does not exist ────────────
+def test_advertised_sign_ins_are_actually_implemented():
+    """`has_interactive_signin` promises a control the user can press. Every
+    provider claiming one must resolve to a flow that really starts something."""
+    from lodestone.models.auth_flows import ApiKeyOnlyFlow, get_flow
+    from lodestone.models.capabilities import CAPABILITIES_REGISTRY
+
+    for pid, caps in CAPABILITIES_REGISTRY.items():
+        flow = get_flow(pid)
+        if caps.has_interactive_signin:
+            assert not isinstance(flow, ApiKeyOnlyFlow), (
+                f"{pid} advertises a sign-in but resolves to ApiKeyOnlyFlow")
+        if caps.api_key_only:
+            assert isinstance(flow, ApiKeyOnlyFlow), (
+                f"{pid} is key-only but resolves to {type(flow).__name__}")
+
+
+def test_api_key_only_and_interactive_signin_are_mutually_exclusive():
+    from lodestone.models.capabilities import CAPABILITIES_REGISTRY
+
+    for pid, caps in CAPABILITIES_REGISTRY.items():
+        assert not (caps.api_key_only and caps.has_interactive_signin), pid

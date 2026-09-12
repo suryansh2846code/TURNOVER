@@ -47,7 +47,7 @@ def test_model_catalog_structure():
     # Check xAI catalog entry
     xai_entry = next(c for c in catalog if c["id"] == "xai")
     assert xai_entry["label"] == "xAI (Grok)"
-    assert "grok-2-1212" in [m["id"] for m in xai_entry["models"]]
+    assert "grok-4.6" in [m["id"] for m in xai_entry["models"]]
 
     # Check Cursor catalog entry
     cursor_entry = next(c for c in catalog if c["id"] == "cursor")
@@ -66,9 +66,13 @@ def test_model_catalog_shows_only_latest_models_for_all_providers():
     assert "gpt-4o-mini" not in catalog["openai"]
     assert "o1" not in catalog["openai"]
 
-    # Claude: only Claude 3.7 and 3.5; no old Claude 3 Opus
-    assert "claude-3-7-sonnet-latest" in catalog["claude"]
+    # Claude: current generation only. The 3.x '-latest' aliases reached
+    # end-of-life on 2026-02-19 and no longer resolve.
+    assert "claude-opus-5" in catalog["claude"]
+    assert "claude-sonnet-5" in catalog["claude"]
     assert "claude-3-opus-latest" not in catalog["claude"]
+    assert "claude-3-7-sonnet-latest" not in catalog["claude"]
+    assert "claude-3-5-sonnet-latest" not in catalog["claude"]
 
     # Gemini: only Gemini 2.5 and 2.0; no old Gemini 1.5
     assert "gemini-2.5-flash" in catalog["gemini"]
@@ -76,18 +80,22 @@ def test_model_catalog_shows_only_latest_models_for_all_providers():
     assert "gemini-1.5-pro" not in catalog["gemini"]
     assert "gemini-1.5-flash" not in catalog["gemini"]
 
-    # xAI: has latest Grok 3 and Grok 2
-    assert "grok-3" in catalog["xai"]
+    # xAI: current Grok 4.x only; the Grok 2/3 ids were retired upstream
+    assert "grok-4.6" in catalog["xai"]
     assert "grok-beta" not in catalog["xai"]
+    assert "grok-3" not in catalog["xai"]
+    assert "grok-2-1212" not in catalog["xai"]
 
-    # Cursor: only latest Claude 3.7 and GPT-5.6
-    assert "claude-3.7-sonnet" in catalog["cursor"]
+    # Cursor: current Claude/GPT generation only
+    assert "claude-sonnet-5" in catalog["cursor"]
     assert "gpt-5.6-terra" in catalog["cursor"]
+    assert "claude-3.7-sonnet" not in catalog["cursor"]
     assert "claude-3.5-sonnet" not in catalog["cursor"]
     assert "gpt-4o" not in catalog["cursor"]
 
-    # OpenRouter: latest Claude 3.7 & GPT-5.6
-    assert "anthropic/claude-3.7-sonnet" in catalog["openrouter"]
+    # OpenRouter: current Claude & GPT generation
+    assert "anthropic/claude-sonnet-5" in catalog["openrouter"]
+    assert "anthropic/claude-3.7-sonnet" not in catalog["openrouter"]
     assert "openai/gpt-5.6-terra" in catalog["openrouter"]
     assert "anthropic/claude-3.5-sonnet" not in catalog["openrouter"]
     assert "openai/gpt-4o" not in catalog["openrouter"]
@@ -101,7 +109,7 @@ def test_context_window_lookup():
     """Verify approximate context window mappings."""
     assert context_window("gemini-2.5-pro") == 1_000_000
     assert context_window("claude-3-7-sonnet-latest") == 200_000
-    assert context_window("grok-2-latest") == 131_072
+    assert context_window("grok-4.6") == 131_072
     assert context_window("deepseek-chat") == 64_000
     assert context_window("cursor-small") == 128_000
 
@@ -186,11 +194,25 @@ def test_xai_provider_chat():
         assert kwargs["headers"]["Authorization"] == "Bearer fake-xai-key"
 
 
-def test_cursor_provider_bridge():
-    """Test Cursor provider with local bridge or custom base."""
-    p = CursorProvider(base_url="http://localhost:8080/v1")
-    assert p.base_url == "http://localhost:8080/v1"
-    assert p.model == "cursor-small"
+def test_cursor_provider_runs_through_the_cli():
+    """Cursor has no chat-completions endpoint — verified 2026-09-12:
+    `POST api.cursor.com/v1/chat/completions` returns 404 Route not found.
+    Models run through the headless CLI (`agent -p`) instead."""
+    from unittest.mock import patch
+
+    with patch("lodestone.models.cursor.find_cursor_cli", return_value=None):
+        p = CursorProvider()
+        assert p.model == "cursor-fast"
+        ready, reason = p.is_ready()
+        # An API key alone cannot help: there is no endpoint to send it to.
+        assert ready is False
+        assert "CLI" in reason
+
+    with patch("lodestone.models.cursor.find_cursor_cli", return_value="/usr/bin/agent"):
+        assert CursorProvider().is_ready() == (True, "")
+
+    assert not hasattr(CursorProvider(), "base_url"), \
+        "Cursor must not be modelled as an OpenAI-compatible HTTP provider"
 
 
 def test_deepseek_provider():

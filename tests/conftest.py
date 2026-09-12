@@ -14,3 +14,23 @@ os.environ["LODESTONE_MODEL_PROVIDER"] = "mock"
 os.environ["LODESTONE_MODEL_NAME"] = "mock-1"
 os.environ["LODESTONE_EMBEDDING_PROVIDER"] = "hash"
 os.environ.setdefault("LODESTONE_HOME", tempfile.mkdtemp(prefix="lodestone-tests-"))
+
+
+import pytest
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _never_touch_the_real_keychain():
+    """`set_secret` writes to the macOS login Keychain, which LODESTONE_HOME does
+    NOT isolate — so any test saving an API key would leave a real entry behind
+    (and could clobber the developer's own). Force the file-backed path, which
+    lives inside the temporary LODESTONE_HOME above.
+    """
+    from lodestone.config import Settings
+
+    original = Settings._keychain_ok
+    Settings._keychain_ok = lambda self: False
+    try:
+        yield
+    finally:
+        Settings._keychain_ok = original

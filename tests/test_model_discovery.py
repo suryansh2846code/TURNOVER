@@ -95,25 +95,46 @@ def test_models_api_endpoint():
     assert len(data["models"]) > 0
 
 
-def test_chatgpt_subscription_locks_unsupported_models():
-    """Verify models not supported on user plan are flagged as locked with plan_required."""
+def test_chatgpt_subscription_locks_unsupported_models(tmp_path, monkeypatch):
+    """Only the slugs the account's own Codex cache lists may be unlocked."""
+    import json
+
     from lodestone.models.discovery import _chatgpt_subscription_models
 
-    models = _chatgpt_subscription_models()
-    model_map = {m.id: m for m in models}
+    cache = tmp_path / "models_cache.json"
+    cache.write_text(json.dumps({"models": [
+        {"slug": "gpt-5.6-terra", "display_name": "GPT-5.6-Terra"},
+        {"slug": "gpt-5.6-luna", "display_name": "GPT-5.6-Luna"},
+    ]}))
+    monkeypatch.setattr("lodestone.models.chatgpt_auth._codex_models_cache_path", lambda: cache)
+    monkeypatch.setattr("lodestone.models.chatgpt_auth.detect_chatgpt_local_session",
+                        lambda fetch_usage=True: {"plan": "ChatGPT Free"})
 
-    # Terra and Luna are available on free plan
-    assert "gpt-5.6-terra" in model_map
+    model_map = {m.id: m for m in _chatgpt_subscription_models()}
+
+    # Present in the account's cache -> usable
     assert model_map["gpt-5.6-terra"].locked is False
+    assert model_map["gpt-5.6-luna"].locked is False
 
-    # Astra and Sol require Pro
-    if "gpt-6-astra" in model_map:
-        assert model_map["gpt-6-astra"].locked is True
-        assert model_map["gpt-6-astra"].plan_required == "Pro"
+    # Absent from it -> locked, with the tier that would be required
+    assert model_map["gpt-6-astra"].locked is True
+    assert model_map["gpt-6-astra"].plan_required == "Pro"
+    assert model_map["gpt-5.6-sol"].locked is True
+    assert model_map["gpt-5.6-sol"].plan_required == "Pro"
 
-    if "gpt-5.6-sol" in model_map:
-        assert model_map["gpt-5.6-sol"].locked is True
-        assert model_map["gpt-5.6-sol"].plan_required == "Pro"
+
+def test_chatgpt_subscription_falls_back_to_plan_when_no_cache(tmp_path, monkeypatch):
+    """With no Codex cache, the plan tables decide — conservatively."""
+    from lodestone.models.discovery import _chatgpt_subscription_models
+
+    monkeypatch.setattr("lodestone.models.chatgpt_auth._codex_models_cache_path",
+                        lambda: tmp_path / "absent.json")
+    monkeypatch.setattr("lodestone.models.chatgpt_auth.detect_chatgpt_local_session",
+                        lambda fetch_usage=True: {"plan": "ChatGPT Free"})
+
+    model_map = {m.id: m for m in _chatgpt_subscription_models()}
+    assert model_map["gpt-5.6-terra"].locked is False   # free tier
+    assert model_map["gpt-6-astra"].locked is True      # Pro only
 
 
 def test_chatgpt_subscription_rejects_unsupported_model():
@@ -140,44 +161,93 @@ def test_set_agent_model_api_rejects_locked_model():
 
 
 def test_claude_opus_and_fable_discovery():
-    """Verify Claude Opus 5, Sonnet 5, and Fable 5.1 are discovered and locked appropriately."""
-    models, _ = get_discovered_models("claude")
-    model_map = {m["id"]: m for m in models}
+    """Verify Claude Opus 5, Sonnet 5 and Fable 5 are discovered for a paid plan."""
+    from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
+    conn = get_connection("claude")
+    prev_status = conn.connection_status
+    prev_email = conn.email
+    try:
+        conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+        conn.email = "pro@anthropic.com"
+        save_connection(conn)
+        models, _ = get_discovered_models("claude", force_refresh=True)
+        model_map = {m["id"]: m for m in models}
 
-    assert "claude-opus-5" in model_map
-    assert "claude-sonnet-5" in model_map
-    assert "claude-fable-5-1" in model_map
+        assert "claude-opus-5" in model_map
+        assert "claude-sonnet-5" in model_map
+        assert "claude-fable-5" in model_map
 
-    # Opus 5 capabilities
-    opus = model_map["claude-opus-5"]
-    assert opus.get("reasoning") is True
-    assert opus.get("context_window") == 200_000
+        # Opus 5 capabilities
+        opus = model_map["claude-opus-5"]
+        assert opus.get("reasoning") is True
+        assert opus.get("context_window") == 200_000
 
-    # Fable 5.1 is locked because it requires Team or Enterprise tier
-    fable = model_map["claude-fable-5-1"]
-    assert fable.get("locked") is True
-    assert fable.get("plan_required") in ("Team", "Enterprise", "Team / Enterprise (v2.1.255+)") or "2.1.255" in fable.get("plan_required", "")
+        # Fable 5 is a subscription model — available on any paid Claude plan.
+        # (Fable 5.1 is a separate model gated on Claude CLI >= 2.1.255, which
+        # is a client-version requirement, not a plan tier.)
+        fable = model_map["claude-fable-5"]
+        assert fable.get("locked") is False
+        assert fable.get("plan_required") is None
+    finally:
+        conn.connection_status = prev_status
+        conn.email = prev_email
+        save_connection(conn)
 
 
-def test_claude_code_fable_handled_gracefully():
-    """Verify ClaudeCodeProvider informs user about locked model cleanly."""
+def test_claude_code_reports_a_locked_model_cleanly():
+    """A model the plan cannot run is refused before shelling out to the CLI."""
+    from unittest.mock import patch
+
     from lodestone.models.base import Message
     from lodestone.models.claude_code import ClaudeCodeProvider
 
-    provider = ClaudeCodeProvider(model="claude-fable-5-1")
-    res = provider.chat([Message(role="user", content="hello")])
-    assert "currently locked" in res.text or "Fable 5.1 is currently disabled" in res.text
+    with patch("lodestone.models.claude_code.find_claude", return_value="/usr/bin/claude"), \
+         patch("lodestone.models.accounts.detect_claude_account",
+               return_value={"plan": "Claude Free", "disabled_models": {}}), \
+         patch("subprocess.run", side_effect=AssertionError("must not invoke the CLI")):
+        res = ClaudeCodeProvider(model="claude-opus-5").chat(
+            [Message(role="user", content="hello")])
+    assert "currently locked" in res.text
+
+
+def test_claude_code_respects_a_cli_reported_disablement():
+    """~/.claude.json can mark a model unavailable for this CLI version."""
+    from unittest.mock import patch
+
+    from lodestone.models.base import Message
+    from lodestone.models.claude_code import ClaudeCodeProvider
+
+    with patch("lodestone.models.claude_code.find_claude", return_value="/usr/bin/claude"), \
+         patch("lodestone.models.accounts.detect_claude_account",
+               return_value={"plan": "Claude Max",
+                             "disabled_models": {"opus": "Update to 2.1.255+"}}), \
+         patch("subprocess.run", side_effect=AssertionError("must not invoke the CLI")):
+        res = ClaudeCodeProvider(model="claude-opus-5").chat(
+            [Message(role="user", content="hello")])
+    assert "Update to 2.1.255+" in res.text
 
 
 def test_cursor_locking_matches_plan():
     """Verify Cursor Free tier keeps cursor-fast unlocked while locking Pro models."""
-    models, _ = get_discovered_models("cursor")
-    model_map = {m["id"]: m for m in models}
+    from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
+    conn = get_connection("cursor")
+    prev_status = conn.connection_status
+    prev_email = conn.email
+    try:
+        conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+        conn.email = "free@cursor.com"
+        save_connection(conn)
+        models, _ = get_discovered_models("cursor", force_refresh=True)
+        model_map = {m["id"]: m for m in models}
 
-    assert "cursor-fast" in model_map
-    assert model_map["cursor-fast"].get("locked") is False
+        assert "cursor-fast" in model_map
+        assert model_map["cursor-fast"].get("locked") is False
 
-    assert "claude-opus-5" in model_map
-    assert model_map["claude-opus-5"].get("locked") is True
-    assert model_map["claude-opus-5"].get("plan_required") == "Pro"
+        assert "claude-opus-5" in model_map
+        assert model_map["claude-opus-5"].get("locked") is True
+        assert model_map["claude-opus-5"].get("plan_required") == "Pro"
+    finally:
+        conn.connection_status = prev_status
+        conn.email = prev_email
+        save_connection(conn)
 
