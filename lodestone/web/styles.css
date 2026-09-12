@@ -1351,15 +1351,14 @@ button.tiny.running:hover { background: linear-gradient(to right,
 }
 
 /* Live Waiting / Polling State */
+/* The "finish in your browser" row shown while a sign-in is in flight. Plain
+   rather than tinted: it is a neutral status, not a warning. */
 .ts-waiting-card {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: rgba(59, 130, 246, 0.05);
-  border: 1px solid rgba(59, 130, 246, 0.3);
   border-radius: 10px;
-  padding: 12px 14px;
-  margin-bottom: 8px;
+  padding: 4px 2px;
 }
 .ts-spinner {
   width: 18px;
@@ -1380,12 +1379,12 @@ button.tiny.running:hover { background: linear-gradient(to right,
   gap: 2px;
 }
 .ts-waiting-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #93c5fd;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
 }
 .ts-waiting-sub {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
   line-height: 1.35;
 }

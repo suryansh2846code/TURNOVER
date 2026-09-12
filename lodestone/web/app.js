@@ -750,12 +750,11 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
 
       signinContainer.innerHTML = `
         <div class="ts-waiting-card">
-          <div class="ts-spinner"></div>
           <div class="ts-waiting-body">
-            <div class="ts-waiting-title">Waiting for ${esc(brandName)} sign-in…</div>
-            <div class="ts-waiting-sub">Finish signing in to ${esc(brandName)} in your browser. Lodestone will automatically update when your account is ready.</div>
+            <div class="ts-waiting-title">Finish signing in in your browser</div>
+            <div class="ts-waiting-sub">Lodestone will continue when you're done.</div>
           </div>
-          <button type="button" class="tiny ghost ts-cancel-poll-btn">Cancel</button>
+          <button type="button" class="ts-btn-link ts-cancel-poll-btn">Cancel</button>
         </div>
       `;
 
@@ -817,15 +816,13 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
           return;
         }
 
-        toast(`Opening ${brandName} in browser…`);
+        if (!floating) toast(`Opening ${brandName} in browser…`);
 
-        // In the desktop app, hand off to a floating card that sits above the
-        // browser and reports the result there. Raised from here because under
-        // --dev the backend is a separate process with no handle on the window.
-        if (await raiseFloatingSigninCard(providerId, brandName, res.auth_url || "")) {
-          restore();
-          return;
-        }
+        // In the desktop app a floating card also follows the user to the
+        // browser. The in-app row stays either way, so the Models panel still
+        // shows what is happening and offers Cancel.
+        const floating = await raiseFloatingSigninCard(
+          providerId, brandName, res.auth_url || "");
 
         // Open browser tab if the backend hasn't already (e.g. no CLI available)
         if (res.auth_url && !res.browser_opened) {
@@ -836,8 +833,9 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
           }
         }
 
-        // Show floating HUD widget
-        hud = showWaitingHud({
+        // The in-app HUD is a stand-in for the native card; skip it when the
+        // real one is on screen.
+        hud = floating ? null : showWaitingHud({
           brandName,
           authUrl: res.auth_url || "",
           providerId,

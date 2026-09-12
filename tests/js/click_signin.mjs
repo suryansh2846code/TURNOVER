@@ -80,6 +80,7 @@ process.stdout.write(JSON.stringify({
   // Re-query after the click: whatever is attached to the box NOW is what the
   // user actually sees.
   containerHtml: box.querySelector(".ts-signin-container").innerHTML || "",
+  feedback: box.querySelector(".pc-feedback").textContent || "",
   calls,
 }));
 

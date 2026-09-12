@@ -198,6 +198,24 @@ def test_the_poll_does_not_hammer_the_expensive_endpoint():
     assert "/refresh" not in before_success, "refresh is called before knowing it succeeded"
 
 
+def test_waiting_row_replaces_the_sign_in_button():
+    """While a sign-in is in flight the Models card shows what to do and a way
+    out, instead of a Sign-in button that would start a second flow."""
+    src = (ROOT / "lodestone/web/app.js").read_text()
+    handler = src[src.index("signinBtn.onclick = async () => {"):]
+    handler = handler[:handler.index("\n  }")]
+    assert "Finish signing in in your browser" in handler
+    assert "ts-cancel-poll-btn" in handler, "no way to abandon the sign-in"
+    # the waiting row is installed before the request, so there is no dead gap
+    assert handler.index("Finish signing in") < handler.index("/auth/start")
+
+
+def test_the_in_app_hud_is_skipped_when_the_native_card_is_up():
+    """Two cards saying the same thing is noise."""
+    src = (ROOT / "lodestone/web/app.js").read_text()
+    assert "floating ? null : showWaitingHud(" in src
+
+
 def test_loader_animation_is_present():
     css = HUD_HTML.read_text()
     assert "@keyframes orbit" in css and ".loader i" in css
