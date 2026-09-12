@@ -2,7 +2,6 @@
 confidence, importance, provenance, reinforcement, access tracking, and status.
 """
 import tempfile
-from datetime import datetime, timezone
 import pytest
 
 from lodestone.brain import Brain

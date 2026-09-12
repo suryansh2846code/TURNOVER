@@ -141,7 +141,6 @@ class Scheduler:
         while not self._stop.is_set():
             # fire due reminders often (every minute); sync on the longer interval
             self._fire_reminders()
-            import time
             if time.time() >= next_sync:
                 try:
                     self.sync_all(interactive=False)

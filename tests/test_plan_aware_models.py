@@ -8,7 +8,6 @@ connection -> the provider's answer -> static tables (fallback only).
 import json
 import re
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 

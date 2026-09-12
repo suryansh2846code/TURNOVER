@@ -6,7 +6,6 @@ shares the one Brain, so what one learns makes the others smarter.
 """
 from __future__ import annotations
 
-import json
 import sqlite3
 import uuid
 from dataclasses import dataclass, field

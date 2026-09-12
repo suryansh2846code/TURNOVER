@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 
 from . import freshness
-from .store import CanonicalStore, _norm
+from .store import CanonicalStore
 
 
 def _relevant(text: str, query_tokens: set[str]) -> int:

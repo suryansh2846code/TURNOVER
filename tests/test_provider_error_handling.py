@@ -15,8 +15,7 @@ from lodestone.models.anthropic import AnthropicProvider
 from lodestone.models.base import Message
 from lodestone.models.claude_code import ClaudeCodeProvider
 from lodestone.models.cursor import CursorProvider
-from lodestone.models.errors import (ErrorKind, classify_cli, classify_exception,
-                                     classify_http, extract_detail, redact)
+from lodestone.models.errors import (ErrorKind, classify_cli, classify_http, extract_detail, redact)
 from lodestone.models.openai_compat import (OllamaProvider, OpenAICompatProvider,
                                             OpenRouterProvider)
 from lodestone.models.xai import XAIProvider
@@ -277,7 +276,7 @@ def test_every_http_error_handler_uses_the_shared_classifier():
 
 def test_error_kinds_are_exhaustively_messaged():
     """Every kind must produce a non-empty, actionable message."""
-    from lodestone.models.errors import ErrorKind, classify_http
+    from lodestone.models.errors import classify_http
 
     seen = set()
     for status in (400, 401, 402, 403, 404, 413, 429, 500, 503):

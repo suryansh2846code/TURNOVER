@@ -6,7 +6,7 @@ None`. The 401 escaped as an uncaught HTTPStatusError, so the first message a
 subscriber sent blew up. Anthropic has no subscription inference endpoint, so
 those calls belong to the local Claude CLI.
 """
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import httpx
 import pytest

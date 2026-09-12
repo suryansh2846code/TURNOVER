@@ -5,15 +5,12 @@ from fastapi.testclient import TestClient
 
 from lodestone.api.app import app
 from lodestone.models.accounts import (
-    connect_local_account,
     detect_all_accounts,
     detect_claude_account,
     detect_cursor_account,
-    detect_google_account,
 )
 from lodestone.models.connections import ConnectionStatus, get_connection
 from lodestone.models.gemini import GeminiProvider
-from lodestone.models.registry import list_providers
 
 
 client = TestClient(app)
@@ -145,7 +142,7 @@ def test_signin_endpoints():
 
 def test_openai_chatgpt_oauth_flow():
     """Verify OpenAI signin starts ChatGPT OAuth PKCE flow with official client."""
-    from lodestone.models.chatgpt_auth import CLIENT_ID, AUTH_BASE_URL, detect_chatgpt_local_session, adopt_local_chatgpt_session
+    from lodestone.models.chatgpt_auth import CLIENT_ID, detect_chatgpt_local_session, adopt_local_chatgpt_session
 
     resp = client.post("/api/providers/openai/signin")
     assert resp.status_code == 200

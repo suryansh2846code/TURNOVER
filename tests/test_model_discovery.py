@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 from lodestone.api.app import app
 from lodestone.models.discovery import (
     _detect_capabilities,
-    discover_anthropic_models,
     discover_openai_models,
     discover_xai_models,
     get_discovered_models,

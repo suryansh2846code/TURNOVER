@@ -1,9 +1,8 @@
 """Tests for new & enhanced model connection layer (Gemini, xAI, Cursor, DeepSeek, Claude, etc.)."""
 import json
-import pytest
 from unittest.mock import MagicMock, patch
 
-from lodestone.models.base import Message, Tool, ToolCall
+from lodestone.models.base import Message, Tool
 from lodestone.models.gemini import GeminiProvider
 from lodestone.models.xai import XAIProvider
 from lodestone.models.cursor import CursorProvider
@@ -12,9 +11,7 @@ from lodestone.models.anthropic import AnthropicProvider
 from lodestone.models.registry import (
     get_provider,
     get_model_catalog,
-    list_providers,
     context_window,
-    PRIMARY_PROVIDERS,
 )
 
 

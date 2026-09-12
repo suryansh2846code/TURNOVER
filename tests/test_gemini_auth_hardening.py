@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import json
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-import httpx
 
 from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
 from lodestone.models.gemini import (

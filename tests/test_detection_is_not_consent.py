@@ -14,7 +14,7 @@ import pytest
 
 from lodestone.models.accounts import _claude_plan_label, connect_local_account
 from lodestone.models.anthropic import AnthropicProvider
-from lodestone.models.connections import (ACCOUNT, ConnectionStatus,
+from lodestone.models.connections import (ConnectionStatus,
                                           ProviderConnection, get_connection,
                                           save_connection)
 from lodestone.models.entitlements import (evaluate_model_entitlement,

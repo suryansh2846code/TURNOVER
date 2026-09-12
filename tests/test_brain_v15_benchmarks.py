@@ -1,7 +1,6 @@
 """Performance and Latency Benchmarks for Brain v1.5."""
 import tempfile
 import time
-import pytest
 
 from lodestone.brain import Brain
 from lodestone.core.models import MemoryType

@@ -1,7 +1,6 @@
 """Tests for Brain v1.5 Database Migration, Failure Recovery, and Secret Protection."""
 import sqlite3
 import tempfile
-import pytest
 
 from lodestone.brain import Brain
 from lodestone.core.store import MemoryStore

@@ -31,41 +31,26 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from lodestone.agents import Agent, get_agent_model, set_agent_model
-from lodestone.agents.runtime import TurnResult, build_runtime_identity, format_runtime_context_prompt
+from lodestone.agents.runtime import build_runtime_identity, format_runtime_context_prompt
 from lodestone.api.app import app
-from lodestone.config import get_settings
 from lodestone.models.accounts import (
-    connect_local_account,
     detect_claude_account,
     detect_cursor_account,
-    detect_openai_account,
-    detect_xai_account,
 )
-from lodestone.models.base import ChatResult, Message
+from lodestone.models.base import Message
 from lodestone.models.chatgpt_auth import (
-    _SECRET_KEY_CHATGPT_TOKEN,
-    _load_stored_chatgpt_data,
-    _save_stored_chatgpt_data,
     adopt_local_chatgpt_session,
     detect_chatgpt_local_session,
-    get_chatgpt_access_token,
 )
 from lodestone.models.claude_code import ClaudeCodeProvider
 from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
 from lodestone.models.deepseek import DeepSeekProvider
 from lodestone.models.discovery import (
-    DiscoveredModel,
-    _chatgpt_subscription_models,
-    _detect_capabilities,
-    _fallback_openai,
     discover_ollama_models,
     get_discovered_models,
 )
@@ -76,7 +61,6 @@ from lodestone.models.entitlements import (
 from lodestone.models.xai import XAIProvider
 from lodestone.models.xai_auth import (
     _SECRET_KEY_XAI_TOKEN,
-    _load_stored_xai_data,
     _save_stored_xai_data,
     get_xai_access_token,
 )

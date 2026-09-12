@@ -31,7 +31,6 @@ from .models import (
     MemoryStatus,
     MemoryType,
     OpenLoop,
-    OpenLoopPriority,
     OpenLoopStatus,
     RecallExplanation,
     RecallHit,
@@ -692,7 +691,6 @@ class MemoryStore:
 
             # Temporal match boost
             temporal_boost = 0.0
-            v_from = row["valid_from"]
             v_until = row["valid_until"]
             if date_ids is not None and mid in date_ids:
                 temporal_boost += 0.25

@@ -7,7 +7,6 @@ from lodestone.api.app import app
 from lodestone.models.capabilities import (
     CAPABILITIES_REGISTRY,
     get_capabilities,
-    list_capabilities,
 )
 
 
@@ -90,7 +89,6 @@ def test_advertised_sign_ins_are_actually_implemented():
     """`has_interactive_signin` promises a control the user can press. Every
     provider claiming one must resolve to a flow that really starts something."""
     from lodestone.models.auth_flows import ApiKeyOnlyFlow, get_flow
-    from lodestone.models.capabilities import CAPABILITIES_REGISTRY
 
     for pid, caps in CAPABILITIES_REGISTRY.items():
         flow = get_flow(pid)
@@ -103,7 +101,6 @@ def test_advertised_sign_ins_are_actually_implemented():
 
 
 def test_api_key_only_and_interactive_signin_are_mutually_exclusive():
-    from lodestone.models.capabilities import CAPABILITIES_REGISTRY
 
     for pid, caps in CAPABILITIES_REGISTRY.items():
         assert not (caps.api_key_only and caps.has_interactive_signin), pid

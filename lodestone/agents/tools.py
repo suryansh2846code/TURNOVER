@@ -6,9 +6,8 @@ string the model reads back. The set an agent gets is filtered by its role.
 """
 from __future__ import annotations
 
-import json
+from typing import Any
 
-import httpx
 
 from ..brain import get_brain
 from ..models.base import Tool

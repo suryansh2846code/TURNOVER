@@ -116,7 +116,7 @@ def get_agent_model_endpoint(agent_id: str):
     from ..agents.agent_models import get_agent_model
     from ..agents.presets import get_agent
     try:
-        agent = get_agent(agent_id)
+        get_agent(agent_id)          # existence check; raises KeyError below
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'")
     prov, model = get_agent_model(agent_id)
@@ -999,7 +999,7 @@ def get_provider_models_endpoint(name: str, refresh: bool = False):
 def refresh_provider_endpoint(name: str):
     from datetime import datetime, timezone
     from ..models.capabilities import get_capabilities
-    from ..models.connections import API_KEY, ConnectionStatus, get_connection, save_connection
+    from ..models.connections import ConnectionStatus, get_connection, save_connection
     from ..models.discovery import get_discovered_models
     from ..models.registry import _REGISTRY, clear_provider_cache
 

@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest   # the only supported platform (see CLAUDE.md)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install
+        run: |
+          uv venv
+          uv pip install -e .
+          uv pip install pytest ruff
+
+      - name: Lint
+        run: uv run ruff check lodestone tests
+
+      - name: Frontend syntax
+        run: node --check lodestone/web/app.js
+
+      - name: Tests
+        run: uv run pytest -q
+        env:
+          # Never touch a real credential store or a developer's home.
+          LODESTONE_MODEL_PROVIDER: mock
+          LODESTONE_EMBEDDING_PROVIDER: hash

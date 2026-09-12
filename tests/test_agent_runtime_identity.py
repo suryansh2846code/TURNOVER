@@ -1,6 +1,5 @@
 """Tests for agent runtime identity and authoritative runtime context injection."""
 from unittest.mock import MagicMock, patch
-import pytest
 from starlette.testclient import TestClient
 
 from lodestone.agents import (
@@ -11,7 +10,7 @@ from lodestone.agents import (
     run_turn,
 )
 from lodestone.api.app import app
-from lodestone.models.base import LLMProvider, Message
+from lodestone.models.base import LLMProvider
 
 
 class DummyProvider(LLMProvider):

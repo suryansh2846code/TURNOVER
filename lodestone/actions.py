@@ -7,7 +7,7 @@ runs the corresponding connector's WRITE method.
 from __future__ import annotations
 
 import re
-from typing import Any, Callable
+from typing import Any
 
 from .connectors import get_connector
 
@@ -80,7 +80,7 @@ def _create_routine(params: dict) -> dict:
         trigger = "new_email"
     agent = params.get("agent") or params.get("agent_id") or "personal"
     interval = int(params.get("interval_min") or 60)
-    r = get_routines().create(name, agent, trigger, instruction, interval)
+    get_routines().create(name, agent, trigger, instruction, interval)
     when = "on every new email" if trigger == "new_email" else f"every {interval} min"
     return {"ok": True, "detail": f"Automation '{name}' created — runs {when}"}
 

@@ -60,7 +60,7 @@ def run_app(dev: bool = False) -> None:
 
     from .config import get_settings
 
-    s = get_settings()
+    get_settings()          # load settings / ensure the home dir exists
     host = "127.0.0.1"
     port = _stable_port(host)    # reuse a port across launches → stable webview origin
 
