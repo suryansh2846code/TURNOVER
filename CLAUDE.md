@@ -91,6 +91,12 @@ own model. Everything runs and stays on the user's machine.
 - `lodestone/models/` — LLM providers (`anthropic`, `openai`/`openrouter`/`ollama`,
   `claude-code`, `subscription`, `mock`) behind `LLMProvider`. `get_provider(name, model)`.
 - `lodestone/scheduler.py` — background sync loop; `sync_all` is cooperative-cancelable.
+- **Recall cost**: `store.search()` is linear in memory count (~0.05 ms each) and
+  runs on *every* agent turn. 3k memories ≈ 120 ms, 10k ≈ 430 ms, 50k ≈ 2.5 s.
+  95% of that is the eight-factor Python scoring loop, **not** vector search
+  (the matmul is 0.1%). Measured and analysed in [`docs/SCALING.md`](docs/SCALING.md);
+  reproduce with `scripts/benchmark_recall.py`. Don't reach for an ANN index —
+  it would optimise the 0.1%.
 
 ## Model availability is resolved per user, never hardcoded
 This is the rule that makes every user's experience match their own account

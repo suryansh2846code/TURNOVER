@@ -20,6 +20,26 @@
 
 ## Deferred — needs a product decision
 
+### Recall scaling
+**Status:** measured, deliberately not built. See [`SCALING.md`](SCALING.md).
+
+Recall is linear in memory count (~0.05 ms each) and runs on every agent turn.
+A real install sits at 3.3k memories / ~120 ms, which is fine; 10k is 430 ms
+and 50k is 2.5 s. The bottleneck is **not** vector search — the matmul is 0.1%
+of the time — it is the eight-factor Python scoring loop that runs over every
+row (95%). A top-K pre-filter before that loop measured **25–33× faster** (50k:
+2.3 s → 70 ms) as a contained change to one function.
+
+Not needed yet because the app is bounded by default (Gmail 600/90d, Drive 500,
+Files 2000). **The real risk is the uncapped connectors** — iMessage has no
+limit at all, and years of history would land a user at 100k+ from one
+checkbox. Capping those is cheaper than optimising recall, and should come
+first.
+
+**Reopen if:** a real brain passes ~10k memories, an uncapped connector ships,
+or recall stops being once-per-turn.
+
+
 ### Grok subscription support (xAI)
 **Status:** deliberately not built. xAI is API-key-only in the app today.
 
