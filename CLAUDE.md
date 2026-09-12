@@ -197,6 +197,18 @@ never linked. `find_*_cli()` prefers our pinned copy over anything on PATH.
 Managed today: `cursor` (agent), `grok`. Adding one means adding a `CliSpec` and
 a resolver.
 
+**A CLI sign-in finishes on its own schedule.** The browser flow completes long
+after any poll window, so: the waiting HUD polls `/auth/status` for **every**
+provider (never a hardcoded id list), waits ~10 minutes, and on timeout says
+what to do instead of vanishing — and **Refresh re-runs the flow's `status()`**,
+which adopts a completed sign-in. Refresh must be able to finish a sign-in, not
+just re-read state.
+
+**A signed-in CLI is the identity.** Vendors also cache an account elsewhere —
+the Cursor *app* keeps a different email in its sqlite — but the CLI is what we
+actually run, so its `status` output wins. Read it from the shape the CLI
+actually prints (`agent status --format json` nests identity under `userInfo`).
+
 **Vendor CLIs own sign-in too, not just inference.** Each ships a `login`
 command that opens the vendor's own consent page, because the OAuth client
 belongs to that CLI — `agent login` → authenticator.cursor.sh, `grok login

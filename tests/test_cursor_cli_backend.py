@@ -209,3 +209,66 @@ def test_cli_instructions_surface_the_command():
     assert "ts-cli-install" in fn, "no one-click install path"
     assert "ts-cli-cmd" in fn and "clipboard" in fn, "no copyable-command fallback"
     assert "ts-cli-recheck" in fn, "no way to re-check after signing in"
+
+
+# ── the signed-in CLI is the identity, and refresh completes a sign-in ───
+CLI_AUTHED = """{
+  "status": "authenticated",
+  "isAuthenticated": true,
+  "userInfo": {"email": "new@example.com", "firstName": "New", "lastName": "User"}
+}"""
+
+
+def test_identity_is_read_from_the_nested_userInfo():
+    """`agent status --format json` nests it; reading the top level found
+    nothing, so the card kept showing a stale account."""
+    from lodestone.models.cursor import cursor_cli_auth_status
+
+    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+         patch("subprocess.run", return_value=_proc(CLI_AUTHED)):
+        st = cursor_cli_auth_status()
+    assert st["authenticated"] is True
+    assert st["email"] == "new@example.com"
+    assert st["name"] == "New User"
+
+
+def test_the_cli_account_beats_the_cursor_apps_cached_one():
+    """The Cursor *app* caches a different account in its sqlite. The CLI is
+    what we actually run, so after signing in there its identity must win."""
+    from lodestone.models.accounts import detect_cursor_account
+
+    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+         patch("subprocess.run", return_value=_proc(CLI_AUTHED)):
+        acct = detect_cursor_account()
+    assert acct["email"] == "new@example.com"
+    assert acct["auth_method"] == "cli"
+
+
+def test_refresh_finishes_a_sign_in_the_poll_gave_up_on():
+    """A browser login completes long after the HUD stops polling, so Refresh
+    must adopt it rather than being decorative."""
+    from lodestone.models.connections import ProviderConnection, get_connection, save_connection
+
+    save_connection(ProviderConnection(provider="cursor"))
+    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+         patch("subprocess.run", return_value=_proc(CLI_AUTHED)):
+        assert TestClient(app).post("/api/providers/cursor/refresh").status_code == 200
+
+    conn = get_connection("cursor")
+    assert conn.account_connected is True
+    assert conn.email == "new@example.com"
+    save_connection(ProviderConnection(provider="cursor"))
+
+
+def test_the_waiting_hud_polls_every_provider():
+    """It gated /auth/status on a hardcoded ["openai","xai","claude"] list, so
+    Cursor's sign-in was never polled at all."""
+    from pathlib import Path
+
+    src = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
+    hud = src[src.index("function showWaitingHud"):]
+    hud = hud[:hud.index("\nfunction ")]
+    assert '["openai", "xai", "claude"].includes' not in hud
+    assert "/auth/status" in hud
+    assert "MAX_ATTEMPTS" in hud, "no explicit wait budget"
+    assert "press Refresh" in hud, "a timeout must say what to do next"

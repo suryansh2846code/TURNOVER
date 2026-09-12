@@ -1045,6 +1045,16 @@ def refresh_provider_endpoint(name: str):
     if cls is None:
         raise HTTPException(404, f"unknown provider '{name}'")
     clear_provider_cache()
+
+    # Refresh must be able to finish a sign-in. A CLI login completes in the
+    # browser long after our poll gave up, so ask the flow first — its status()
+    # adopts a signed-in CLI and records the account.
+    try:
+        from ..models.auth_flows import get_flow
+        get_flow(name).status()
+    except Exception:
+        pass
+
     inst = cls()
     ready, reason = inst.is_ready()
     models, account_meta = get_discovered_models(name, force_refresh=True)

@@ -118,10 +118,16 @@ def cursor_cli_auth_status() -> dict:
         return {"installed": True, "authenticated": False}
 
     data = parse_cli_json(res.stdout) or {}
+    # Identity lives under `userInfo`:
+    #   {"status":"authenticated","isAuthenticated":true,
+    #    "userInfo":{"email":"…","firstName":"…","lastName":"…"}}
+    info = data.get("userInfo") or {}
+    name = " ".join(p for p in (info.get("firstName"), info.get("lastName")) if p)
     return {
         "installed": True,
         "authenticated": bool(data.get("isAuthenticated")),
-        "email": data.get("email") or data.get("user") or None,
+        "email": info.get("email") or data.get("email") or None,
+        "name": name or None,
         "message": data.get("message") or "",
     }
 

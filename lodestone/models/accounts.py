@@ -174,16 +174,34 @@ def detect_cursor_account() -> dict[str, Any]:
     conn = get_connection("cursor")
     is_disconnected = (conn.account_status == ConnectionStatus.DISCONNECTED)
 
-    # 1. Check official Cursor CLI status
+    # 1. The CLI is what we actually run, so its identity wins. The Cursor
+    #    *app* caches a different account in its sqlite, and preferring that
+    #    left the card showing the old email after a CLI sign-in.
     cli_signed_in = False
     cli_email = None
+    cli_name = None
     try:
-        from .cursor import get_cursor_cli_status
-        cli_ok, _, cli_email = get_cursor_cli_status()
-        if cli_ok:
-            cli_signed_in = True
+        from .cursor import cursor_cli_auth_status
+        st = cursor_cli_auth_status()
+        cli_signed_in = bool(st.get("authenticated"))
+        if cli_signed_in:
+            cli_email = st.get("email")
+            cli_name = st.get("name")
     except Exception:
         pass
+
+    if cli_signed_in and cli_email:
+        return {
+            "provider": "cursor",
+            "connected": False if is_disconnected else conn.account_connected,
+            "email": cli_email,
+            "name": cli_name or "Cursor User",
+            "plan": "Cursor (CLI)",
+            "auth_method": "cli",
+            "found_on_computer": True,
+            "signed_in": True,
+            "cli_authenticated": True,
+        }
 
     # 2. Check non-secret metadata in local SQLite storage (cachedEmail, stripeMembershipType only)
     email = cli_email

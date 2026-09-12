@@ -280,35 +280,40 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
   closeBtn.onclick = dismiss;
 
   let attempts = 0;
+  // A browser sign-in with an account switch, a password and 2FA can take a
+  // while. Giving up after ~2.5 minutes left users staring at a card that
+  // never updated, so wait ~10 and then say so rather than vanishing.
+  const MAX_ATTEMPTS = 500;
+  const finish = (email) => {
+    clearInterval(pollTimer);
+    pollTimer = null;
+    dismiss();
+    toast(`✓ Connected ${brandName}${email ? ` (${email})` : ""}!`);
+    if (onConnected) onConnected();
+  };
+
   pollTimer = setInterval(async () => {
     attempts++;
-    if (attempts > 120) { // ~2.5 mins
+    if (attempts > MAX_ATTEMPTS) {
+      clearInterval(pollTimer);
+      pollTimer = null;
       dismiss();
+      toast(`Still waiting on ${brandName}. Finish in your browser, then press Refresh.`);
+      if (onCancel) onCancel();
       return;
     }
     try {
-      // Check dedicated oauth-status if applicable
-      if (["openai", "xai", "claude"].includes(providerId)) {
-          const st = await api(`/api/providers/${providerId}/auth/status`).catch(() => ({}));
-          if (st.status === "success") {
-            clearInterval(pollTimer);
-            pollTimer = null;
-            await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
-            dismiss();
-            toast(`✓ Connected ${brandName} (${st.email || ''})!`);
-            if (onConnected) onConnected();
-            return;
-          }
-        }
-        const ref = await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
-        if (ref.ready || ref.connection?.connection_status === "ACCOUNT_CONNECTED") {
-          clearInterval(pollTimer);
-          pollTimer = null;
-          dismiss();
-          const email = ref.connection?.email || "";
-          toast(`✓ Connected ${brandName}${email ? ` (${email})` : ""}!`);
-          if (onConnected) onConnected();
-        }
+      // Every provider answers /auth/status — never gate this on a provider id.
+      const st = await api(`/api/providers/${providerId}/auth/status`).catch(() => ({}));
+      if (st.status === "success") {
+        await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
+        finish(st.email);
+        return;
+      }
+      const ref = await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
+      if (ref.ready || ref.connection?.account_connected) {
+        finish(ref.connection?.email || "");
+      }
     } catch (_) {}
   }, 1200);
 
