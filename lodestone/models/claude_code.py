@@ -13,13 +13,13 @@ usage, so it is not free like the local Ollama backend.
 """
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
 
-from .base import ChatResult, LLMProvider, Message
+from .base import ChatResult, LLMProvider, Message, parse_cli_json
+from .errors import ErrorKind, ProviderError, classify_cli
 
 # Bin dirs GUI apps miss: apps launched from Finder/.app get a minimal PATH
 # (/usr/bin:/bin:/usr/sbin:/sbin), so Homebrew, npm-global and the Claude Code
@@ -134,22 +134,18 @@ class ClaudeCodeProvider(LLMProvider):
                 env=env,
             )
         except subprocess.TimeoutExpired:
-            return ChatResult(text="⚠️ Claude Code timed out. Try again or switch model.")
+            return ChatResult(text=ProviderError(
+                ErrorKind.TIMEOUT, "claude-code", model=self.model, retryable=True,
+                message="Claude Code timed out. Try again, or switch model.").as_reply())
 
-        data = {}
-        if proc.stdout.strip().startswith("{"):
-            try:
-                data = json.loads(proc.stdout)
-            except json.JSONDecodeError:
-                data = {}
+        data = parse_cli_json(proc.stdout)
         text = (data.get("result") or "").strip()
 
         if proc.returncode != 0 or data.get("is_error"):
             if text:                       # Claude returned a usable message anyway
                 return ChatResult(text=text, finish_reason="stop")
-            detail = (proc.stderr.strip() or data.get("subtype")
-                      or data.get("stop_reason") or "unknown error")
-            return ChatResult(
-                text=f"⚠️ Claude Code couldn't answer ({detail}). "
-                     "Try rephrasing, or switch to a different model in the sidebar.")
+            err = classify_cli("claude-code", proc.returncode,
+                               proc.stdout or str(data.get("subtype") or ""),
+                               proc.stderr or "", model=self.model)
+            return ChatResult(text=err.as_reply())
         return ChatResult(text=text or proc.stdout.strip(), finish_reason="stop")

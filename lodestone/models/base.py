@@ -27,6 +27,7 @@ class ToolCall:
     id: str
     name: str
     arguments: dict[str, Any]
+    extra_content: dict[str, Any] | None = None
 
 
 @dataclass
@@ -92,3 +93,25 @@ class LLMProvider:
         max_tokens: int = 1500,
     ) -> ChatResult:  # pragma: no cover - interface
         raise NotImplementedError
+
+
+def parse_cli_json(stdout: str) -> dict:
+    """Pull a JSON object out of a CLI's stdout.
+
+    Agent CLIs prepend plain-text notices (deprecation warnings, update nags)
+    before the payload, so the output does not necessarily start with '{'.
+    Scan for the first brace that parses; otherwise every such call reads as a
+    total failure.
+    """
+    import json as _json
+
+    out = (stdout or "").strip()
+    if not out:
+        return {}
+    start = out.find("{")
+    while start != -1:
+        try:
+            return _json.loads(out[start:])
+        except _json.JSONDecodeError:
+            start = out.find("{", start + 1)
+    return {}

@@ -1,12 +1,15 @@
-"""OAuth PKCE Flow and Token Manager for ChatGPT / OpenAI Codex.
+"""OAuth PKCE flow and token manager for ChatGPT subscriptions.
 
-Implements the official OpenAI OAuth PKCE authorization flow for ChatGPT subscriptions,
-compatible with the Codex client (`app_EMoamEEZ73f0CkXaXp7hrann`):
-1. Integrates natively with the `codex` CLI (`codex login`) or built-in loopback server on port 1455.
-2. Opens the official OpenAI authorization consent page (Choose an account to continue to Codex).
-3. Exchanges authorization code for tokens (access_token, refresh_token, id_token).
-4. Decodes user identity (email, display name) and safely stores tokens in Lodestone and ~/.codex.
-5. Updates provider connection state for immediate live reflection in TURNOVER.
+Sign-in runs the OpenAI OAuth PKCE flow against a loopback server on port 1455
+(the redirect URI is registered, so the port is fixed — it cannot fall back):
+1. Build a PKCE challenge and open the OpenAI consent page in the browser.
+2. Exchange the returned authorization code for access/refresh/id tokens.
+3. Decode identity + plan from the token claims and store tokens in Lodestone's
+   secret store, never in another application's files.
+4. Record the connection so the catalog reflects it immediately.
+
+An existing `~/.codex/auth.json` session is also detected, so a user already
+signed in to the Codex CLI does not have to authorize a second time.
 """
 from __future__ import annotations
 
@@ -15,11 +18,7 @@ import hashlib
 import http.server
 import json
 import logging
-import os
 import secrets
-import shutil
-import socket
-import subprocess
 import threading
 import time
 import urllib.parse
@@ -30,7 +29,7 @@ from typing import Any
 import httpx
 
 from ..config import get_settings
-from .connections import ConnectionStatus, get_connection, save_connection
+from .connections import ACCOUNT, ConnectionStatus, get_connection, save_connection
 
 logger = logging.getLogger(__name__)
 
@@ -41,34 +40,53 @@ REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/auth/callback"
 SCOPE = "openid profile email offline_access"
 
 
+_SECRET_KEY_CHATGPT_TOKEN = "LODESTONE_CHATGPT_TOKEN"
+
+
 def _token_storage_path() -> Path:
     return get_settings().home / "chatgpt_token.json"
+
+
+def _load_stored_chatgpt_data() -> dict[str, Any] | None:
+    """Retrieve Lodestone-owned ChatGPT token payload from secure Keychain store."""
+    settings = get_settings()
+    raw = settings.get_secret(_SECRET_KEY_CHATGPT_TOKEN)
+    if raw:
+        try:
+            return json.loads(raw)
+        except Exception:
+            pass
+    # Auto-migrate legacy plaintext file to keychain if present
+    legacy = settings.home / "chatgpt_token.json"
+    if legacy.exists():
+        try:
+            data = json.loads(legacy.read_text())
+            settings.set_secret(_SECRET_KEY_CHATGPT_TOKEN, json.dumps(data))
+            legacy.unlink(missing_ok=True)
+            return data
+        except Exception:
+            pass
+    return None
+
+
+def _save_stored_chatgpt_data(data: dict[str, Any] | None) -> None:
+    """Persist Lodestone-owned ChatGPT token payload into secure Keychain store."""
+    settings = get_settings()
+    if data is None:
+        settings.set_secret(_SECRET_KEY_CHATGPT_TOKEN, None)
+    else:
+        settings.set_secret(_SECRET_KEY_CHATGPT_TOKEN, json.dumps(data))
+    legacy = settings.home / "chatgpt_token.json"
+    if legacy.exists():
+        legacy.unlink(missing_ok=True)
 
 
 def _codex_auth_path() -> Path:
     return Path.home() / ".codex/auth.json"
 
 
-def _turnstone_auth_path() -> Path:
-    return Path.home() / "Library/Application Support/Turnstone/provider-auth/codex/auth.json"
-
-
-def find_codex_cli() -> Path | None:
-    """Locate the official Codex CLI binary on this machine."""
-    which_p = shutil.which("codex")
-    if which_p:
-        return Path(which_p)
-
-    candidates = [
-        Path.home() / "Library/Application Support/Turnstone/bin/codex",
-        Path.home() / ".local/bin/codex",
-        Path("/opt/homebrew/bin/codex"),
-        Path("/usr/local/bin/codex"),
-    ]
-    for c in candidates:
-        if c.exists() and os.access(c, os.X_OK):
-            return c
-    return None
+def _codex_models_cache_path() -> Path:
+    return Path.home() / ".codex/models_cache.json"
 
 
 def _decode_jwt_payload(jwt_token: str) -> dict[str, Any]:
@@ -114,8 +132,8 @@ def _format_chatgpt_plan(raw_plan: str | None) -> str:
     return _CHATGPT_PLAN_LABELS.get(clean, f"ChatGPT {clean.title()}")
 
 
-def _extract_plan_and_account_from_tokens(data: dict[str, Any]) -> tuple[str, str, str, str | None]:
-    """Extract (plan_name, email, display_name, account_id) from stored tokens/claims."""
+def _identity_from_tokens(data: dict[str, Any]) -> tuple[str, str, str]:
+    """Extract (plan_name, email, display_name) from stored tokens/claims."""
     tokens = data.get("tokens") or {}
     access_tok = tokens.get("access_token") or ""
     id_tok = tokens.get("id_token") or ""
@@ -125,20 +143,65 @@ def _extract_plan_and_account_from_tokens(data: dict[str, Any]) -> tuple[str, st
 
     auth_info = claims.get("https://api.openai.com/auth") or id_claims.get("https://api.openai.com/auth") or {}
     raw_plan = auth_info.get("chatgpt_plan_type") or data.get("plan_type")
-    account_id = auth_info.get("chatgpt_account_id") or tokens.get("account_id")
 
     profile_info = claims.get("https://api.openai.com/profile") or id_claims.get("https://api.openai.com/profile") or {}
     email = data.get("email") or profile_info.get("email") or claims.get("email") or id_claims.get("email") or ""
     name = data.get("name") or profile_info.get("name") or claims.get("name") or id_claims.get("name") or ""
 
-    plan_name = _format_chatgpt_plan(raw_plan)
-    return plan_name, email, name, account_id
+    return _format_chatgpt_plan(raw_plan), email, name
 
 
-def clear_chatgpt_usage_cache() -> None:
-    global _USAGE_CACHE, _USAGE_CACHE_TIME
-    _USAGE_CACHE = {}
-    _USAGE_CACHE_TIME = 0.0
+# Model slugs each ChatGPT plan tier can run. Consulted ONLY when the Codex
+# models cache is absent — the cache is the account's own answer and always wins.
+# Single source of truth: both catalog discovery and inference read this.
+_FREE_PLAN_SLUGS = {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "codex-auto-review"}
+_PLUS_PLAN_SLUGS = _FREE_PLAN_SLUGS | {"o3-mini"}
+_PRO_PLAN_SLUGS = _PLUS_PLAN_SLUGS | {"gpt-6-astra", "gpt-5.6-sol"}
+
+
+def _slugs_for_plan(plan: str | None) -> set[str]:
+    """Model slugs a ChatGPT plan is expected to run, as a conservative fallback."""
+    p = (plan or "").lower()
+    if any(k in p for k in ("pro", "team", "business", "enterprise", "edu")):
+        return set(_PRO_PLAN_SLUGS)
+    if "plus" in p or "go" in p:
+        return set(_PLUS_PLAN_SLUGS)
+    return set(_FREE_PLAN_SLUGS)
+
+
+def resolve_subscription_models() -> tuple[set[str], dict[str, dict[str, Any]], str]:
+    """Resolve what the signed-in ChatGPT account can actually run.
+
+    Returns (supported slugs, per-slug metadata, plan label). Prefers the Codex
+    models cache written by the account itself; falls back to the plan tables
+    above when it is missing.
+    """
+    supported: set[str] = set()
+    meta: dict[str, dict[str, Any]] = {}
+
+    cache_path = _codex_models_cache_path()
+    if cache_path.exists():
+        try:
+            for m in json.loads(cache_path.read_text()).get("models", []):
+                slug = m.get("slug")
+                if not slug:
+                    continue
+                supported.add(slug)
+                meta[slug] = {
+                    "name": m.get("display_name") or slug.replace("-", " ").title(),
+                    "desc": m.get("description") or "Codex agentic coding model",
+                    "context_window": m.get("context_window", 272_000),
+                }
+        except Exception:
+            logger.warning("Could not read Codex models cache at %s", cache_path)
+
+    session = detect_chatgpt_local_session(fetch_usage=False)
+    plan = (session and session.get("plan")) or "ChatGPT Free"
+
+    if not supported:
+        supported = _slugs_for_plan(plan)
+
+    return supported, meta, plan
 
 
 def get_chatgpt_subscription_usage(force_refresh: bool = False) -> dict[str, Any] | None:
@@ -149,14 +212,6 @@ def get_chatgpt_subscription_usage(force_refresh: bool = False) -> dict[str, Any
         return _USAGE_CACHE
 
     token = get_chatgpt_access_token()
-    if not token:
-        turnstone_f = _turnstone_auth_path()
-        if turnstone_f.exists():
-            try:
-                td = json.loads(turnstone_f.read_text())
-                token = td.get("tokens", {}).get("access_token")
-            except Exception:
-                pass
     if not token:
         return None
 
@@ -231,13 +286,12 @@ def get_chatgpt_subscription_usage(force_refresh: bool = False) -> dict[str, Any
 
 
 def detect_chatgpt_local_session(fetch_usage: bool = True) -> dict[str, Any] | None:
-    """Detect existing ChatGPT / Codex authentication on this machine."""
-    # 1. First check Lodestone's own stored token
-    our_token = _token_storage_path()
-    if our_token.exists():
+    """Detect existing ChatGPT / Codex authentication on this machine without credential theft."""
+    # 1. First check Lodestone's own securely stored token in Keychain
+    stored = _load_stored_chatgpt_data()
+    if stored:
         try:
-            data = json.loads(our_token.read_text())
-            plan_name, email, name, account_id = _extract_plan_and_account_from_tokens(data)
+            plan_name, email, name = _identity_from_tokens(stored)
             if email:
                 usage = get_chatgpt_subscription_usage() if fetch_usage else None
                 if usage and usage.get("plan"):
@@ -248,49 +302,25 @@ def detect_chatgpt_local_session(fetch_usage: bool = True) -> dict[str, Any] | N
                     "name": name or "ChatGPT User",
                     "plan": plan_name,
                     "usage": usage,
-                    "has_token": bool(data.get("tokens", {}).get("access_token")),
+                    "has_token": True,
                 }
         except Exception:
             pass
 
-    # 2. Check ~/.codex/auth.json (Codex CLI native auth)
+    # 2. Check ~/.codex/auth.json for existing local account presence metadata (NEVER copy tokens)
     codex_auth = _codex_auth_path()
     if codex_auth.exists():
         try:
             data = json.loads(codex_auth.read_text())
-            plan_name, email, name, account_id = _extract_plan_and_account_from_tokens(data)
+            plan_name, email, name = _identity_from_tokens(data)
             if email:
-                usage = get_chatgpt_subscription_usage() if fetch_usage else None
-                if usage and usage.get("plan"):
-                    plan_name = usage["plan"]
                 return {
                     "source": "codex_cli",
                     "email": email,
                     "name": name or "ChatGPT User",
                     "plan": plan_name,
-                    "usage": usage,
-                    "has_token": bool(data.get("tokens", {}).get("access_token")),
-                }
-        except Exception:
-            pass
-
-    # 3. Check Turnstone / OpenCode installed session on macOS
-    turnstone_auth = _turnstone_auth_path()
-    if turnstone_auth.exists():
-        try:
-            data = json.loads(turnstone_auth.read_text())
-            plan_name, email, name, account_id = _extract_plan_and_account_from_tokens(data)
-            if email:
-                usage = get_chatgpt_subscription_usage() if fetch_usage else None
-                if usage and usage.get("plan"):
-                    plan_name = usage["plan"]
-                return {
-                    "source": "turnstone",
-                    "email": email,
-                    "name": name or "ChatGPT User",
-                    "plan": plan_name,
-                    "usage": usage,
-                    "has_token": bool(data.get("tokens", {}).get("access_token")),
+                    "usage": None,
+                    "has_token": False,
                 }
         except Exception:
             pass
@@ -299,30 +329,20 @@ def detect_chatgpt_local_session(fetch_usage: bool = True) -> dict[str, Any] | N
 
 
 def adopt_local_chatgpt_session() -> tuple[bool, str, dict[str, Any]]:
-    """Adopt credentials found in Codex CLI, Turnstone or local storage into TURNOVER."""
-    info = detect_chatgpt_local_session()
+    """Bind a detected ChatGPT / Codex session without copying its credentials."""
+    info = detect_chatgpt_local_session(fetch_usage=False)
     if not info or not info.get("email"):
         return False, "No local ChatGPT session found on this computer", {}
 
-    # Copy tokens over safely to Lodestone storage
-    source = info.get("source")
-    src_file = _codex_auth_path() if source == "codex_cli" else _turnstone_auth_path() if source == "turnstone" else None
-    if src_file and src_file.exists():
-        try:
-            src_data = json.loads(src_file.read_text())
-            _token_storage_path().parent.mkdir(parents=True, exist_ok=True)
-            _token_storage_path().write_text(json.dumps(src_data, indent=2))
-        except Exception as exc:
-            logger.warning(f"Could not copy {source} session: {exc}")
-
-    # Mark connection as active in DB
+    # Bind connection state without duplicating another app's secret tokens
     now = datetime.now(timezone.utc).isoformat()
     conn = get_connection("openai")
-    conn.auth_method = "account"
+    source = info.get("source")
+    conn.auth_method = "cli" if source == "codex_cli" else "account"
     conn.email = info["email"]
     conn.account_display_name = info.get("name") or "ChatGPT User"
-    conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
-    conn.status_message = f"Connected to ChatGPT ({info['email']})"
+    conn.set_credential(ACCOUNT, ConnectionStatus.ACCOUNT_CONNECTED)
+    conn.status_message = f"Connected via {source or 'ChatGPT'} ({info['email']})"
     conn.connected_at = conn.connected_at or now
     conn.last_verified_at = now
     save_connection(conn)
@@ -335,7 +355,6 @@ class _AuthServerState:
         self.lock = threading.Lock()
         self.server: http.server.HTTPServer | None = None
         self.thread: threading.Thread | None = None
-        self.cli_proc: subprocess.Popen | None = None
         self.verifier: str = ""
         self.state: str = ""
         self.auth_url: str = ""
@@ -385,7 +404,7 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
                     _GLOBAL_AUTH_STATE.status = "error"
                     _GLOBAL_AUTH_STATE.error_message = error_desc or error
                 self._render_response(
-                    title="TURNOVER - Authorization Failed",
+                    title="Lodestone - Authorization Failed",
                     heading="✕ Authorization Failed",
                     message=error_desc or error,
                     is_error=True,
@@ -399,7 +418,7 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
 
             if not code:
                 self._render_response(
-                    title="TURNOVER - Missing Code",
+                    title="Lodestone - Missing Code",
                     heading="✕ Missing Authorization Code",
                     message="No authorization code received from OpenAI.",
                     is_error=True,
@@ -409,7 +428,7 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
 
             if expected_state and state != expected_state:
                 self._render_response(
-                    title="TURNOVER - Invalid State",
+                    title="Lodestone - Invalid State",
                     heading="✕ Security Verification Failed",
                     message="OAuth state mismatch. Please try again.",
                     is_error=True,
@@ -442,9 +461,7 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
                 email = claims.get("email") or "ChatGPT User"
                 name = claims.get("name") or "ChatGPT Account"
 
-                # Persist tokens securely
-                storage_file = _token_storage_path()
-                storage_file.parent.mkdir(parents=True, exist_ok=True)
+                # Persist tokens securely in OS Keychain
                 payload = {
                     "auth_mode": "chatgpt_subscription",
                     "tokens": token_data,
@@ -452,7 +469,7 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
                     "name": name,
                     "last_refresh": datetime.now(timezone.utc).isoformat(),
                 }
-                storage_file.write_text(json.dumps(payload, indent=2))
+                _save_stored_chatgpt_data(payload)
 
                 # Update DB connection record
                 now = datetime.now(timezone.utc).isoformat()
@@ -460,7 +477,7 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
                 conn.auth_method = "account"
                 conn.email = email
                 conn.account_display_name = name
-                conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+                conn.set_credential(ACCOUNT, ConnectionStatus.ACCOUNT_CONNECTED)
                 conn.status_message = f"Connected to ChatGPT ({email})"
                 conn.connected_at = conn.connected_at or now
                 conn.last_verified_at = now
@@ -477,9 +494,9 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
                     _GLOBAL_AUTH_STATE.connected_email = email
 
                 self._render_response(
-                    title="TURNOVER - Authorization Successful",
+                    title="Lodestone - Authorization Successful",
                     heading="✓ Authorization Successful",
-                    message=f"Your ChatGPT account ({email}) is now connected to TURNOVER. You can close this tab and return to the app.",
+                    message=f"Your ChatGPT account ({email}) is now connected to Lodestone. You can close this tab and return to the app.",
                     is_error=False,
                 )
             except Exception as exc:
@@ -488,7 +505,7 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
                     _GLOBAL_AUTH_STATE.status = "error"
                     _GLOBAL_AUTH_STATE.error_message = str(exc)
                 self._render_response(
-                    title="TURNOVER - Token Exchange Failed",
+                    title="Lodestone - Token Exchange Failed",
                     heading="✕ Authorization Error",
                     message=f"Failed to exchange token with OpenAI: {exc}",
                     is_error=True,
@@ -499,7 +516,7 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
             logger.exception("Unhandled error in ChatGPT OAuth callback handler")
             try:
                 self._render_response(
-                    title="TURNOVER - Error",
+                    title="Lodestone - Error",
                     heading="✕ Sign-In Processing Error",
                     message=str(top_exc),
                     is_error=True,
@@ -597,50 +614,12 @@ def _stop_server_async():
     threading.Thread(target=_runner, daemon=True).start()
 
 
-def _watch_codex_auth_file_async(initial_mtime: float):
-    """Background watcher that detects when Codex CLI writes auth.json after login."""
-    def _watcher():
-        auth_file = _codex_auth_path()
-        for _ in range(150):  # watch for up to 3 minutes
-            time.sleep(1.2)
-            if not auth_file.exists():
-                continue
-            try:
-                mtime = auth_file.stat().st_mtime
-                if mtime > initial_mtime:
-                    # File was updated!
-                    data = json.loads(auth_file.read_text())
-                    tokens = data.get("tokens", {})
-                    id_tok = tokens.get("id_token", "")
-                    claims = _decode_jwt_payload(id_tok)
-                    email = claims.get("email")
-                    name = claims.get("name")
-                    if email and tokens.get("access_token"):
-                        # Adopt session
-                        adopt_local_chatgpt_session()
-                        with _GLOBAL_AUTH_STATE.lock:
-                            _GLOBAL_AUTH_STATE.status = "success"
-                            _GLOBAL_AUTH_STATE.connected_email = email
-                        logger.info(f"Codex CLI authenticated successfully as {email}")
-                        break
-            except Exception as exc:
-                logger.debug(f"Watching auth.json: {exc}")
 
-    t = threading.Thread(target=_watcher, daemon=True)
-    t.start()
 
 
 def start_chatgpt_oauth_flow() -> tuple[bool, str, str]:
     """Start the native OAuth PKCE loopback flow for ChatGPT / OpenAI on port 1455."""
     with _GLOBAL_AUTH_STATE.lock:
-        # Kill previous CLI process if any
-        if _GLOBAL_AUTH_STATE.cli_proc:
-            try:
-                _GLOBAL_AUTH_STATE.cli_proc.terminate()
-            except Exception:
-                pass
-            _GLOBAL_AUTH_STATE.cli_proc = None
-
         # Cleanly stop any existing server before starting a fresh one
         if _GLOBAL_AUTH_STATE.server:
             try:
@@ -677,8 +656,13 @@ def start_chatgpt_oauth_flow() -> tuple[bool, str, str]:
             http.server.HTTPServer.allow_reuse_address = True
             server = http.server.HTTPServer(("127.0.0.1", REDIRECT_PORT), _OAuthCallbackHandler)
         except OSError as exc:
+            # The redirect URI is registered against this exact port, so there is
+            # no fallback — another sign-in already holds it.
             logger.warning(f"Could not bind to port {REDIRECT_PORT}: {exc}")
-            return False, auth_url, f"Port {REDIRECT_PORT} busy: {exc}"
+            return False, auth_url, (
+                f"Port {REDIRECT_PORT} is already in use — another ChatGPT "
+                "sign-in is in progress (quit `codex login` and try again)."
+            )
 
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -696,6 +680,13 @@ def start_chatgpt_oauth_flow() -> tuple[bool, str, str]:
         return True, auth_url, "Waiting for browser sign-in"
 
 
+def disconnect() -> None:
+    """Forget the stored ChatGPT credential and stop any in-flight sign-in."""
+    _save_stored_chatgpt_data(None)
+    _token_storage_path().unlink(missing_ok=True)
+    _stop_server_async()
+
+
 def get_oauth_flow_status() -> dict[str, Any]:
     """Check current status of ongoing OAuth sign-in."""
     with _GLOBAL_AUTH_STATE.lock:
@@ -708,48 +699,60 @@ def get_oauth_flow_status() -> dict[str, Any]:
 
 
 def get_chatgpt_access_token() -> str | None:
-    """Retrieve active ChatGPT access token, refreshing it automatically if expired."""
-    for p in [_token_storage_path(), _turnstone_auth_path(), _codex_auth_path()]:
-        if not p.exists():
-            continue
-        try:
-            data = json.loads(p.read_text())
-            tokens = data.get("tokens", {})
-            tok = tokens.get("access_token")
-            if not tok:
-                continue
+    """Retrieve active ChatGPT access token from secure Keychain store or local session, refreshing if expired."""
+    data = _load_stored_chatgpt_data()
 
-            # Check expiration
-            claims = _decode_jwt_payload(tok)
-            exp = claims.get("exp", 0)
-            if exp and time.time() > exp - 180:
-                ref_tok = tokens.get("refresh_token")
-                if ref_tok:
-                    try:
-                        r = httpx.post(
-                            f"{AUTH_BASE_URL}/oauth/token",
-                            data={
-                                "grant_type": "refresh_token",
-                                "refresh_token": ref_tok,
-                                "client_id": CLIENT_ID,
-                            },
-                            headers={"Content-Type": "application/x-www-form-urlencoded"},
-                            timeout=15.0,
-                        )
-                        if r.status_code == 200:
-                            new_toks = r.json()
-                            data["tokens"] = new_toks
-                            data["last_refresh"] = datetime.now(timezone.utc).isoformat()
-                            _token_storage_path().write_text(json.dumps(data, indent=2))
-                            return new_toks.get("access_token")
-                    except Exception as refresh_exc:
-                        logger.warning(f"Failed to refresh ChatGPT token: {refresh_exc}")
+    if not data:
+        # Fall back to an existing Codex CLI session so a user already signed in
+        # there does not have to authorize twice. Read-only: a refreshed token is
+        # written to Lodestone's own store, never back into ~/.codex.
+        codex_auth = _codex_auth_path()
+        if codex_auth.exists():
+            try:
+                d = json.loads(codex_auth.read_text())
+                if d.get("tokens", {}).get("access_token"):
+                    data = d
+            except Exception:
+                pass
 
-            return tok
-        except Exception:
-            pass
+    if not data:
+        return None
 
-    return None
+    try:
+        tokens = data.get("tokens", {})
+        tok = tokens.get("access_token")
+        if not tok:
+            return None
+
+        # Check expiration
+        claims = _decode_jwt_payload(tok)
+        exp = claims.get("exp", 0)
+        if exp and time.time() > exp - 180:
+            ref_tok = tokens.get("refresh_token")
+            if ref_tok:
+                try:
+                    r = httpx.post(
+                        f"{AUTH_BASE_URL}/oauth/token",
+                        data={
+                            "grant_type": "refresh_token",
+                            "refresh_token": ref_tok,
+                            "client_id": CLIENT_ID,
+                        },
+                        headers={"Content-Type": "application/x-www-form-urlencoded"},
+                        timeout=15.0,
+                    )
+                    if r.status_code == 200:
+                        new_toks = r.json()
+                        data["tokens"] = new_toks
+                        data["last_refresh"] = datetime.now(timezone.utc).isoformat()
+                        _save_stored_chatgpt_data(data)
+                        return new_toks.get("access_token")
+                except Exception as refresh_exc:
+                    logger.warning(f"Failed to refresh ChatGPT token: {refresh_exc}")
+
+        return tok
+    except Exception:
+        return None
 
 
 def chat_with_chatgpt_subscription(
@@ -799,33 +802,8 @@ def chat_with_chatgpt_subscription(
                 "parameters": t.parameters,
             })
 
-    # 1. Determine models supported by the current user session / plan
-    supported_models: set[str] = set()
-    models_cache_candidates = [
-        _turnstone_auth_path().parent / "models_cache.json",
-        Path.home() / ".codex/models_cache.json",
-        Path.home() / ".lodestone/models_cache.json",
-    ]
-    for cache_p in models_cache_candidates:
-        if cache_p.exists():
-            try:
-                cdata = json.loads(cache_p.read_text())
-                supported_models = {m.get("slug") for m in cdata.get("models", []) if m.get("slug")}
-                if supported_models:
-                    break
-            except Exception:
-                pass
-
-    local_sess = detect_chatgpt_local_session(fetch_usage=False)
-    user_plan = (local_sess and local_sess.get("plan")) or "ChatGPT Free"
-
-    if not supported_models:
-        if "free" in user_plan.lower():
-            supported_models = {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "codex-auto-review"}
-        elif "plus" in user_plan.lower():
-            supported_models = {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "o3-mini", "codex-auto-review"}
-        else:
-            supported_models = {"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "o3-mini", "codex-auto-review"}
+    # 1. What this account's plan can actually run
+    supported_models, _meta, user_plan = resolve_subscription_models()
 
     from .entitlements import evaluate_model_entitlement, get_best_unlocked_model
 
@@ -900,13 +878,18 @@ def chat_with_chatgpt_subscription(
                 except Exception:
                     pass
     except httpx.HTTPStatusError as exc:
-        code = exc.response.status_code
-        if code in (401, 403):
-            return ChatResult(text="⚠️ ChatGPT subscription session expired or invalid. Please sign in again in Models.")
-        elif code == 429:
-            return ChatResult(text="⚠️ ChatGPT rate limited. Please wait a moment and retry.")
-        return ChatResult(text=f"⚠️ ChatGPT subscription error ({code}): {exc.response.text[:150]}")
+        from .errors import ErrorKind, classify_http
+
+        err = classify_http("ChatGPT", exc.response.status_code, exc.response.text,
+                            model=chosen_model)
+        if err.kind is ErrorKind.AUTH:
+            err.message = ("Your ChatGPT session expired. Sign in again in "
+                           "Models & Accounts.")
+        return ChatResult(text=err.as_reply())
     except Exception as exc:
-        return ChatResult(text=f"⚠️ Error connecting to ChatGPT subscription: {exc}")
+        from .errors import classify_exception
+
+        return ChatResult(text=classify_exception("ChatGPT", exc,
+                                                  model=chosen_model).as_reply())
 
     return ChatResult(text=full_text, tool_calls=calls)

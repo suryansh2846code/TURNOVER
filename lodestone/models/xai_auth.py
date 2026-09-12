@@ -14,9 +14,7 @@ import hashlib
 import http.server
 import json
 import logging
-import os
 import secrets
-import socket
 import threading
 import time
 import urllib.parse
@@ -27,7 +25,7 @@ from typing import Any
 import httpx
 
 from ..config import get_settings
-from .connections import ConnectionStatus, get_connection, save_connection
+from .connections import ACCOUNT, ConnectionStatus, get_connection, save_connection
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +37,45 @@ REDIRECT_URI = f"http://127.0.0.1:{REDIRECT_PORT}/callback"
 SCOPE = "openid profile email offline_access grok-cli:access api:access"
 
 
+_SECRET_KEY_XAI_TOKEN = "LODESTONE_XAI_TOKEN"
+
+
 def _token_storage_path() -> Path:
     return get_settings().home / "xai_token.json"
+
+
+def _load_stored_xai_data() -> dict[str, Any] | None:
+    """Retrieve Lodestone-owned xAI token payload from secure Keychain store."""
+    settings = get_settings()
+    raw = settings.get_secret(_SECRET_KEY_XAI_TOKEN)
+    if raw:
+        try:
+            return json.loads(raw)
+        except Exception:
+            pass
+    # Auto-migrate legacy plaintext file to keychain if present
+    legacy = settings.home / "xai_token.json"
+    if legacy.exists():
+        try:
+            data = json.loads(legacy.read_text())
+            settings.set_secret(_SECRET_KEY_XAI_TOKEN, json.dumps(data))
+            legacy.unlink(missing_ok=True)
+            return data
+        except Exception:
+            pass
+    return None
+
+
+def _save_stored_xai_data(data: dict[str, Any] | None) -> None:
+    """Persist Lodestone-owned xAI token payload into secure Keychain store."""
+    settings = get_settings()
+    if data is None:
+        settings.set_secret(_SECRET_KEY_XAI_TOKEN, None)
+    else:
+        settings.set_secret(_SECRET_KEY_XAI_TOKEN, json.dumps(data))
+    legacy = settings.home / "xai_token.json"
+    if legacy.exists():
+        legacy.unlink(missing_ok=True)
 
 
 def _decode_jwt_payload(jwt_token: str) -> dict[str, Any]:
@@ -60,11 +95,10 @@ def _decode_jwt_payload(jwt_token: str) -> dict[str, Any]:
 
 
 def detect_xai_local_session() -> dict[str, Any] | None:
-    """Detect existing xAI / Grok session in Lodestone storage."""
-    our_token = _token_storage_path()
-    if our_token.exists():
+    """Detect existing xAI / Grok session in Lodestone secure storage."""
+    data = _load_stored_xai_data()
+    if data:
         try:
-            data = json.loads(our_token.read_text())
             email = data.get("email")
             name = data.get("name")
             if not email and "tokens" in data:
@@ -76,13 +110,55 @@ def detect_xai_local_session() -> dict[str, Any] | None:
                 return {
                     "source": "turnover",
                     "email": email,
-                    "name": name or "Grok User",
-                    "plan": "Grok Account",
+                    "name": name or "xAI User",
+                    "plan": "xAI Account",
                     "has_token": bool(data.get("tokens", {}).get("access_token")),
                 }
         except Exception:
             pass
     return None
+
+
+def get_xai_access_token() -> str | None:
+    """Retrieve active xAI access token from secure Keychain store, refreshing if expired."""
+    data = _load_stored_xai_data()
+    if not data:
+        return None
+    try:
+        tokens = data.get("tokens", {})
+        tok = tokens.get("access_token")
+        if not tok:
+            return None
+
+        # Check expiration
+        claims = _decode_jwt_payload(tok)
+        exp = claims.get("exp", 0)
+        if exp and time.time() > exp - 180:
+            ref_tok = tokens.get("refresh_token")
+            if ref_tok:
+                try:
+                    r = httpx.post(
+                        TOKEN_URL,
+                        data={
+                            "grant_type": "refresh_token",
+                            "refresh_token": ref_tok,
+                            "client_id": CLIENT_ID,
+                        },
+                        headers={"Content-Type": "application/x-www-form-urlencoded"},
+                        timeout=15.0,
+                    )
+                    if r.status_code == 200:
+                        new_toks = r.json()
+                        data["tokens"] = new_toks
+                        data["last_refresh"] = datetime.now(timezone.utc).isoformat()
+                        _save_stored_xai_data(data)
+                        return new_toks.get("access_token")
+                except Exception as refresh_exc:
+                    logger.warning(f"Failed to refresh xAI token: {refresh_exc}")
+
+        return tok
+    except Exception:
+        return None
 
 
 class _XaiAuthState:
@@ -203,11 +279,9 @@ class _XaiCallbackHandler(http.server.BaseHTTPRequestHandler):
                 token_data = token_resp.json()
                 id_token = token_data.get("id_token", "")
                 claims = _decode_jwt_payload(id_token) if id_token else {}
-                email = claims.get("email") or token_data.get("email") or "grok-user@x.ai"
+                email = claims.get("email") or token_data.get("email") or claims.get("sub") or "xAI User"
                 name = claims.get("name") or "xAI Grok User"
 
-                storage_file = _token_storage_path()
-                storage_file.parent.mkdir(parents=True, exist_ok=True)
                 payload = {
                     "auth_mode": "xai_subscription",
                     "tokens": token_data,
@@ -215,14 +289,14 @@ class _XaiCallbackHandler(http.server.BaseHTTPRequestHandler):
                     "name": name,
                     "last_refresh": datetime.now(timezone.utc).isoformat(),
                 }
-                storage_file.write_text(json.dumps(payload, indent=2))
+                _save_stored_xai_data(payload)
 
                 now = datetime.now(timezone.utc).isoformat()
                 conn = get_connection("xai")
                 conn.auth_method = "account"
                 conn.email = email
                 conn.account_display_name = name
-                conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
+                conn.set_credential(ACCOUNT, ConnectionStatus.ACCOUNT_CONNECTED)
                 conn.status_message = f"Connected to Grok ({email})"
                 conn.connected_at = conn.connected_at or now
                 conn.last_verified_at = now
@@ -396,6 +470,13 @@ def start_xai_oauth_flow() -> tuple[bool, str, str]:
         _GLOBAL_XAI_AUTH_STATE.connected_email = ""
 
         return True, auth_url, "Waiting for browser sign-in"
+
+
+def disconnect() -> None:
+    """Forget the stored xAI credential and stop any in-flight sign-in."""
+    _save_stored_xai_data(None)
+    _token_storage_path().unlink(missing_ok=True)
+    _stop_server_async()
 
 
 def get_xai_oauth_flow_status() -> dict[str, Any]:

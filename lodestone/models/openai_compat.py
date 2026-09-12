@@ -12,7 +12,9 @@ import uuid
 
 import httpx
 
-from .base import ChatResult, LLMProvider, Message, Tool, ToolCall, _saved_key
+from .base import ChatResult, LLMProvider, Message, ToolCall, _saved_key
+from .errors import (ErrorKind, ProviderError, classify_exception,
+                     classify_http)
 
 
 class OpenAICompatProvider(LLMProvider):
@@ -42,7 +44,9 @@ class OpenAICompatProvider(LLMProvider):
                     if conn.connection_status == ConnectionStatus.DISCONNECTED:
                         return False, f"Disconnected. Set {self.key_env} or Sign in with ChatGPT"
                     if conn.connection_status == ConnectionStatus.ACCOUNT_CONNECTED:
-                        return True, ""
+                        if get_chatgpt_access_token():
+                            return True, ""
+                        return False, "ChatGPT session expired or missing token. Please reconnect in Models & Accounts."
                     if get_chatgpt_access_token():
                         return True, ""
                 except Exception:
@@ -60,26 +64,40 @@ class OpenAICompatProvider(LLMProvider):
                     "content": m.content,
                 })
             elif m.role == "assistant" and m.tool_calls:
+                tc_list = []
+                for tc in m.tool_calls:
+                    item = {
+                        "id": tc.id, "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.arguments) if isinstance(tc.arguments, dict) else str(tc.arguments),
+                        },
+                    }
+                    if getattr(tc, "extra_content", None):
+                        item["extra_content"] = tc.extra_content
+                    tc_list.append(item)
                 out.append({
                     "role": "assistant",
                     "content": m.content or None,
-                    "tool_calls": [{
-                        "id": tc.id, "type": "function",
-                        "function": {"name": tc.name,
-                                     "arguments": json.dumps(tc.arguments)},
-                    } for tc in m.tool_calls],
+                    "tool_calls": tc_list,
                 })
             else:
                 out.append({"role": m.role, "content": m.content})
         return out
 
+    def _refine_error(self, err):
+        """Hook for a provider to sharpen a classified error. Default: as-is."""
+        return err
+
     def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
         if self.name == "openai" and not self.api_key:
             from .chatgpt_auth import chat_with_chatgpt_subscription, get_chatgpt_access_token
-            if get_chatgpt_access_token():
+            tok = get_chatgpt_access_token()
+            if tok:
                 return chat_with_chatgpt_subscription(
                     messages, model=self.model, tools=tools,
                 )
+            return ChatResult(text="⚠️ No OpenAI API key or ChatGPT subscription connected. Please sign in with ChatGPT or set OPENAI_API_KEY in Models & Accounts.")
 
         payload = {
             "model": self.model,
@@ -105,32 +123,23 @@ class OpenAICompatProvider(LLMProvider):
                 headers=headers, json=payload, timeout=120,
             )
             resp.raise_for_status()
-        except httpx.TimeoutException:
-            return ChatResult(text=f"⚠️ {self.name} timed out. Try again, or "
-                              "switch models in the sidebar.")
         except httpx.HTTPStatusError as exc:
-            code = exc.response.status_code
-            if code in (401, 403):
-                msg = f"Invalid or expired API key for {self.name} — check {self.key_env}."
-            elif code == 429:
-                msg = f"{self.name} rate-limited you. Wait a moment and retry."
-            elif code >= 500:
-                msg = f"{self.name} server error ({code}). Try again shortly."
-            else:
-                detail = (exc.response.text or "")[:150]
-                msg = f"{self.name} request failed ({code}). {detail}"
-            return ChatResult(text=f"⚠️ {msg}")
-        except httpx.RequestError:
-            return ChatResult(
-                text=f"⚠️ Can't reach {self.name} at {self.base_url}. "
-                     + ("Is Ollama running? (`ollama serve`)" if self.name == "ollama"
-                        else "Check your connection and base URL."))
+            err = classify_http(self.name, exc.response.status_code, exc.response.text,
+                                model=self.model, key_env=self.key_env)
+            return ChatResult(text=self._refine_error(err).as_reply())
+        except (httpx.TimeoutException, httpx.RequestError) as exc:
+            err = classify_exception(self.name, exc, model=self.model, base_url=self.base_url)
+            if self.name == "ollama" and err.kind is ErrorKind.NETWORK:
+                err.message = "Ollama isn't running. Start it with `ollama serve`."
+            return ChatResult(text=self._refine_error(err).as_reply())
         try:
             data = resp.json()
             choice = data["choices"][0]["message"]
         except (json.JSONDecodeError, KeyError, IndexError, TypeError):
-            return ChatResult(text=f"⚠️ Unexpected response from {self.name}. "
-                              "Try again or switch models.")
+            err = ProviderError(ErrorKind.BAD_REQUEST, self.name, model=self.model,
+                                message=f"Unexpected response from {self.name}. "
+                                        "Try again or switch models.")
+            return ChatResult(text=err.as_reply())
         calls = []
         for tc in choice.get("tool_calls") or []:
             try:
@@ -155,7 +164,7 @@ class OpenAICompatProvider(LLMProvider):
 class OpenRouterProvider(OpenAICompatProvider):
     name = "openrouter"
     default_base = "https://openrouter.ai/api/v1"
-    default_model = "anthropic/claude-3.5-sonnet"
+    default_model = "anthropic/claude-sonnet-5"
     key_env = "OPENROUTER_API_KEY"
     key_required = True
 
@@ -164,7 +173,7 @@ class OllamaProvider(OpenAICompatProvider):
     """Local models via Ollama — fully offline, no key."""
     name = "ollama"
     default_base = "http://localhost:11434/v1"
-    default_model = "llama3.1"
+    default_model = "llama3.2"
     key_env = "OLLAMA_API_KEY"
     key_required = False
 
