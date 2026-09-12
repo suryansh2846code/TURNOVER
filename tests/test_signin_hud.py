@@ -63,47 +63,48 @@ def test_the_frontend_raises_the_card_and_stands_down():
     assert "return false" in fn
 
 
-def test_card_opens_in_the_screen_corner():
-    """Like a system notification, not centred over the app."""
-    created = {}
-    hud.configure("http://127.0.0.1:9999", MagicMock())
-    screen = MagicMock(x=0, y=0, width=1470, height=956)
-    fake_webview = MagicMock(screens=[screen])
-    fake_webview.create_window = lambda *a, **kw: created.update(kw) or MagicMock()
-    with patch.dict("sys.modules", {"webview": fake_webview}):
-        hud.open_signin("xai", "Grok")
-    assert created["x"] > 900, "not anchored to the right edge"
-    assert created["y"] < 60, "not anchored to the top edge"
-
-
-# ── the window itself ────────────────────────────────────────────────────
-def test_window_floats_above_other_apps():
-    """The whole point: the user is in their browser, not in Lodestone."""
+def test_window_is_prepared_up_front_and_floats():
+    """Built once, hidden, on the main thread — creating and destroying windows
+    from the js_api worker thread is cross-thread Cocoa work we avoid."""
     created = {}
 
     def fake_create_window(title, url, **kw):
-        created["title"], created["url"], created["kw"] = title, url, kw
+        created.update(kw)
         return MagicMock()
 
+    screen = MagicMock(x=0, y=0, width=1470, height=956)
+    with patch.dict("sys.modules", {"webview": MagicMock(screens=[screen])}):
+        hud.prepare(fake_create_window)
+
+    assert created["hidden"] is True, "must not flash on screen at startup"
+    assert created["on_top"] is True, "floating above other apps is the point"
+    assert created["frameless"] is True
+    assert created["easy_drag"] is True, "a frameless window must be movable"
+    assert created["x"] > 900 and created["y"] < 60, "not in the top-right corner"
+
+
+def test_showing_reuses_the_window_rather_than_creating_one():
+    window = MagicMock()
     hud.configure("http://127.0.0.1:9999", MagicMock())
-    with patch.dict("sys.modules", {"webview": MagicMock(create_window=fake_create_window)}):
+    hud._hud_window = window
+    screen = MagicMock(x=0, y=0, width=1470, height=956)
+    with patch.dict("sys.modules", {"webview": MagicMock(screens=[screen])}):
         assert hud.open_signin("xai", "Grok", "https://auth.x.ai/c") is True
 
-    assert created["kw"]["on_top"] is True
-    assert created["kw"]["frameless"] is True
-    assert created["kw"]["easy_drag"] is True, "a frameless window must be movable"
-    assert "provider=xai" in created["url"] and "brand=Grok" in created["url"]
-    assert f"limit={hud.SIGNIN_TIMEOUT_SECONDS}" in created["url"]
+    url = window.load_url.call_args[0][0]
+    assert "provider=xai" in url and "brand=Grok" in url
+    assert f"limit={hud.SIGNIN_TIMEOUT_SECONDS}" in url
+    window.show.assert_called_once()
+    window.destroy.assert_not_called()
 
 
-def test_opening_twice_replaces_rather_than_stacks():
-    windows = [MagicMock(), MagicMock()]
-    hud.configure("http://127.0.0.1:9999", MagicMock())
-    with patch.dict("sys.modules",
-                    {"webview": MagicMock(create_window=MagicMock(side_effect=windows))}):
-        hud.open_signin("xai", "Grok")
-        hud.open_signin("cursor", "Cursor")
-    windows[0].destroy.assert_called_once()
+def test_closing_hides_and_stops_the_page_polling():
+    window = MagicMock()
+    hud._hud_window = window
+    hud.close()
+    window.hide.assert_called_once()
+    window.load_url.assert_called_with("about:blank")
+    window.destroy.assert_not_called()
 
 
 def test_close_is_safe_when_nothing_is_open():
@@ -111,10 +112,24 @@ def test_close_is_safe_when_nothing_is_open():
 
 
 def test_a_window_failure_does_not_break_sign_in():
+    window = MagicMock()
+    window.show.side_effect = RuntimeError("no display")
     hud.configure("http://127.0.0.1:9999", MagicMock())
-    with patch.dict("sys.modules",
-                    {"webview": MagicMock(create_window=MagicMock(side_effect=RuntimeError("no display")))}):
+    hud._hud_window = window
+    with patch.dict("sys.modules", {"webview": MagicMock(screens=[])}):
         assert hud.open_signin("xai", "Grok") is False
+
+
+def test_cancelling_stops_the_flow_and_hides_the_card():
+    """Dismissing the card must actually abandon the sign-in, not just hide it."""
+    window = MagicMock()
+    hud._hud_window = window
+    cancelled = {}
+    flow = MagicMock(cancel=lambda: cancelled.setdefault("called", True))
+    with patch("lodestone.models.auth_flows.get_flow", return_value=flow):
+        assert hud._Bridge().cancel_signin("cursor") is True
+    assert cancelled.get("called") is True
+    window.hide.assert_called_once()
 
 
 def test_timeout_is_generous_enough_for_a_real_sign_in():
@@ -156,6 +171,31 @@ def test_it_actually_polls_for_status():
     proc = subprocess.run(["node", str(HARNESS), str(HUD_HTML), "success"],
                           capture_output=True, text=True, timeout=60)
     assert json.loads(proc.stdout)["polled"] >= 1
+
+
+def test_the_card_offers_a_way_to_cancel():
+    html = HUD_HTML.read_text()
+    assert 'id="cancel"' in html and "Cancel sign-in" in html
+    assert "/auth/cancel" in html, "the button must abandon the flow, not just close"
+
+
+def test_the_models_card_cancel_abandons_the_flow():
+    src = (ROOT / "lodestone/web/app.js").read_text()
+    assert "/auth/cancel" in src, "in-app Cancel only hid the spinner"
+
+
+def test_the_poll_does_not_hammer_the_expensive_endpoint():
+    """/refresh re-runs discovery and takes seconds per provider; calling it
+    every tick queued requests faster than the server could finish them and
+    froze the whole app."""
+    src = (ROOT / "lodestone/web/app.js").read_text()
+    hudfn = src[src.index("function showWaitingHud"):]
+    hudfn = hudfn[:hudfn.index("\nfunction ")]
+    loop = hudfn[hudfn.index("pollTimer = setInterval"):]
+    # Strip comments so the rule is checked against code, not prose.
+    code = "\n".join(l for l in loop.splitlines() if not l.strip().startswith("//"))
+    before_success = code[:code.index('st.status === "success"')]
+    assert "/refresh" not in before_success, "refresh is called before knowing it succeeded"
 
 
 def test_loader_animation_is_present():

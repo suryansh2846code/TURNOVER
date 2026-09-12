@@ -205,6 +205,11 @@ def test_status_reports_waiting_then_success():
          patch("subprocess.run", return_value=_cp(0, MODELS_OUT)):   # "not authenticated"
         assert client.get("/api/providers/xai/auth/status").json()["status"] == "waiting"
 
+    # Cached for a few seconds so polling is cheap; a completed login is
+    # noticed once that lapses.
+    from lodestone.models.grok_cli import reset_auth_cache
+    reset_auth_cache()
+
     with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
          patch("subprocess.run", return_value=_cp(0, "Available models:\n  * grok-4.6")):
         assert client.get("/api/providers/xai/auth/status").json()["status"] == "success"

@@ -295,7 +295,7 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
   // A browser sign-in with an account switch, a password and 2FA can take a
   // while. Giving up after ~2.5 minutes left users staring at a card that
   // never updated, so wait ~10 and then say so rather than vanishing.
-  const MAX_ATTEMPTS = 500;
+  const MAX_ATTEMPTS = 300;   // x2s = ~10 minutes
   const finish = (email) => {
     clearInterval(pollTimer);
     pollTimer = null;
@@ -315,19 +315,22 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
       return;
     }
     try {
-      // Every provider answers /auth/status — never gate this on a provider id.
+      // Poll ONLY the cheap status endpoint. /refresh re-runs discovery and can
+      // take seconds per provider; calling it every tick queued requests faster
+      // than the server could finish them and froze the whole app.
       const st = await api(`/api/providers/${providerId}/auth/status`).catch(() => ({}));
       if (st.status === "success") {
-        await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
+        await api(`/api/providers/${providerId}/refresh`, { method: "POST" }).catch(() => {});
         finish(st.email);
-        return;
-      }
-      const ref = await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
-      if (ref.ready || ref.connection?.account_connected) {
-        finish(ref.connection?.email || "");
+      } else if (st.status === "error" && st.error) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        dismiss();
+        toast(`${brandName} sign-in failed: ${st.error}`);
+        if (onCancel) onCancel();
       }
     } catch (_) {}
-  }, 1200);
+  }, 2000);
 
   activeWaitingHud = { el: hud, dismiss };
   return activeWaitingHud;
@@ -767,7 +770,17 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
         renderProviderConnectBox(boxEl, providerId, options);
       };
 
-      if (cancelBtn) cancelBtn.onclick = stopPolling;
+      if (cancelBtn) cancelBtn.onclick = async () => {
+        // Abandon the sign-in for real: stop the CLI's login process and put
+        // the floating card away, not just hide our own spinner.
+        cancelBtn.disabled = true;
+        try {
+          await api(`/api/providers/${providerId}/auth/cancel`, { method: "POST" });
+        } catch (_) {}
+        try { window.pywebview?.api?.close_signin_hud?.(); } catch (_) {}
+        toast(`Cancelled ${brandName} sign-in`);
+        stopPolling();
+      };
 
       try {
         const res = await api(`/api/providers/${providerId}/auth/start`, { method: "POST" });

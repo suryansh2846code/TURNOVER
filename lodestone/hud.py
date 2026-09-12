@@ -13,6 +13,11 @@ product must work in both modes.
 no handle on the webview at all — a backend-initiated window silently did
 nothing there. The frontend always runs inside the webview, so it calls
 `window.pywebview.api.open_signin_hud(...)` and this module does the rest.
+
+**The window is created once, hidden, on the main thread** and then shown and
+hidden as needed. Creating and destroying windows from the js_api worker thread
+is the kind of cross-thread Cocoa work that is easy to get wrong; show/hide of a
+pre-made window is a plain, thread-safe call.
 """
 from __future__ import annotations
 
@@ -66,6 +71,20 @@ class _Bridge:
     def close_hud(self) -> None:
         close()
 
+    def cancel_signin(self, provider: str) -> bool:
+        """Abandon an in-progress sign-in and put the card away."""
+        close()
+        try:
+            from .models.auth_flows import get_flow
+
+            cancel = getattr(get_flow(provider), "cancel", None)
+            if cancel is not None:
+                cancel()
+            return True
+        except Exception:
+            logger.debug("could not cancel %s sign-in", provider, exc_info=True)
+            return False
+
     def focus_main(self) -> None:
         close()
         try:
@@ -77,45 +96,53 @@ class _Bridge:
             logger.debug("could not focus the main window", exc_info=True)
 
 
+def prepare(create_window) -> None:
+    """Build the (hidden) window up front, on the main thread."""
+    global _hud_window
+    width, height = _WINDOW_SIZE
+    x, y = _corner_position(width, height)
+    try:
+        _hud_window = create_window(
+            "Connect", "about:blank",
+            width=width, height=height, x=x, y=y,
+            hidden=True, frameless=True, easy_drag=True, on_top=True,
+            resizable=False, shadow=True, focus=True, js_api=_Bridge(),
+        )
+    except Exception:
+        logger.warning("could not prepare the sign-in window", exc_info=True)
+        _hud_window = None
+
+
 def open_signin(provider: str, brand: str, auth_url: str = "") -> bool:
     """Show the floating card for an in-progress sign-in. False if unavailable."""
-    if not available():
+    if not available() or _hud_window is None:
         return False
-
-    import webview
 
     query = urllib.parse.urlencode({
         "provider": provider, "brand": brand,
         "auth_url": auth_url, "limit": SIGNIN_TIMEOUT_SECONDS,
     })
-    url = f"{_origin}/signin-hud?{query}"
-
     with _lock:
-        close()
         try:
-            global _hud_window
+            _hud_window.load_url(f"{_origin}/signin-hud?{query}")
             width, height = _WINDOW_SIZE
             x, y = _corner_position(width, height)
-            _hud_window = webview.create_window(
-                f"Connect {brand}", url,
-                width=width, height=height, x=x, y=y,
-                frameless=True, easy_drag=True, on_top=True,
-                resizable=False, shadow=True, transparent=True,
-                focus=True, js_api=_Bridge(),
-            )
+            if x is not None:
+                _hud_window.move(x, y)
+            _hud_window.show()
             return True
         except Exception:
-            logger.warning("could not open the sign-in window", exc_info=True)
-            _hud_window = None
+            logger.warning("could not show the sign-in window", exc_info=True)
             return False
 
 
 def close() -> None:
-    global _hud_window
-    window, _hud_window = _hud_window, None
-    if window is None:
+    """Hide the card. The window is reused, never destroyed — tearing one down
+    from a worker thread is exactly the cross-thread work we are avoiding."""
+    if _hud_window is None:
         return
     try:
-        window.destroy()
+        _hud_window.hide()
+        _hud_window.load_url("about:blank")     # stop the page polling
     except Exception:
-        logger.debug("sign-in window already closed", exc_info=True)
+        logger.debug("sign-in window already hidden", exc_info=True)

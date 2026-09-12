@@ -1,6 +1,9 @@
 """Unit tests for Native AI Account detection, sign-in flows, and Gemini OAuth reflection."""
 from __future__ import annotations
 
+import pytest
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 
 from lodestone.api.app import app
@@ -117,6 +120,31 @@ def test_connect_local_cursor_account():
         assert conn.email == cursor_info["email"]
 
 
+@pytest.fixture(autouse=True)
+def _no_real_oauth_server(request):
+    """Never bind the real OAuth loopback port from a test.
+
+    `start_chatgpt_oauth_flow()` listens on a fixed 1455 (the redirect URI is
+    registered against it, so it cannot move). Binding it for real made these
+    tests fail whenever anything else held the port — including the user's own
+    running app mid-sign-in.
+    """
+    import http.server
+
+    if request.node.get_closest_marker("real_oauth_server"):
+        yield          # this test drives the callback over HTTP for real
+        return
+
+    class _FakeServer:
+        def __init__(self, *a, **kw): pass
+        def serve_forever(self): pass
+        def shutdown(self): pass
+        def server_close(self): pass
+
+    with patch.object(http.server, "HTTPServer", _FakeServer):
+        yield
+
+
 def test_signin_endpoints():
     """Providers with an interactive sign-in start one; key-only ones say so."""
     from lodestone.models.capabilities import get_capabilities
@@ -209,6 +237,7 @@ def test_open_browser_endpoint(monkeypatch):
     assert bad_resp.status_code == 400
 
 
+@pytest.mark.real_oauth_server
 def test_openai_oauth_callback_handler(monkeypatch):
     """Verify OpenAI OAuth callback handler handles /auth/callback without AttributeError and updates connection."""
     import base64

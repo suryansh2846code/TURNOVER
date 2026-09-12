@@ -113,6 +113,8 @@ def run_app(dev: bool = False) -> None:
         js_api=_AppBridge(),
     )
     hud.configure(f"http://{host}:{port}", window)
+    # Built now, on the main thread, and shown later from the page.
+    hud.prepare(webview.create_window)
 
     try:
         webview.start()          # blocks until the window is closed

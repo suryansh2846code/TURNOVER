@@ -38,6 +38,17 @@ What that means concretely, and what it has already changed:
   the page for the same reason. Timeout is **180s** (`hud.SIGNIN_TIMEOUT_SECONDS`), deliberately
   generous: an account switch with a password and 2FA blew past a 150s poll in
   practice. On expiry it shows an error with **Try again**, never a dead spinner.
+- **Polling must be cheap.** `/auth/status` is polled every 2s during sign-in;
+  `/refresh` re-runs discovery and takes **1.6-6.4s per provider**, so calling it
+  each tick queued requests faster than the server could finish them, saturated
+  FastAPI's sync threadpool, and froze the whole app (the UI shares that server).
+  Poll the cheap endpoint and call the expensive one **once**, on success. CLI
+  sign-in checks shell out, so they are cached for a few seconds
+  (`reset_auth_cache()` on login and cancel).
+- **Anything the user starts, they can stop.** Sign-in is cancellable from both
+  the floating card and the Models card: `/auth/cancel` → `AuthFlow.cancel()`
+  terminates the CLI's login process. Dismissing the floating card cancels too —
+  a close button that silently leaves work running is a lie.
 - **Never make the user wait without telling them.** Long work runs as a
   background job with progress that survives a refresh — sync, brain enrich, CLI
   install. A spinner with no end state is a bug.

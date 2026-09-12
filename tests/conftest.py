@@ -34,3 +34,16 @@ def _never_touch_the_real_keychain():
         yield
     finally:
         Settings._keychain_ok = original
+
+
+@pytest.fixture(autouse=True)
+def _no_stale_cli_auth_cache():
+    """CLI sign-in state is cached for a few seconds so polling doesn't spawn a
+    subprocess per tick. That cache must not leak between tests."""
+    from lodestone.models import cursor, grok_cli
+
+    cursor.reset_auth_cache()
+    grok_cli.reset_auth_cache()
+    yield
+    cursor.reset_auth_cache()
+    grok_cli.reset_auth_cache()

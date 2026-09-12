@@ -91,6 +91,15 @@
     to   { transform: rotate(360deg) translateX(7px); }
   }
 
+  .linkbtn {
+    margin: 10px auto 0;
+    display: block;
+    border: 0; background: none; padding: 6px 8px;
+    color: var(--muted); font: inherit; font-size: 14px; cursor: pointer;
+  }
+  .linkbtn:hover { color: var(--text); }
+  .linkbtn[hidden] { display: none; }
+
   .tick { color: var(--accent); font-size: 17px; line-height: 1; }
   .countdown { font-variant-numeric: tabular-nums; }
   .is-ok .status { color: var(--accent); }
@@ -111,6 +120,7 @@
   </div>
   <p class="body" id="body">Sign in and approve access there. Lodestone will update when the connection is ready.</p>
   <button class="action" id="action"></button>
+  <button class="linkbtn" id="cancel">Cancel sign-in</button>
 </div>
 
 <script>
@@ -152,10 +162,17 @@
     });
   });
 
-  $("close").onclick = () => bridge()?.close_hud?.();
+  const cancelSignin = async () => {
+    done = true;                                   // stop the poll immediately
+    try { await api(`/api/providers/${provider}/auth/cancel`, { method: "POST" }); } catch (_) {}
+    (bridge()?.cancel_signin?.(provider)) ?? bridge()?.close_hud?.();
+  };
+  $("close").onclick = cancelSignin;               // dismissing IS cancelling
+  $("cancel").onclick = cancelSignin;
 
   function succeed(email) {
     done = true;
+    $("cancel").hidden = true;
     $("card").className = "card is-ok";
     $("status").innerHTML = `<span class="tick">&#10003;</span><span>Connected</span>`;
     $("title").textContent = `${brandName} is connected`;
@@ -167,6 +184,7 @@
 
   function fail(message) {
     done = true;
+    $("cancel").textContent = "Close";
     $("card").className = "card is-err";
     $("status").innerHTML = `<span>&#9888;</span><span>Sign-in timed out</span>`;
     $("title").textContent = `Couldn't connect ${brandName}`;

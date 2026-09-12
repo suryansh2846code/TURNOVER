@@ -64,4 +64,7 @@ select = ["F", "E9"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "real_oauth_server: test drives the OAuth callback over real HTTP (binds port 1455)",
+]
 filterwarnings = ["ignore::DeprecationWarning"]

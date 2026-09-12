@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 from .base import ChatResult, LLMProvider, Message, parse_cli_json
@@ -112,25 +113,65 @@ def grok_cli_models() -> list[str]:
     return models
 
 
-def grok_cli_auth_status() -> dict:
+_auth_cache: tuple[float, dict] | None = None
+_AUTH_TTL = 3.0
+
+
+def grok_cli_auth_status(*, fresh: bool = False) -> dict:
     """Whether the Grok CLI is signed in.
 
     `grok models` prints "You are not authenticated." when it is not, and the
     model list either way — so one call answers both questions.
     """
+    global _auth_cache
+    # Polled once a second during sign-in; without this every tick spawns a
+    # subprocess and the request queue outruns the server.
+    if not fresh and _auth_cache and (time.monotonic() - _auth_cache[0]) < _AUTH_TTL:
+        return _auth_cache[1]
+
     cli = find_grok_cli()
     if not cli:
-        return {"installed": False, "authenticated": False}
+        result = {"installed": False, "authenticated": False}
+        _auth_cache = (time.monotonic(), result)
+        return result
     try:
         res = subprocess.run([cli, "models"], capture_output=True, text=True,
                              timeout=20.0, env={**os.environ, "PATH": _augmented_path()})
     except Exception:
-        return {"installed": True, "authenticated": False}
+        result = {"installed": True, "authenticated": False}
+        _auth_cache = (time.monotonic(), result)
+        return result
     blob = f"{res.stdout} {res.stderr}".lower()
-    return {
+    result = {
         "installed": True,
         "authenticated": "not authenticated" not in blob and res.returncode == 0,
     }
+    _auth_cache = (time.monotonic(), result)
+    return result
+
+
+_login_proc: subprocess.Popen | None = None
+
+
+def reset_auth_cache() -> None:
+    """Forget the cached sign-in state (used on login/cancel, and by tests)."""
+    global _auth_cache
+    _auth_cache = None
+
+
+def cancel_cli_login() -> bool:
+    """Stop an in-progress `login`. The browser tab stays open; the user simply
+    never finishes, and nothing is recorded."""
+    global _login_proc, _auth_cache
+    proc, _login_proc = _login_proc, None
+    _auth_cache = None
+    if proc is None or proc.poll() is not None:
+        return False
+    try:
+        proc.terminate()
+        return True
+    except Exception:
+        return False
 
 
 def start_grok_cli_login() -> tuple[bool, str]:
@@ -142,8 +183,10 @@ def start_grok_cli_login() -> tuple[bool, str]:
     cli = find_grok_cli()
     if not cli:
         return False, INSTALL_HINT
+    global _login_proc, _auth_cache
+    _auth_cache = None      # the answer is about to change
     try:
-        subprocess.Popen([cli, "login", "--oauth"],
+        _login_proc = subprocess.Popen([cli, "login", "--oauth"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL,
                          env={**os.environ, "PATH": _augmented_path()},

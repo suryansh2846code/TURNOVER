@@ -161,6 +161,11 @@ def test_status_polls_the_cli_and_connects_on_success():
          patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')):
         assert TestClient(app).get("/api/providers/cursor/auth/status").json()["status"] == "waiting"
 
+    # Sign-in state is cached for a few seconds so polling doesn't spawn a
+    # subprocess per tick; a completed login is noticed once that lapses.
+    from lodestone.models.cursor import reset_auth_cache
+    reset_auth_cache()
+
     with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run",
                return_value=_proc('{"isAuthenticated": true, "email": "me@example.com"}')):

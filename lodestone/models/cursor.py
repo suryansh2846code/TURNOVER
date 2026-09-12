@@ -24,6 +24,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 from .base import ChatResult, LLMProvider, Message, _saved_key, parse_cli_json
@@ -102,21 +103,35 @@ def _is_cursor_agent(path: str) -> bool:
     return res.returncode == 0 and "cursor" in path.lower()
 
 
-def cursor_cli_auth_status() -> dict:
+_auth_cache: tuple[float, dict] | None = None
+_AUTH_TTL = 3.0
+
+
+def cursor_cli_auth_status(*, fresh: bool = False) -> dict:
     """Ask the CLI whether it is signed in.
 
         agent status --format json
         -> {"status":"unauthenticated","isAuthenticated":false,"message":"Not logged in"}
     """
+    global _auth_cache
+    # Polled once a second during sign-in; without this every tick spawns a
+    # subprocess and the request queue outruns the server.
+    if not fresh and _auth_cache and (time.monotonic() - _auth_cache[0]) < _AUTH_TTL:
+        return _auth_cache[1]
+
     cli = find_cursor_cli()
     if not cli:
-        return {"installed": False, "authenticated": False}
+        result = {"installed": False, "authenticated": False}
+        _auth_cache = (time.monotonic(), result)
+        return result
     try:
         res = subprocess.run([cli, "status", "--format", "json"],
                              capture_output=True, text=True, timeout=15.0,
                              env={**os.environ, "PATH": _augmented_path()})
     except Exception:
-        return {"installed": True, "authenticated": False}
+        result = {"installed": True, "authenticated": False}
+        _auth_cache = (time.monotonic(), result)
+        return result
 
     data = parse_cli_json(res.stdout) or {}
     # Identity lives under `userInfo`:
@@ -124,13 +139,39 @@ def cursor_cli_auth_status() -> dict:
     #    "userInfo":{"email":"…","firstName":"…","lastName":"…"}}
     info = data.get("userInfo") or {}
     name = " ".join(p for p in (info.get("firstName"), info.get("lastName")) if p)
-    return {
+    result = {
         "installed": True,
         "authenticated": bool(data.get("isAuthenticated")),
         "email": info.get("email") or data.get("email") or None,
         "name": name or None,
         "message": data.get("message") or "",
     }
+    _auth_cache = (time.monotonic(), result)
+    return result
+
+
+_login_proc: subprocess.Popen | None = None
+
+
+def reset_auth_cache() -> None:
+    """Forget the cached sign-in state (used on login/cancel, and by tests)."""
+    global _auth_cache
+    _auth_cache = None
+
+
+def cancel_cli_login() -> bool:
+    """Stop an in-progress `login`. The browser tab stays open; the user simply
+    never finishes, and nothing is recorded."""
+    global _login_proc, _auth_cache
+    proc, _login_proc = _login_proc, None
+    _auth_cache = None
+    if proc is None or proc.poll() is not None:
+        return False
+    try:
+        proc.terminate()
+        return True
+    except Exception:
+        return False
 
 
 def start_cursor_cli_login() -> tuple[bool, str]:
@@ -143,8 +184,10 @@ def start_cursor_cli_login() -> tuple[bool, str]:
     cli = find_cursor_cli()
     if not cli:
         return False, INSTALL_HINT
+    global _login_proc, _auth_cache
+    _auth_cache = None      # the answer is about to change
     try:
-        subprocess.Popen([cli, "login"],
+        _login_proc = subprocess.Popen([cli, "login"],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          stdin=subprocess.DEVNULL,
                          env={**os.environ, "PATH": _augmented_path()},

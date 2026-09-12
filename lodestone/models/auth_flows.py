@@ -202,6 +202,11 @@ class CursorFlow:
             auth_url="https://cursor.com/docs/cli/overview",
             detail=msg if ok else msg)
 
+    def cancel(self) -> None:
+        from .cursor import cancel_cli_login
+
+        cancel_cli_login()
+
     def status(self) -> AuthStatus:
         from .cursor import cursor_cli_auth_status
 
@@ -238,6 +243,11 @@ class GrokFlow:
             provider_id=self.provider_id, started=ok, brand_name="Grok",
             browser_opened=ok, cli_found=True,
             auth_url="https://x.ai/news/grok-build-cli", detail=msg)
+
+    def cancel(self) -> None:
+        from .grok_cli import cancel_cli_login
+
+        cancel_cli_login()
 
     def status(self) -> AuthStatus:
         from .grok_cli import grok_cli_auth_status
