@@ -154,6 +154,15 @@ derived rollup). Removing a key must never sign the user out, and connecting an
 account must never claim a key exists. `/api/providers/{name}/disconnect` takes
 `scope=account|api_key|all`.
 
+**Vendor CLIs own sign-in too, not just inference.** Each ships a `login`
+command that opens the vendor's own consent page, because the OAuth client
+belongs to that CLI — `agent login` → authenticator.cursor.sh, `grok login
+--oauth` → accounts.x.ai ("Authorise Grok Build"), `claude auth login` →
+claude.com. So a "Sign in with X" button spawns `X login` detached and polls a
+status command (`agent status --format json`, `grok models`), marking the
+account connected on success. That is the whole trick behind competing apps'
+browser sign-in — no private client ids, no bundled secrets.
+
 **Every subscription path is a vendor CLI.** None of these providers exposes a
 subscription inference endpoint; each ships an official headless CLI instead,
 and that is how a paid plan is reached:

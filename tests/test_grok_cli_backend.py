@@ -163,13 +163,49 @@ def test_binary_discovery_rejects_a_namesake():
 
 
 # ── sign-in points at the CLI ────────────────────────────────────────────
-def test_signin_tells_the_user_to_run_grok_login():
+def test_signin_runs_the_cli_browser_login_when_installed():
+    """`grok login --oauth` opens the Grok Build consent screen at
+    accounts.x.ai; the OAuth client belongs to the CLI."""
     from fastapi.testclient import TestClient
 
     from lodestone.api.app import app
 
+    spawned = {}
     with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
+         patch("subprocess.run", return_value=_cp(0, MODELS_OUT)), \
+         patch("subprocess.Popen", side_effect=lambda cmd, **kw: spawned.setdefault("cmd", cmd)):
+        body = TestClient(app).post("/api/providers/xai/auth/start").json()
+
+    assert spawned["cmd"] == [GROK, "login", "--oauth"]
+    assert body["started"] is True and body["browser_opened"] is True
+
+
+def test_signin_explains_installation_when_the_cli_is_missing():
+    from fastapi.testclient import TestClient
+
+    from lodestone.api.app import app
+
+    with patch("lodestone.models.grok_cli.find_grok_cli", return_value=None), \
          patch("webbrowser.open", side_effect=AssertionError("opened a useless page")):
         body = TestClient(app).post("/api/providers/xai/auth/start").json()
     assert body["started"] is False and body["cli_required"] is True
-    assert "grok login" in body["detail"]
+    assert "x.ai/cli/install.sh" in body["detail"]
+
+
+def test_status_reports_waiting_then_success():
+    from fastapi.testclient import TestClient
+
+    from lodestone.api.app import app
+    from lodestone.models.connections import ProviderConnection, get_connection, save_connection
+
+    save_connection(ProviderConnection(provider="xai"))
+    client = TestClient(app)
+    with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
+         patch("subprocess.run", return_value=_cp(0, MODELS_OUT)):   # "not authenticated"
+        assert client.get("/api/providers/xai/auth/status").json()["status"] == "waiting"
+
+    with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
+         patch("subprocess.run", return_value=_cp(0, "Available models:\n  * grok-4.6")):
+        assert client.get("/api/providers/xai/auth/status").json()["status"] == "success"
+    assert get_connection("xai").account_connected is True
+    save_connection(ProviderConnection(provider="xai"))

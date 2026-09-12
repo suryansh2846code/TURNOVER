@@ -37,6 +37,13 @@ _EXTRA_BIN_DIRS = [
 ]
 
 
+INSTALL_HINT = (
+    "Cursor CLI ('agent') not found. Install it with "
+    "`curl https://cursor.com/install -fsS | bash`, then sign in — Cursor "
+    "has no chat API, so its models run through that CLI on your own plan."
+)
+
+
 def _augmented_path() -> str:
     parts = os.environ.get("PATH", "").split(os.pathsep)
     for d in _EXTRA_BIN_DIRS:
@@ -86,12 +93,58 @@ def _is_cursor_agent(path: str) -> bool:
     return res.returncode == 0 and "cursor" in path.lower()
 
 
-def get_cursor_cli_status() -> tuple[bool, str, str | None]:
-    """(installed, message, email). Auth is reported by the CLI on first use."""
+def cursor_cli_auth_status() -> dict:
+    """Ask the CLI whether it is signed in.
+
+        agent status --format json
+        -> {"status":"unauthenticated","isAuthenticated":false,"message":"Not logged in"}
+    """
     cli = find_cursor_cli()
     if not cli:
+        return {"installed": False, "authenticated": False}
+    try:
+        res = subprocess.run([cli, "status", "--format", "json"],
+                             capture_output=True, text=True, timeout=15.0,
+                             env={**os.environ, "PATH": _augmented_path()})
+    except Exception:
+        return {"installed": True, "authenticated": False}
+
+    data = parse_cli_json(res.stdout) or {}
+    return {
+        "installed": True,
+        "authenticated": bool(data.get("isAuthenticated")),
+        "email": data.get("email") or data.get("user") or None,
+        "message": data.get("message") or "",
+    }
+
+
+def start_cursor_cli_login() -> tuple[bool, str]:
+    """Run the CLI's own browser sign-in.
+
+    `agent login` opens authenticator.cursor.sh itself — the OAuth client
+    belongs to the CLI, so this is the only way to reach that flow. It is
+    spawned detached; progress is observed by polling `agent status`.
+    """
+    cli = find_cursor_cli()
+    if not cli:
+        return False, INSTALL_HINT
+    try:
+        subprocess.Popen([cli, "login"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         stdin=subprocess.DEVNULL,
+                         env={**os.environ, "PATH": _augmented_path()},
+                         start_new_session=True)
+    except Exception as exc:
+        return False, f"Could not start Cursor sign-in: {exc}"
+    return True, "Opened Cursor sign-in in your browser."
+
+
+def get_cursor_cli_status() -> tuple[bool, str, str | None]:
+    """(signed in, message, email) — kept for existing account detection."""
+    st = cursor_cli_auth_status()
+    if not st["installed"]:
         return False, "Cursor CLI not installed", None
-    return True, f"Cursor CLI found at {cli}", None
+    return st["authenticated"], st.get("message") or "", st.get("email")
 
 
 class CursorProvider(LLMProvider):
@@ -99,11 +152,7 @@ class CursorProvider(LLMProvider):
     model = "cursor-fast"
     key_env = "CURSOR_API_KEY"
 
-    _INSTALL_HINT = (
-        "Cursor CLI ('agent') not found. Install it with "
-        "`curl https://cursor.com/install -fsS | bash`, then sign in — Cursor "
-        "has no chat API, so its models run through that CLI on your own plan."
-    )
+    _INSTALL_HINT = INSTALL_HINT
 
     def __init__(self, model: str | None = None, api_key: str | None = None,
                  **_: object) -> None:

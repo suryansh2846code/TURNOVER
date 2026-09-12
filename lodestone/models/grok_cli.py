@@ -104,6 +104,47 @@ def grok_cli_models() -> list[str]:
     return models
 
 
+def grok_cli_auth_status() -> dict:
+    """Whether the Grok CLI is signed in.
+
+    `grok models` prints "You are not authenticated." when it is not, and the
+    model list either way — so one call answers both questions.
+    """
+    cli = find_grok_cli()
+    if not cli:
+        return {"installed": False, "authenticated": False}
+    try:
+        res = subprocess.run([cli, "models"], capture_output=True, text=True,
+                             timeout=20.0, env={**os.environ, "PATH": _augmented_path()})
+    except Exception:
+        return {"installed": True, "authenticated": False}
+    blob = f"{res.stdout} {res.stderr}".lower()
+    return {
+        "installed": True,
+        "authenticated": "not authenticated" not in blob and res.returncode == 0,
+    }
+
+
+def start_grok_cli_login() -> tuple[bool, str]:
+    """Run the CLI's own browser sign-in (`grok login --oauth`).
+
+    The OAuth client belongs to Grok Build, so this is the only way to reach
+    that consent screen. Spawned detached; progress is observed by polling.
+    """
+    cli = find_grok_cli()
+    if not cli:
+        return False, INSTALL_HINT
+    try:
+        subprocess.Popen([cli, "login", "--oauth"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         stdin=subprocess.DEVNULL,
+                         env={**os.environ, "PATH": _augmented_path()},
+                         start_new_session=True)
+    except Exception as exc:
+        return False, f"Could not start Grok sign-in: {exc}"
+    return True, "Opened Grok sign-in in your browser."
+
+
 class GrokCliProvider(LLMProvider):
     name = "grok-cli"
     model = "grok-4.6"

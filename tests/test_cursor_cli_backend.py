@@ -131,11 +131,42 @@ def test_signin_points_at_the_cli_instead_of_a_dead_browser_flow():
     assert "cursor.com/install" in body["detail"]
 
 
-def test_signin_detects_an_installed_cli():
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT):
-        body = TestClient(app).post("/api/providers/cursor/signin").json()
-    assert body["cli_found"] is True
-    assert "agent login" in body["detail"]
+def test_signin_runs_the_cli_browser_login_when_installed():
+    """`agent login` opens authenticator.cursor.sh itself — the OAuth client
+    belongs to the CLI — so we spawn it and poll, giving the same
+    click -> browser -> connected flow as any other provider."""
+    spawned = {}
+
+    def fake_popen(cmd, **kw):
+        spawned["cmd"] = cmd
+        return object()
+
+    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+         patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')), \
+         patch("subprocess.Popen", side_effect=fake_popen):
+        body = TestClient(app).post("/api/providers/cursor/auth/start").json()
+
+    assert spawned["cmd"] == [AGENT, "login"]
+    assert body["started"] is True
+    assert body["browser_opened"] is True
+    assert body.get("cli_required") is not True
+
+
+def test_status_polls_the_cli_and_connects_on_success():
+    from lodestone.models.connections import ProviderConnection, get_connection, save_connection
+
+    save_connection(ProviderConnection(provider="cursor"))
+    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+         patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')):
+        assert TestClient(app).get("/api/providers/cursor/auth/status").json()["status"] == "waiting"
+
+    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+         patch("subprocess.run",
+               return_value=_proc('{"isAuthenticated": true, "email": "me@example.com"}')):
+        body = TestClient(app).get("/api/providers/cursor/auth/status").json()
+    assert body["status"] == "success"
+    assert get_connection("cursor").account_connected is True
+    save_connection(ProviderConnection(provider="cursor"))
 
 
 @pytest.mark.parametrize("stdout,expect", [

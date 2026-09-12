@@ -64,6 +64,28 @@ class AuthFlow(Protocol):
     def status(self) -> AuthStatus: ...
 
 
+def _mark_account_connected(pid: str, email: str | None, plan: str) -> None:
+    """Record a CLI sign-in as a connected account credential."""
+    from datetime import datetime, timezone
+
+    from .connections import ACCOUNT, ConnectionStatus, get_connection, save_connection
+    from .registry import clear_provider_cache
+
+    conn = get_connection(pid)
+    if conn.account_connected and (not email or conn.email == email):
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    conn.auth_method = "cli"
+    conn.email = email or conn.email or plan
+    conn.account_display_name = conn.account_display_name or plan
+    conn.set_credential(ACCOUNT, ConnectionStatus.ACCOUNT_CONNECTED)
+    conn.connected_at = conn.connected_at or now
+    conn.last_verified_at = now
+    conn.status_message = f"Connected via CLI ({plan})"
+    save_connection(conn)
+    clear_provider_cache(pid)
+
+
 def _open(url: str) -> bool:
     if not url:
         return False
@@ -153,30 +175,75 @@ class ClaudeFlow:
 
 
 class CursorFlow:
-    """Cursor signs in through its own CLI; there is nothing to open."""
+    """Cursor's own CLI owns sign-in — `agent login` opens
+    authenticator.cursor.sh itself, because the OAuth client belongs to the CLI.
+    We spawn it and poll `agent status`, so the user sees the same
+    click -> browser -> connected flow as any other provider."""
 
     provider_id = "cursor"
 
     def start(self) -> AuthStart:
-        from .cursor import find_cursor_cli
+        from .cursor import INSTALL_HINT, cursor_cli_auth_status, start_cursor_cli_login
 
-        cli = find_cursor_cli()
+        st = cursor_cli_auth_status()
+        if not st["installed"]:
+            return AuthStart(
+                provider_id=self.provider_id, started=False, brand_name="Cursor",
+                cli_required=True, cli_found=False,
+                auth_url="https://cursor.com/docs/cli/overview", detail=INSTALL_HINT)
+
+        ok, msg = start_cursor_cli_login()
         return AuthStart(
-            provider_id=self.provider_id, started=False, brand_name="Cursor",
-            cli_required=True, cli_found=bool(cli),
+            provider_id=self.provider_id, started=ok, brand_name="Cursor",
+            browser_opened=ok, cli_found=True,
             auth_url="https://cursor.com/docs/cli/overview",
-            detail=("Cursor CLI found — run `agent login` in a terminal, then press "
-                    "Refresh." if cli else
-                    "Cursor runs through its CLI. Install it with "
-                    "`curl https://cursor.com/install -fsS | bash`, run `agent login`, "
-                    "then press Refresh."),
-        )
+            detail=msg if ok else msg)
 
     def status(self) -> AuthStatus:
-        from .cursor import find_cursor_cli
+        from .cursor import cursor_cli_auth_status
 
-        return AuthStatus(provider_id=self.provider_id,
-                          status="success" if find_cursor_cli() else "idle")
+        st = cursor_cli_auth_status()
+        if st.get("authenticated"):
+            _mark_account_connected("cursor", st.get("email"), "Cursor")
+            return AuthStatus(provider_id=self.provider_id, status="success",
+                              email=st.get("email") or "")
+        if not st["installed"]:
+            return AuthStatus(provider_id=self.provider_id, status="idle")
+        return AuthStatus(provider_id=self.provider_id, status="waiting")
+
+
+class GrokFlow:
+    """xAI's CLI owns sign-in: `grok login --oauth` opens the Grok Build consent
+    screen at accounts.x.ai. api.x.ai has no subscription path."""
+
+    provider_id = "xai"
+
+    def start(self) -> AuthStart:
+        from .grok_cli import INSTALL_HINT, grok_cli_auth_status, start_grok_cli_login
+
+        st = grok_cli_auth_status()
+        if not st["installed"]:
+            return AuthStart(
+                provider_id=self.provider_id, started=False, brand_name="Grok",
+                cli_required=True, cli_found=False,
+                auth_url="https://x.ai/news/grok-build-cli", detail=INSTALL_HINT)
+
+        ok, msg = start_grok_cli_login()
+        return AuthStart(
+            provider_id=self.provider_id, started=ok, brand_name="Grok",
+            browser_opened=ok, cli_found=True,
+            auth_url="https://x.ai/news/grok-build-cli", detail=msg)
+
+    def status(self) -> AuthStatus:
+        from .grok_cli import grok_cli_auth_status
+
+        st = grok_cli_auth_status()
+        if st.get("authenticated"):
+            _mark_account_connected("xai", None, "Grok subscription")
+            return AuthStatus(provider_id=self.provider_id, status="success")
+        if not st["installed"]:
+            return AuthStatus(provider_id=self.provider_id, status="idle")
+        return AuthStatus(provider_id=self.provider_id, status="waiting")
 
 
 class ClaudeCodeFlow:
@@ -203,30 +270,6 @@ class ClaudeCodeFlow:
 
         return AuthStatus(provider_id=self.provider_id,
                           status="success" if find_claude() else "idle")
-
-
-class GrokFlow:
-    """xAI's CLI owns sign-in; api.x.ai has no subscription path."""
-
-    provider_id = "xai"
-
-    def start(self) -> AuthStart:
-        from .grok_cli import INSTALL_HINT, find_grok_cli
-
-        cli = find_grok_cli()
-        return AuthStart(
-            provider_id=self.provider_id, started=False, brand_name="Grok",
-            cli_required=True, cli_found=bool(cli),
-            auth_url="https://x.ai/news/grok-build-cli",
-            detail=("Grok CLI found — run `grok login` in a terminal, then press "
-                    "Refresh." if cli else INSTALL_HINT),
-        )
-
-    def status(self) -> AuthStatus:
-        from .grok_cli import find_grok_cli
-
-        return AuthStatus(provider_id=self.provider_id,
-                          status="success" if find_grok_cli() else "idle")
 
 
 class BrowserFlow:
