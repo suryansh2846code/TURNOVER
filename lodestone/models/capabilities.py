@@ -32,8 +32,33 @@ class ProviderCapabilities:
     official_auth_url: str
     documentation_url: str
 
+    @property
+    def has_interactive_signin(self) -> bool:
+        """Is there a sign-in that ends with a credential we can use?
+
+        A local CLI only counts when the provider actually has an account to
+        sign into — Ollama has a CLI but no account, so offering it a sign-in
+        button would be a control that does nothing.
+        """
+        return bool(
+            self.oauth_supported or self.browser_login_supported
+            or self.device_login_supported
+            or (self.local_cli_auth_supported and self.account_identity_supported)
+        )
+
+    @property
+    def api_key_only(self) -> bool:
+        """No interactive sign-in exists for this provider — a key is the only way."""
+        return self.api_key_supported and not (
+            self.oauth_supported or self.browser_login_supported
+            or self.device_login_supported or self.local_cli_auth_supported
+        )
+
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d["api_key_only"] = self.api_key_only
+        d["has_interactive_signin"] = self.has_interactive_signin
+        return d
 
 
 CAPABILITIES_REGISTRY: dict[str, ProviderCapabilities] = {
@@ -57,10 +82,13 @@ CAPABILITIES_REGISTRY: dict[str, ProviderCapabilities] = {
     "cursor": ProviderCapabilities(
         provider_id="cursor",
         display_name="Cursor",
-        description="Cursor agent models via Cursor account, CLI, or API key.",
+        # Cursor exposes no chat-completions API — models run through its
+        # headless CLI (`agent -p`), which owns the sign-in. A browser flow
+        # here would end without a credential Lodestone can use.
+        description="Cursor's models via the Cursor CLI (`agent`), on your own Cursor plan.",
         api_key_supported=True,
-        oauth_supported=True,
-        browser_login_supported=True,
+        oauth_supported=False,
+        browser_login_supported=False,
         device_login_supported=False,
         local_cli_auth_supported=True,
         enterprise_sso_supported=False,
@@ -68,20 +96,20 @@ CAPABILITIES_REGISTRY: dict[str, ProviderCapabilities] = {
         model_discovery_supported=False,
         refresh_supported=True,
         disconnect_supported=True,
-        official_auth_url="https://cursor.com",
-        documentation_url="https://docs.cursor.com",
+        official_auth_url="https://cursor.com/docs/cli/overview",
+        documentation_url="https://cursor.com/docs/cli/headless",
     ),
     "gemini": ProviderCapabilities(
         provider_id="gemini",
         display_name="Google Gemini",
-        description="Google Gemini models with multimodal reasoning and long-context capabilities.",
+        description="Google Gemini models via Google AI Studio API key.",
         api_key_supported=True,
-        oauth_supported=True,
-        browser_login_supported=True,
+        oauth_supported=False,
+        browser_login_supported=False,
         device_login_supported=False,
         local_cli_auth_supported=False,
         enterprise_sso_supported=False,
-        account_identity_supported=True,
+        account_identity_supported=False,
         model_discovery_supported=True,
         refresh_supported=True,
         disconnect_supported=True,
@@ -91,14 +119,18 @@ CAPABILITIES_REGISTRY: dict[str, ProviderCapabilities] = {
     "xai": ProviderCapabilities(
         provider_id="xai",
         display_name="xAI (Grok)",
-        description="xAI's Grok reasoning and conversation models via Grok account or API key.",
+        # API key only. A Grok sign-in authenticates but grants no credits on
+        # api.x.ai — SuperGrok and the developer API are separately billed
+        # products — so offering it would promise something that cannot work.
+        # See docs/ROADMAP.md "Grok subscription support".
+        description="xAI's Grok models via an xAI developer API key (console.x.ai).",
         api_key_supported=True,
         oauth_supported=False,
-        browser_login_supported=True,
+        browser_login_supported=False,
         device_login_supported=False,
         local_cli_auth_supported=False,
         enterprise_sso_supported=False,
-        account_identity_supported=True,
+        account_identity_supported=False,
         model_discovery_supported=True,
         refresh_supported=True,
         disconnect_supported=True,
@@ -142,14 +174,16 @@ CAPABILITIES_REGISTRY: dict[str, ProviderCapabilities] = {
     "openrouter": ProviderCapabilities(
         provider_id="openrouter",
         display_name="OpenRouter",
-        description="Unified gateway to hundreds of AI models via API key or OAuth PKCE.",
+        # API key only — no OAuth flow is implemented, and advertising one
+        # rendered a "Sign in with OpenRouter" button that did nothing.
+        description="Unified gateway to hundreds of AI models via an OpenRouter API key.",
         api_key_supported=True,
-        oauth_supported=True,
-        browser_login_supported=True,
+        oauth_supported=False,
+        browser_login_supported=False,
         device_login_supported=False,
         local_cli_auth_supported=False,
         enterprise_sso_supported=False,
-        account_identity_supported=True,
+        account_identity_supported=False,
         model_discovery_supported=True,
         refresh_supported=True,
         disconnect_supported=True,
@@ -189,6 +223,23 @@ CAPABILITIES_REGISTRY: dict[str, ProviderCapabilities] = {
         disconnect_supported=False,
         official_auth_url="",
         documentation_url="https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview",
+    ),
+    "subscription": ProviderCapabilities(
+        provider_id="subscription",
+        display_name="Subscription Gateway",
+        description="Any OpenAI-compatible gateway you run, set via LODESTONE_SUBSCRIPTION_BASE_URL.",
+        api_key_supported=True,
+        oauth_supported=False,
+        browser_login_supported=False,
+        device_login_supported=False,
+        local_cli_auth_supported=False,
+        enterprise_sso_supported=False,
+        account_identity_supported=False,
+        model_discovery_supported=False,
+        refresh_supported=True,
+        disconnect_supported=True,
+        official_auth_url="",
+        documentation_url="",
     ),
     "mock": ProviderCapabilities(
         provider_id="mock",

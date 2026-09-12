@@ -11,13 +11,12 @@ A `mock` provider keeps the whole agent stack testable with no network/keys.
 from __future__ import annotations
 
 import os
-import re
 import uuid
 from functools import lru_cache
 
 from ..config import get_settings
 from .anthropic import AnthropicProvider
-from .base import ChatResult, LLMProvider, Message, ToolCall
+from .base import ChatResult, LLMProvider, ToolCall
 from .claude_code import ClaudeCodeProvider
 from .cursor import CursorProvider
 from .deepseek import DeepSeekProvider
@@ -37,7 +36,7 @@ class SubscriptionProvider(OpenAICompatProvider):
     """
     name = "subscription"
     default_base = "http://localhost:8080/v1"
-    default_model = "claude-sonnet-5"
+    default_model = "gpt-5.6-terra"
     key_env = "LODESTONE_SUBSCRIPTION_KEY"
     key_required = False
 
@@ -145,16 +144,14 @@ MODEL_CATALOG = {
         "id": "claude",
         "label": "Claude (Anthropic)",
         "icon": "spark",
-        "default_model": "claude-opus-5",
+        "default_model": "claude-sonnet-5",
         "key_env": "ANTHROPIC_API_KEY",
         "key_url": "https://console.anthropic.com/settings/keys",
         "models": [
             {"id": "claude-opus-5", "name": "Claude Opus 5", "desc": "Frontier intelligence & highest-capacity reasoning"},
-            {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "desc": "Next-gen balanced speed, coding & agentic reasoning"},
-            {"id": "claude-fable-5-1", "name": "Claude Fable 5.1", "desc": "Advanced agentic model (Requires Team / Enterprise v2.1.255+)", "locked": True, "plan_required": "Team / Enterprise (v2.1.255+)"},
-            {"id": "claude-3-7-sonnet-latest", "name": "Claude 3.7 Sonnet", "desc": "Hybrid reasoning & coding flagship"},
-            {"id": "claude-3-5-sonnet-latest", "name": "Claude 3.5 Sonnet", "desc": "High-intelligence workhorse"},
-            {"id": "claude-3-5-haiku-latest", "name": "Claude 3.5 Haiku", "desc": "Fast & responsive everyday model"},
+            {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "desc": "Balanced speed, coding & agentic reasoning"},
+            {"id": "claude-fable-5", "name": "Claude Fable 5", "desc": "Most capable for the hardest, longest-running work"},
+            {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5", "desc": "Fast & responsive everyday model"},
         ],
     },
     "cursor": {
@@ -168,7 +165,7 @@ MODEL_CATALOG = {
             {"id": "cursor-fast", "name": "Cursor Fast", "desc": "Low latency reasoning & agent flow (Free tier)"},
             {"id": "cursor-small", "name": "Cursor Small", "desc": "Fast local coding & agent flow (Free tier)"},
             {"id": "claude-opus-5", "name": "Cursor Claude Opus 5", "desc": "Via Cursor session bridge", "locked": True, "plan_required": "Pro"},
-            {"id": "claude-3.7-sonnet", "name": "Cursor Claude 3.7 Sonnet", "desc": "Via Cursor session bridge", "locked": True, "plan_required": "Pro"},
+            {"id": "claude-sonnet-5", "name": "Cursor Claude Sonnet 5", "desc": "Via Cursor session bridge", "locked": True, "plan_required": "Pro"},
             {"id": "gpt-5.6-terra", "name": "Cursor GPT-5.6-Terra", "desc": "Via Cursor session bridge", "locked": True, "plan_required": "Pro"},
         ],
     },
@@ -176,28 +173,28 @@ MODEL_CATALOG = {
         "id": "gemini",
         "label": "Google Gemini",
         "icon": "globe",
-        "default_model": "gemini-2.5-flash",
+        "default_model": "gemini-3.6-flash",
         "key_env": "GEMINI_API_KEY",
         "key_url": "https://aistudio.google.com/apikey",
         "models": [
-            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "desc": "Deep reasoning across complex domains", "locked": True, "plan_required": "API Key / AI Studio"},
-            {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "desc": "Next-gen speed, reasoning & multimodal"},
-            {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "desc": "Ultra-fast generation & tool use"},
+            {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash", "desc": "Latest fast reasoning & multimodal model"},
+            {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash", "desc": "Fast reasoning & multimodal"},
+            {"id": "gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro Preview", "desc": "Deep reasoning across complex domains"},
+            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "desc": "Previous-generation deep reasoning"},
+            {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "desc": "Previous-generation speed & multimodal"},
         ],
     },
     "xai": {
         "id": "xai",
         "label": "xAI (Grok)",
         "icon": "zap",
-        "default_model": "grok-3",
+        "default_model": "grok-4.6",
         "key_env": "XAI_API_KEY",
         "key_url": "https://console.x.ai",
         "models": [
-            {"id": "grok-3", "name": "Grok 3", "desc": "Flagship reasoning & deep intelligence", "locked": True, "plan_required": "SuperGrok / Tier 2"},
-            {"id": "grok-3-mini", "name": "Grok 3 Mini", "desc": "High-speed reasoning & code generation"},
-            {"id": "grok-2-latest", "name": "Grok 2", "desc": "Advanced reasoning & tool calling"},
-            {"id": "grok-2-vision-latest", "name": "Grok 2 Vision", "desc": "Multimodal reasoning & image understanding"},
-            {"id": "grok-2-1212", "name": "Grok 2 (1212)", "desc": "Stable production snapshot"},
+            {"id": "grok-4.6", "name": "Grok 4.6", "desc": "Latest flagship reasoning model"},
+            {"id": "grok-4.5", "name": "Grok 4.5", "desc": "Strong reasoning & tool calling"},
+            {"id": "grok-4.3", "name": "Grok 4.3", "desc": "Fast general-purpose reasoning"},
         ],
     },
     "openai": {
@@ -215,6 +212,8 @@ MODEL_CATALOG = {
             {"id": "gpt-reserve", "name": "GPT-Reserve", "desc": "Fast and affordable backup agentic coding model"},
             {"id": "o3-mini", "name": "o3-mini", "desc": "Fast STEM & code reasoning", "locked": True, "plan_required": "Plus"},
             {"id": "gpt-5.5", "name": "GPT-5.5", "desc": "Proven previous-generation coding model"},
+            {"id": "gpt-5.4", "name": "GPT-5.4", "desc": "Earlier-generation coding model"},
+            {"id": "gpt-5.4-mini", "name": "GPT-5.4-Mini", "desc": "Compact, fast earlier-generation model"},
         ],
     },
     "deepseek": {
@@ -225,8 +224,8 @@ MODEL_CATALOG = {
         "key_env": "DEEPSEEK_API_KEY",
         "key_url": "https://platform.deepseek.com/api_keys",
         "models": [
-            {"id": "deepseek-chat", "name": "DeepSeek V3", "desc": "Elite coding & general intelligence"},
-            {"id": "deepseek-reasoner", "name": "DeepSeek R1", "desc": "Reasoning model with chain of thought"},
+            {"id": "deepseek-chat", "name": "DeepSeek Chat", "desc": "Current chat model (alias — always the latest)"},
+            {"id": "deepseek-reasoner", "name": "DeepSeek Reasoner", "desc": "Current reasoning model (alias — always the latest)"},
         ],
     },
     "ollama": {
@@ -248,11 +247,12 @@ MODEL_CATALOG = {
         "id": "openrouter",
         "label": "OpenRouter",
         "icon": "router",
-        "default_model": "anthropic/claude-3.7-sonnet",
+        "default_model": "anthropic/claude-sonnet-5",
         "key_env": "OPENROUTER_API_KEY",
         "key_url": "https://openrouter.ai/keys",
         "models": [
-            {"id": "anthropic/claude-3.7-sonnet", "name": "Claude 3.7 Sonnet", "desc": "Via OpenRouter"},
+            {"id": "anthropic/claude-sonnet-5", "name": "Claude Sonnet 5", "desc": "Via OpenRouter"},
+            {"id": "anthropic/claude-opus-5", "name": "Claude Opus 5", "desc": "Via OpenRouter"},
             {"id": "openai/gpt-5.6-terra", "name": "GPT-5.6-Terra", "desc": "Via OpenRouter"},
             {"id": "deepseek/deepseek-r1", "name": "DeepSeek R1", "desc": "Via OpenRouter"},
             {"id": "meta-llama/llama-3.3-70b-instruct", "name": "Llama 3.3 70B", "desc": "Via OpenRouter"},
@@ -266,12 +266,11 @@ MODEL_CATALOG = {
         "key_env": "",
         "key_url": "https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview",
         "models": [
-            {"id": "claude-code", "name": "Claude Code Session", "desc": "Local Anthropic CLI bridge (uses active CLI model)"},
+            {"id": "claude-code", "name": "Claude Code Session", "desc": "Let the Claude CLI pick its active model"},
             {"id": "claude-opus-5", "name": "Claude Opus 5", "desc": "Frontier intelligence & deep reasoning (CLI session)"},
-            {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "desc": "Next-gen agentic coding (CLI session)"},
-            {"id": "claude-fable-5-1", "name": "Claude Fable 5.1", "desc": "Disabled in current CLI — requires v2.1.255+", "locked": True, "plan_required": "Team / Enterprise (v2.1.255+)"},
-            {"id": "claude-3-7-sonnet", "name": "Claude 3.7 Sonnet", "desc": "Hybrid reasoning & coding flagship"},
-            {"id": "claude-3-5-sonnet", "name": "Claude 3.5 Sonnet", "desc": "High-intelligence workhorse"},
+            {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "desc": "Balanced agentic coding (CLI session)"},
+            {"id": "claude-fable-5", "name": "Claude Fable 5", "desc": "Most capable for the hardest, longest-running work"},
+            {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5", "desc": "Fast & responsive everyday model"},
         ],
     },
     "subscription": {
@@ -285,8 +284,7 @@ MODEL_CATALOG = {
             {"id": "gpt-5.6-terra", "name": "GPT-5.6-Terra (Subscription)", "desc": "Codex subscription agentic coding model"},
             {"id": "claude-opus-5", "name": "Claude Opus 5 (Subscription)", "desc": "Anthropic flagship reasoning model"},
             {"id": "claude-sonnet-5", "name": "Claude Sonnet 5 (Subscription)", "desc": "Next-gen agentic coding model"},
-            {"id": "claude-3-7-sonnet", "name": "Claude 3.7 Sonnet (Subscription)", "desc": "Claude subscription reasoning model"},
-            {"id": "claude-fable-5-1", "name": "Claude Fable 5.1 (Subscription)", "desc": "Enterprise tier required", "locked": True, "plan_required": "Enterprise"},
+            {"id": "claude-fable-5", "name": "Claude Fable 5 (Subscription)", "desc": "Most capable Claude subscription model"},
         ],
     },
     "mock": {
@@ -321,6 +319,12 @@ from .discovery import get_discovered_models
 def get_model_catalog(force_refresh: bool = False) -> list[dict]:
     """Return unified model catalog for UI and per-agent configuration."""
     catalog = []
+    try:
+        from .accounts import detect_all_accounts
+        all_accts = detect_all_accounts()
+    except Exception:
+        all_accts = {}
+
     for pid in PRIMARY_PROVIDERS:
         entry = MODEL_CATALOG.get(pid)
         if not entry:
@@ -337,36 +341,39 @@ def get_model_catalog(force_refresh: bool = False) -> list[dict]:
         # Dynamic model discovery & account metadata
         models, account_meta = get_discovered_models(pid, force_refresh=force_refresh)
         if not models:
-            models = entry.get("models", [])
+            # Copy: the static catalog is module state and must not be mutated.
+            models = [dict(m) for m in entry.get("models", [])]
 
         # Connection state & capabilities
         conn = get_connection(pid)
         caps = get_capabilities(pid)
 
-        from .entitlements import is_provider_connected
+        from .entitlements import is_provider_connected, provider_credentials
         is_conn, user_plan, _ = is_provider_connected(pid)
+        creds = provider_credentials(pid)
 
-        # Sync readiness into connection if ready changed
-        if ready and conn.connection_status == ConnectionStatus.NOT_CONNECTED:
-            conn.connection_status = ConnectionStatus.API_KEY_CONNECTED if caps and caps.api_key_supported else ConnectionStatus.CONNECTED
+        acct = all_accts.get(pid)
+
+        # NOTE: readiness is deliberately NOT written back into the connection
+        # here. A credential discovered on the machine is surfaced through
+        # `detected_account` so the user can choose to connect it; promoting it
+        # to CONNECTED on their behalf is what made providers appear connected
+        # that the user never authorised.
 
         if not is_conn:
             ready = False
+            if conn.connection_status in (ConnectionStatus.CONNECTED, ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
+                conn.connection_status = ConnectionStatus.ACCOUNT_FOUND_ON_COMPUTER if (acct and acct.get("found_on_computer")) else ConnectionStatus.NOT_CONNECTED
+                conn.status_message = "Not connected for model inference"
+                save_connection(conn)
             if conn.connection_status == ConnectionStatus.DISCONNECTED:
                 reason = "Disconnected by user"
             elif not reason:
                 reason = "Not connected"
-            for m in models:
-                m["locked"] = True
-                m["plan_required"] = "Connect in Models"
-
-        acct = None
-        try:
-            from .accounts import detect_all_accounts
-            all_accts = detect_all_accounts()
-            acct = all_accts.get(pid)
-        except Exception:
-            pass
+            # Lock state comes from get_discovered_models()'s live entitlement
+            # pass — never mutate these dicts, they may be the discovery cache.
+            models = [{**m, "locked": True, "plan_required": "Connect in Models"}
+                      for m in models]
 
         locality, destination = _LOCALITY.get(pid, ("cloud", "Sent to model provider."))
         catalog.append({
@@ -386,6 +393,9 @@ def get_model_catalog(force_refresh: bool = False) -> list[dict]:
             "destination": destination,
             "capabilities": caps.to_dict() if caps else None,
             "connection": conn.to_dict(),
+            # Each credential reported separately: an account and an API key are
+            # connected or disconnected independently of one another.
+            "credentials": creds,
             "account_meta": account_meta,
             "detected_account": acct if (acct and acct.get("found_on_computer")) else None,
             "plan": acct.get("plan") if acct else None,
@@ -414,25 +424,20 @@ def list_providers() -> list[dict]:
         locality, destination = _LOCALITY.get(name, ("cloud", "Sent to the model provider."))
         conn = get_connection(name)
 
-        from .entitlements import is_provider_connected
+        from .entitlements import is_provider_connected, provider_credentials
         is_conn, user_plan, _ = is_provider_connected(name)
+        creds = provider_credentials(name)
+        acct = local_accounts.get(name)
         if not is_conn:
             ready = False
+            if conn.connection_status in (ConnectionStatus.CONNECTED, ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
+                conn.connection_status = ConnectionStatus.ACCOUNT_FOUND_ON_COMPUTER if (acct and acct.get("found_on_computer")) else ConnectionStatus.NOT_CONNECTED
+                conn.status_message = "Not connected for model inference"
+                save_connection(conn)
             if conn.connection_status == ConnectionStatus.DISCONNECTED:
                 reason = "Disconnected by user"
             elif not reason:
                 reason = "Not connected"
-
-        acct = local_accounts.get(name)
-        if acct and acct.get("found_on_computer"):
-            if name == "gemini" and acct.get("connected") and conn.connection_status not in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.DISCONNECTED):
-                conn.email = acct.get("email")
-                conn.auth_method = "account"
-                conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
-                conn.status_message = "Connected to Google Gemini"
-                save_connection(conn)
-                ready = True
-                reason = ""
 
         caps = get_capabilities(name)
         detected_dict = acct if (acct and acct.get("found_on_computer")) else None
@@ -447,6 +452,7 @@ def list_providers() -> list[dict]:
             "destination": destination,
             "connection": conn.to_dict(),
             "capabilities": caps.to_dict() if caps else None,
+            "credentials": creds,
             "detected_account": detected_dict,
             "usage": usage_data,
             "plan": plan_name,
@@ -454,16 +460,62 @@ def list_providers() -> list[dict]:
     return out
 
 
-def clear_provider_cache() -> None:
-    """Clear cached provider instances so new keys/endpoints take effect immediately."""
+def clear_provider_cache(provider: str | None = None) -> None:
+    """Invalidate everything derived from a provider's credentials.
+
+    Called from every path that changes a credential (sign-in, disconnect, key
+    saved, refresh). Clears both the memoized provider instances — which capture
+    the API key at construction time — and the model-discovery cache, so a
+    provider the user just connected re-discovers its real model list instead of
+    serving the disconnected snapshot.
+    """
     get_provider.cache_clear()
+    from .discovery import clear_model_cache
+    clear_model_cache(provider)
+
+
+# ── model-provider compatibility ──────────────────────────────────────────
+# When the global LODESTONE_MODEL_NAME is an Ollama model (e.g. 'qwen2.5:3b')
+# and the user selects a different provider (e.g. Gemini), the fallback
+# model name leaks into the wrong provider, causing 404 errors.
+# This map checks whether a model "looks like" it belongs to a provider.
+_PROVIDER_MODEL_PREFIXES: dict[str, tuple[str, ...]] = {
+    "gemini":    ("gemini",),
+    "google":    ("gemini",),
+    "claude":    ("claude",),
+    "anthropic": ("claude",),
+    "openai":    ("gpt-", "o1", "o3", "o4", "chatgpt", "gpt", "codex"),
+    "xai":       ("grok",),
+    "grok":      ("grok",),
+    "deepseek":  ("deepseek",),
+    "ollama":    (),  # ollama accepts anything, no filtering needed
+    "openrouter": (),  # openrouter uses slash-prefixed IDs, accept anything
+}
+
+def _compatible_model(provider_name: str, model: str | None) -> str | None:
+    """Return model if it looks compatible with provider_name, else None.
+
+    This prevents a stale global model name (from a different provider)
+    from being passed to a provider that doesn't recognize it.  The
+    provider will then use its own default_model.
+    """
+    if not model:
+        return None
+    prefixes = _PROVIDER_MODEL_PREFIXES.get(provider_name)
+    if prefixes is None or len(prefixes) == 0:
+        return model  # unknown or permissive provider — pass through
+    m = model.lower().strip()
+    if any(m.startswith(p) for p in prefixes):
+        return model  # model belongs to this provider
+    return None  # incompatible — let provider use its default
 
 
 @lru_cache
 def get_provider(name: str | None = None, model: str | None = None) -> LLMProvider:
     name = (name or get_settings().model_provider or "mock").lower()
     cls = _REGISTRY.get(name, MockProvider)
-    p = cls(model=model)
+    safe_model = _compatible_model(name, model)
+    p = cls(model=safe_model)
     _wrap_usage(p)
     return p
 

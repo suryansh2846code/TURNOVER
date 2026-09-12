@@ -6,11 +6,9 @@ Eliminates stale hardcoded model IDs and guarantees live catalog truth.
 """
 from __future__ import annotations
 
-import json
 import os
 import time
 from dataclasses import asdict, dataclass
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -18,7 +16,31 @@ import httpx
 from .base import _saved_key
 
 _CACHE_TTL = 3600  # 1 hour cache unless refreshed
-_MODEL_CACHE: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+
+# pid -> (fetched_at, raw discovered models, discovery metadata).
+# Holds the *unentitled* discovery result only; lock state is never cached.
+_MODEL_CACHE: dict[str, tuple[float, list[dict[str, Any]], dict[str, Any]]] = {}
+
+_PROVIDER_ALIASES = {"anthropic": "claude", "google": "gemini", "grok": "xai"}
+
+
+def normalize_provider_id(provider_id: str) -> str:
+    """Collapse provider aliases onto their canonical id."""
+    pid = (provider_id or "").lower().strip()
+    return _PROVIDER_ALIASES.get(pid, pid)
+
+
+def clear_model_cache(provider_id: str | None = None) -> None:
+    """Drop cached discovery results so the next read re-queries the provider.
+
+    Call this whenever credentials change (sign-in, disconnect, key saved) — the
+    entitlement pass already runs live, but a freshly connected provider should
+    also re-discover the model list its account actually has access to.
+    """
+    if provider_id is None:
+        _MODEL_CACHE.clear()
+    else:
+        _MODEL_CACHE.pop(normalize_provider_id(provider_id), None)
 
 
 @dataclass
@@ -27,6 +49,7 @@ class DiscoveredModel:
     name: str
     desc: str
     context_window: int | None = None
+    context_window_approximate: bool = False
     tool_calling: bool = True
     structured_output: bool = True
     streaming: bool = True
@@ -35,6 +58,7 @@ class DiscoveredModel:
     status: str = "available"
     locked: bool = False
     plan_required: str | None = None
+    is_fallback: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -57,7 +81,7 @@ def _detect_capabilities(model_id: str, desc: str = "") -> dict[str, Any]:
     no_tools = any(k in mid for k in ("instruct-preview", "base", "embed", "tts", "whisper", "dall-e"))
     tool_calling = not no_tools
 
-    # Context window heuristic fallback
+    # Context window heuristic fallback (marked internally as approximate)
     context_window = 128_000
     if "gemini" in mid:
         context_window = 1_000_000 if "1.5" in mid or "2.5" in mid else 128_000
@@ -79,6 +103,7 @@ def _detect_capabilities(model_id: str, desc: str = "") -> dict[str, Any]:
         "vision": is_vision,
         "tool_calling": tool_calling,
         "context_window": context_window,
+        "context_window_approximate": True,
         "structured_output": True,
         "streaming": True,
         "status": "available",
@@ -87,46 +112,15 @@ def _detect_capabilities(model_id: str, desc: str = "") -> dict[str, Any]:
 
 def _chatgpt_subscription_models() -> list[DiscoveredModel]:
     """Retrieve models available through ChatGPT Subscription / Codex, locking unsupported models."""
-    supported_slugs: set[str] = set()
-    custom_descs: dict[str, tuple[str, str, int]] = {}
+    from .chatgpt_auth import resolve_subscription_models
 
-    cache_candidates = [
-        Path.home() / "Library/Application Support/Turnstone/provider-auth/codex/models_cache.json",
-        Path.home() / ".codex/models_cache.json",
-        Path.home() / ".lodestone/models_cache.json",
-    ]
-    for cache_path in cache_candidates:
-        if cache_path.exists():
-            try:
-                cached_data = json.loads(cache_path.read_text())
-                for m in cached_data.get("models", []):
-                    slug = m.get("slug")
-                    if slug:
-                        supported_slugs.add(slug)
-                        d_name = m.get("display_name") or slug.replace("-", " ").title()
-                        desc = m.get("description") or "Codex agentic coding model"
-                        ctx = m.get("context_window", 272_000)
-                        custom_descs[slug] = (d_name, desc, ctx)
-                if supported_slugs:
-                    break
-            except Exception:
-                pass
-
-    user_plan = ""
     try:
-        from .chatgpt_auth import detect_chatgpt_local_session
-        sess = detect_chatgpt_local_session(fetch_usage=False)
-        user_plan = (sess and sess.get("plan", "")) or ""
+        supported_slugs, slug_meta = resolve_subscription_models()[:2]
     except Exception:
-        pass
-
-    if not supported_slugs:
-        if "free" in user_plan.lower():
-            supported_slugs = {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "codex-auto-review"}
-        elif "plus" in user_plan.lower():
-            supported_slugs = {"gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "o3-mini", "codex-auto-review"}
-        elif any(k in user_plan.lower() for k in ("pro", "team", "business", "enterprise")):
-            supported_slugs = {"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-reserve", "gpt-5.5", "o3-mini", "codex-auto-review"}
+        supported_slugs, slug_meta = set(), {}
+    custom_descs = {
+        slug: (m["name"], m["desc"], m["context_window"]) for slug, m in slug_meta.items()
+    }
 
     # Full catalog of Codex / ChatGPT models with standard tier requirements
     catalog_specs = [
@@ -299,16 +293,14 @@ def discover_anthropic_models(api_key: str | None = None) -> list[DiscoveredMode
 
 
 def discover_gemini_models(api_key: str | None = None) -> list[DiscoveredModel]:
-    key = (api_key or os.environ.get("GEMINI_API_KEY")
-           or os.environ.get("GOOGLE_API_KEY") or _saved_key("GEMINI_API_KEY"))
-    if not key:
+    from .gemini import resolve_gemini_credentials
+    cred = resolve_gemini_credentials(api_key=api_key)
+    if not cred.valid or not cred.secret:
         return _fallback_gemini()
 
     try:
-        resp = httpx.get(
-            f"https://generativelanguage.googleapis.com/v1beta/models?key={key}",
-            timeout=6.0,
-        )
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={cred.secret}"
+        resp = httpx.get(url, timeout=6.0)
         if resp.status_code != 200:
             return _fallback_gemini()
 
@@ -332,6 +324,7 @@ def discover_gemini_models(api_key: str | None = None) -> list[DiscoveredModel]:
                 id=name,
                 name=display_name,
                 desc=m.get("description") or "Google Gemini model",
+                locked=False,
                 **caps,
             ))
         return models if models else _fallback_gemini()
@@ -414,7 +407,7 @@ def discover_openrouter_models(api_key: str | None = None) -> list[DiscoveredMod
                 "claude-3.7", "claude-3-7", "claude-3.5",
                 "gpt-5", "gpt-6", "o3",
                 "deepseek-r1", "deepseek-v3", "deepseek-chat",
-                "llama-3.3", "qwen-2.5", "grok-3", "grok-2"
+                "llama-3.3", "qwen-2.5", "grok-4"
             ))
             if not is_latest:
                 continue
@@ -495,6 +488,13 @@ def discover_ollama_models(host: str | None = None) -> list[DiscoveredModel]:
 
 # ── Fallback static definitions when offline or unconfigured ─────────────────
 
+def _mark_fallback(models: list[DiscoveredModel]) -> list[DiscoveredModel]:
+    for m in models:
+        m.is_fallback = True
+        m.context_window_approximate = True
+    return models
+
+
 def _fallback_openai() -> list[DiscoveredModel]:
     is_free = True
     try:
@@ -506,7 +506,7 @@ def _fallback_openai() -> list[DiscoveredModel]:
     except Exception:
         pass
 
-    return [
+    return _mark_fallback([
         DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-5.6-luna", "GPT-5.6-Luna", "Fast and affordable agentic coding model", 272_000, vision=True, reasoning=True),
         DiscoveredModel("gpt-5.6-sol", "GPT-5.6-Sol", "Flagship agentic coding model for complex tasks", 272_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro"),
@@ -514,7 +514,9 @@ def _fallback_openai() -> list[DiscoveredModel]:
         DiscoveredModel("gpt-reserve", "GPT-Reserve", "Fast and affordable backup agentic coding model", 272_000, vision=True, reasoning=True),
         DiscoveredModel("o3-mini", "o3-mini", "High-speed STEM and code reasoning", 200_000, reasoning=True, locked=is_free, plan_required="Plus"),
         DiscoveredModel("gpt-5.5", "GPT-5.5", "Proven previous-generation coding model", 272_000, vision=True, reasoning=True),
-    ]
+        DiscoveredModel("gpt-5.4", "GPT-5.4", "Earlier-generation coding model", 272_000, vision=True, reasoning=True),
+        DiscoveredModel("gpt-5.4-mini", "GPT-5.4-Mini", "Compact, fast earlier-generation model", 272_000, vision=True),
+    ])
 
 
 def _fallback_anthropic() -> list[DiscoveredModel]:
@@ -528,68 +530,62 @@ def _fallback_anthropic() -> list[DiscoveredModel]:
     except Exception:
         pass
 
-    return [
+    return _mark_fallback([
         DiscoveredModel("claude-opus-5", "Claude Opus 5", "Frontier intelligence, deep synthesis & complex architecture", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
-        DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5", "Next-gen flagship agentic coding & reasoning workhorse", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
-        DiscoveredModel("claude-fable-5-1", "Claude Fable 5.1", "Long-horizon creative engineering & complex multi-turn reasoning", 200_000, vision=True, reasoning=True, locked=True, plan_required="Team / Enterprise (v2.1.255+)"),
-        DiscoveredModel("claude-3-7-sonnet-latest", "Claude 3.7 Sonnet", "Hybrid reasoning and coding flagship", 200_000, vision=True, reasoning=True, locked=False),
-        DiscoveredModel("claude-3-5-sonnet-latest", "Claude 3.5 Sonnet", "High-intelligence workhorse", 200_000, vision=True, locked=False),
-        DiscoveredModel("claude-3-5-haiku-latest", "Claude 3.5 Haiku", "Fast & responsive everyday model", 200_000, locked=False),
-    ]
+        DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5", "Flagship agentic coding & reasoning workhorse", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
+        DiscoveredModel("claude-fable-5", "Claude Fable 5", "Most capable for the hardest, longest-running work", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
+        DiscoveredModel("claude-haiku-4-5-20251001", "Claude Haiku 4.5", "Fast & responsive everyday model", 200_000, vision=True, locked=False),
+    ])
 
 
 def _fallback_gemini() -> list[DiscoveredModel]:
-    has_key = bool(os.environ.get("GEMINI_API_KEY") or _saved_key("GEMINI_API_KEY"))
-    try:
-        from .accounts import detect_google_account
-        acct = detect_google_account()
-        if acct.get("connected"):
-            has_key = True
-    except Exception:
-        pass
+    from .gemini import resolve_gemini_credentials
+    cred = resolve_gemini_credentials()
+    is_ready = cred.valid
 
-    return [
-        DiscoveredModel("gemini-2.5-pro", "Gemini 2.5 Pro", "Deep reasoning powerhouse across code & math", 1_000_000, vision=True, reasoning=True, locked=not has_key, plan_required="API Key / AI Studio" if not has_key else None),
-        DiscoveredModel("gemini-2.5-flash", "Gemini 2.5 Flash", "Next-gen speed and reasoning", 1_000_000, vision=True, locked=False),
-        DiscoveredModel("gemini-2.0-flash", "Gemini 2.0 Flash", "Ultra-fast generation & tool use", 1_000_000, vision=True, locked=False),
-    ]
+    return _mark_fallback([
+        DiscoveredModel("gemini-3.7-flash", "Gemini 3.7 Flash", "Latest fast reasoning & multimodal model", 1_000_000, vision=True, reasoning=True, locked=not is_ready, plan_required="API Key / AI Studio" if not is_ready else None),
+        DiscoveredModel("gemini-3.6-flash", "Gemini 3.6 Flash", "Fast reasoning & multimodal", 1_000_000, vision=True, reasoning=True, locked=not is_ready, plan_required="API Key / AI Studio" if not is_ready else None),
+        DiscoveredModel("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview", "Deep reasoning across code & complex tasks", 1_000_000, vision=True, reasoning=True, locked=not is_ready, plan_required="API Key / AI Studio" if not is_ready else None),
+        DiscoveredModel("gemini-2.5-pro", "Gemini 2.5 Pro", "Previous-generation deep reasoning", 1_000_000, vision=True, reasoning=True, locked=not is_ready, plan_required="API Key / AI Studio" if not is_ready else None),
+        DiscoveredModel("gemini-2.5-flash", "Gemini 2.5 Flash", "Previous-generation speed & multimodal", 1_000_000, vision=True, locked=not is_ready, plan_required="API Key / AI Studio" if not is_ready else None),
+    ])
 
 
 def _fallback_xai() -> list[DiscoveredModel]:
     has_key = bool(os.environ.get("XAI_API_KEY") or _saved_key("XAI_API_KEY"))
-    return [
-        DiscoveredModel("grok-3", "Grok 3", "Flagship reasoning & deep intelligence", 200_000, reasoning=True, locked=not has_key, plan_required="SuperGrok / Tier 2" if not has_key else None),
-        DiscoveredModel("grok-3-mini", "Grok 3 Mini", "High-speed reasoning & code generation", 200_000, reasoning=True, locked=False),
-        DiscoveredModel("grok-2-latest", "Grok 2", "Advanced reasoning & tool calling", 131_072, locked=False),
-        DiscoveredModel("grok-2-vision-latest", "Grok 2 Vision", "Multimodal reasoning & image input", 131_072, vision=True, locked=False),
-        DiscoveredModel("grok-2-1212", "Grok 2 (1212)", "Stable production snapshot", 131_072, locked=False),
-    ]
+    return _mark_fallback([
+        DiscoveredModel("grok-4.6", "Grok 4.6", "Latest flagship reasoning model", 256_000, vision=True, reasoning=True, locked=not has_key, plan_required="Connect xAI" if not has_key else None),
+        DiscoveredModel("grok-4.5", "Grok 4.5", "Strong reasoning & tool calling", 256_000, vision=True, reasoning=True, locked=not has_key, plan_required="Connect xAI" if not has_key else None),
+        DiscoveredModel("grok-4.3", "Grok 4.3", "Fast general-purpose reasoning", 256_000, reasoning=True, locked=not has_key, plan_required="Connect xAI" if not has_key else None),
+    ])
 
 
 def _fallback_deepseek() -> list[DiscoveredModel]:
-    return [
-        DiscoveredModel("deepseek-chat", "DeepSeek V3", "Elite coding and conversational tier", 64_000, locked=False),
-        DiscoveredModel("deepseek-reasoner", "DeepSeek R1", "Full chain-of-thought deliberate reasoning", 64_000, reasoning=True, locked=False),
-    ]
+    return _mark_fallback([
+        DiscoveredModel("deepseek-chat", "DeepSeek Chat", "Current chat model (alias — always the latest)", 128_000, locked=False),
+        DiscoveredModel("deepseek-reasoner", "DeepSeek Reasoner", "Current reasoning model (alias — always the latest)", 128_000, reasoning=True, locked=False),
+    ])
 
 
 def _fallback_openrouter() -> list[DiscoveredModel]:
-    return [
-        DiscoveredModel("anthropic/claude-3.7-sonnet", "Claude 3.7 Sonnet", "Via OpenRouter gateway", 200_000, vision=True, reasoning=True, locked=False),
+    return _mark_fallback([
+        DiscoveredModel("anthropic/claude-sonnet-5", "Claude Sonnet 5", "Via OpenRouter gateway", 200_000, vision=True, reasoning=True, locked=False),
+        DiscoveredModel("anthropic/claude-opus-5", "Claude Opus 5", "Via OpenRouter gateway", 200_000, vision=True, reasoning=True, locked=False),
         DiscoveredModel("openai/gpt-5.6-terra", "GPT-5.6-Terra", "Via OpenRouter gateway", 272_000, vision=True, reasoning=True, locked=False),
         DiscoveredModel("deepseek/deepseek-r1", "DeepSeek R1", "Via OpenRouter gateway", 64_000, reasoning=True, locked=False),
         DiscoveredModel("meta-llama/llama-3.3-70b-instruct", "Llama 3.3 70B", "Via OpenRouter gateway", 128_000, locked=False),
-    ]
+    ])
 
 
 def _fallback_ollama() -> list[DiscoveredModel]:
-    return [
+    return _mark_fallback([
         DiscoveredModel("llama3.2", "Llama 3.2", "Compact offline local model", 128_000, locked=False),
         DiscoveredModel("qwen2.5:3b", "Qwen 2.5 (3B)", "Compact fast local model", 32_000, locked=False),
         DiscoveredModel("llama3.3:70b", "Llama 3.3 (70B)", "Latest flagship open weights model", 128_000, locked=True, plan_required="Pull required"),
         DiscoveredModel("qwen2.5-coder:7b", "Qwen 2.5 Coder (7B)", "Strong multilingual local model", 32_000, locked=True, plan_required="Pull required"),
         DiscoveredModel("deepseek-r1:8b", "DeepSeek R1 (8B)", "Local reasoning model", 64_000, reasoning=True, locked=True, plan_required="Pull required"),
-    ]
+    ])
 
 
 def _fallback_cursor() -> list[DiscoveredModel]:
@@ -603,98 +599,110 @@ def _fallback_cursor() -> list[DiscoveredModel]:
     except Exception:
         pass
 
-    return [
+    return _mark_fallback([
         DiscoveredModel("cursor-fast", "Cursor Fast", "Low latency reasoning & agent flow", 128_000, locked=False),
         DiscoveredModel("cursor-small", "Cursor Small", "Fast local coding & agent flow", 128_000, locked=False),
         DiscoveredModel("claude-opus-5", "Cursor Claude Opus 5", "Via Cursor session bridge", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
-        DiscoveredModel("claude-3.7-sonnet", "Cursor Claude 3.7 Sonnet", "Via Cursor session bridge", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
+        DiscoveredModel("claude-sonnet-5", "Cursor Claude Sonnet 5", "Via Cursor session bridge", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
         DiscoveredModel("gpt-5.6-terra", "Cursor GPT-5.6-Terra", "Via Cursor session bridge", 272_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
-    ]
+    ])
+
+
+def _discover_raw(pid: str, api_key: str | None) -> tuple[list[DiscoveredModel], dict[str, Any]]:
+    """Run the provider's live model discovery. Network-bound, so this is the
+    only part that gets cached — entitlement is always evaluated fresh."""
+    discovery_meta: dict[str, Any] = {}
+
+    if pid == "openai":
+        models, meta = discover_openai_models(api_key)
+        discovery_meta.update(meta)
+        return models, discovery_meta
+    if pid == "claude":
+        return discover_anthropic_models(api_key), discovery_meta
+    if pid == "gemini":
+        return discover_gemini_models(api_key), discovery_meta
+    if pid == "xai":
+        return discover_xai_models(api_key), discovery_meta
+    if pid == "deepseek":
+        return discover_deepseek_models(api_key), discovery_meta
+    if pid == "openrouter":
+        return discover_openrouter_models(api_key), discovery_meta
+    if pid == "ollama":
+        return discover_ollama_models(), discovery_meta
+    if pid == "cursor":
+        return _fallback_cursor(), discovery_meta
+    if pid == "claude-code":
+        return [
+            DiscoveredModel("claude-code", "Claude Code (Auto)", "Let the Claude CLI pick its active model", 200_000),
+            DiscoveredModel("claude-opus-5", "Claude Opus 5", "Frontier intelligence & autonomous engineering via Claude CLI", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5", "Flagship agentic coding and reasoning workhorse", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-fable-5", "Claude Fable 5", "Most capable for the hardest, longest-running work", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-haiku-4-5-20251001", "Claude Haiku 4.5", "Fast & responsive everyday model", 200_000, vision=True),
+        ], discovery_meta
+    if pid == "subscription":
+        return [
+            DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra (Subscription)", "Codex subscription agentic coding model", 272_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-opus-5", "Claude Opus 5 (Subscription)", "Anthropic flagship reasoning model", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5 (Subscription)", "Next-gen agentic coding model", 200_000, vision=True, reasoning=True),
+            DiscoveredModel("claude-fable-5", "Claude Fable 5 (Subscription)", "Most capable Claude subscription model", 200_000, vision=True, reasoning=True),
+        ], discovery_meta
+    if pid == "mock":
+        return [DiscoveredModel("mock-1", "Mock Test Model", "Offline test fixture", 32_000)], discovery_meta
+    return [], discovery_meta
 
 
 def get_discovered_models(provider_id: str, force_refresh: bool = False,
                           api_key: str | None = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Retrieve discovered models for a provider, evaluating connection status & plan entitlements."""
-    pid = provider_id.lower()
-    if pid == "anthropic":
-        pid = "claude"
-    elif pid == "google":
-        pid = "gemini"
-    elif pid == "grok":
-        pid = "xai"
+    """Retrieve discovered models for a provider, evaluating connection status & plan entitlements.
+
+    Discovery (the network call) is cached for `_CACHE_TTL`; **entitlement is not**.
+    Locking depends on live connection state, so caching it would leave a provider's
+    models locked for up to an hour after the user successfully signs in.
+    """
+    pid = normalize_provider_id(provider_id)
 
     now = time.time()
-    if not force_refresh and pid in _MODEL_CACHE:
-        cached_time, cached_models = _MODEL_CACHE[pid]
-        if now - cached_time < _CACHE_TTL:
-            return cached_models, {}
+    cached = _MODEL_CACHE.get(pid)
+    if force_refresh or cached is None or (now - cached[0]) >= _CACHE_TTL:
+        found, discovery_meta = _discover_raw(pid, api_key)
+        raw_models = [m.to_dict() for m in found]
+        _MODEL_CACHE[pid] = (now, raw_models, discovery_meta)
+    else:
+        _, raw_models, discovery_meta = cached
 
     from .entitlements import evaluate_model_entitlement, is_provider_connected
 
     is_connected, user_plan, detected_meta = is_provider_connected(pid, api_key)
-    account_meta: dict[str, Any] = dict(detected_meta)
+
     context: dict[str, Any] = {}
-    models: list[DiscoveredModel] = []
-
-    if pid == "openai":
-        models, meta = discover_openai_models(api_key)
-        account_meta.update(meta)
-    elif pid == "claude":
-        models = discover_anthropic_models(api_key)
-        if detected_meta and "disabled_models" in detected_meta:
-            context["disabled_models"] = detected_meta["disabled_models"]
-    elif pid == "gemini":
-        models = discover_gemini_models(api_key)
-    elif pid == "xai":
-        models = discover_xai_models(api_key)
-    elif pid == "deepseek":
-        models = discover_deepseek_models(api_key)
-    elif pid == "openrouter":
-        models = discover_openrouter_models(api_key)
-    elif pid == "ollama":
-        models = discover_ollama_models()
+    if detected_meta and "disabled_models" in detected_meta:
+        context["disabled_models"] = detected_meta["disabled_models"]
+    if pid == "ollama":
         context["installed_models"] = {
-            m.id for m in models if "installed" in (m.desc or "").lower()
+            m["id"] for m in raw_models if "installed" in (m.get("desc") or "").lower()
         }
-    elif pid == "cursor":
-        models = _fallback_cursor()
-    elif pid == "claude-code":
-        models = [
-            DiscoveredModel("claude-code", "Claude Code (Auto)", "Let Claude CLI select optimal model", 200_000),
-            DiscoveredModel("claude-opus-5", "Claude Opus 5", "Frontier intelligence & autonomous engineering via Claude CLI", 200_000, vision=True, reasoning=True),
-            DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5", "Flagship agentic coding and reasoning workhorse", 200_000, vision=True, reasoning=True),
-            DiscoveredModel("claude-fable-5-1", "Claude Fable 5.1", "Long-horizon creative engineering & complex multi-turn reasoning", 200_000, vision=True, reasoning=True),
-            DiscoveredModel("claude-3-7-sonnet", "Claude 3.7 Sonnet", "Hybrid reasoning and coding model via Claude CLI", 200_000, vision=True, reasoning=True),
-            DiscoveredModel("claude-3-5-sonnet", "Claude 3.5 Sonnet", "High-intelligence workhorse via Claude CLI", 200_000, vision=True),
-        ]
-        if detected_meta and "disabled_models" in detected_meta:
-            context["disabled_models"] = detected_meta["disabled_models"]
-    elif pid == "mock":
-        models = [DiscoveredModel("mock-1", "Mock Test Model", "Offline test fixture", 32_000)]
-    elif pid == "subscription":
-        models = [
-            DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra (Subscription)", "Codex subscription agentic coding model", 272_000, vision=True, reasoning=True),
-            DiscoveredModel("claude-opus-5", "Claude Opus 5 (Subscription)", "Anthropic flagship reasoning model", 200_000, vision=True, reasoning=True),
-            DiscoveredModel("claude-sonnet-5", "Claude Sonnet 5 (Subscription)", "Next-gen agentic coding model", 200_000, vision=True, reasoning=True),
-            DiscoveredModel("claude-3-7-sonnet", "Claude 3.7 Sonnet (Subscription)", "Claude subscription reasoning model", 200_000, vision=True, reasoning=True),
-            DiscoveredModel("claude-fable-5-1", "Claude Fable 5.1 (Subscription)", "Enterprise tier required", 200_000, vision=True, reasoning=True),
-        ]
-    else:
-        models = []
 
-    # UNIVERSAL ENTITLEMENT EVALUATION
-    for m in models:
+    # Copy every row: the cache must never be mutated by a caller.
+    out: list[dict[str, Any]] = []
+    for cached_model in raw_models:
+        m = dict(cached_model)
+        # A model that came from the provider itself (live query, codex cache,
+        # CLI options, installed ollama tags) carries that provider's own
+        # verdict. Only a hardcoded fallback row has nothing to report.
+        reported = None if m.get("is_fallback") else (m.get("locked", False),
+                                                      m.get("plan_required"))
         locked, plan_req = evaluate_model_entitlement(
             provider=pid,
-            model_id=m.id,
+            model_id=m["id"],
             is_connected=is_connected,
             user_plan=user_plan,
             context=context,
+            provider_reported=reported,
         )
-        m.locked = locked
-        m.plan_required = plan_req
-        m.status = "available" if not locked else "locked"
+        m["locked"] = locked
+        m["plan_required"] = plan_req
+        m["status"] = "available" if not locked else "locked"
+        out.append(m)
 
-    dict_models = [m.to_dict() for m in models]
-    _MODEL_CACHE[pid] = (now, dict_models)
-    return dict_models, account_meta
+    account_meta: dict[str, Any] = {**detected_meta, **discovery_meta}
+    return out, account_meta

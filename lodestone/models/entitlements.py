@@ -1,17 +1,10 @@
-"""Universal Provider Plan & Model Entitlement Engine for TURNOVER / Lodestone.
+"""Provider-Reported & Dynamic Model Entitlement Engine for TURNOVER / Lodestone.
 
 Determines model accessibility dynamically based on:
-1. Provider Connection State:
-   - If a provider is not connected (no API key, unauthenticated session, offline daemon),
-     all models are gated with `locked = True` and `plan_required = "Connect in Models"`.
-2. Provider Plan Tier:
-   - Once connected, models are evaluated against the authenticated user's tier.
-   - Models are unlocked (`locked = False`) if the user's tier meets or exceeds the requirement.
-   - Higher-tier models are locked with clear plan badges (e.g. `🔒 Pro`, `🔒 Plus`, `🔒 Pull required`).
-3. Explicit Provider Constraints:
-   - Honors explicit disablement flags (e.g., CLI version prerequisites from `~/.claude.json`).
-
-Completely zero-hardcoded: works identically for ANY user, ANY account ID/email, on any OS.
+1. Provider Live Discovery & Capability Reporting (authoritative source of truth).
+2. Verified Account Access & Scopes (runtime identity, session validity, and actual API capabilities).
+3. Provider-Reported Constraints (e.g. CLI update prerequisites reported by installed tools).
+4. Conservative Static Fallback Mappings (safe fallback tier metadata when provider APIs do not expose real-time entitlement endpoints).
 """
 from __future__ import annotations
 
@@ -37,6 +30,7 @@ OPENAI_TIER_API = PlanTier("API Key", 40)
 # Claude / Anthropic tiers
 CLAUDE_TIER_FREE = PlanTier("Free", 10)
 CLAUDE_TIER_PRO = PlanTier("Pro", 20)
+CLAUDE_TIER_MAX = PlanTier("Max", 25)
 CLAUDE_TIER_TEAM = PlanTier("Team", 30)
 CLAUDE_TIER_ENTERPRISE = PlanTier("Enterprise", 40)
 
@@ -75,6 +69,8 @@ def normalize_plan_tier(provider: str, plan_str: str | None) -> PlanTier:
             return CLAUDE_TIER_ENTERPRISE
         elif "team" in p:
             return CLAUDE_TIER_TEAM
+        elif "max" in p:
+            return CLAUDE_TIER_MAX
         elif any(k in p for k in ("pro", "subscription")):
             return CLAUDE_TIER_PRO
         elif "free" in p:
@@ -111,6 +107,8 @@ def normalize_plan_tier(provider: str, plan_str: str | None) -> PlanTier:
 _MODEL_TIER_REQUIREMENTS: dict[str, dict[str, PlanTier]] = {
     "openai": {
         "gpt-5.5": OPENAI_TIER_FREE,
+        "gpt-5.4": OPENAI_TIER_FREE,
+        "gpt-5.4-mini": OPENAI_TIER_FREE,
         "gpt-5.6-terra": OPENAI_TIER_FREE,
         "gpt-5.6-luna": OPENAI_TIER_FREE,
         "gpt-reserve": OPENAI_TIER_FREE,
@@ -123,50 +121,45 @@ _MODEL_TIER_REQUIREMENTS: dict[str, dict[str, PlanTier]] = {
         "o3": OPENAI_TIER_PRO,
     },
     "claude": {
-        "claude-3-5-haiku-latest": CLAUDE_TIER_FREE,
-        "claude-3-5-haiku": CLAUDE_TIER_FREE,
-        "claude-3-5-sonnet-latest": CLAUDE_TIER_FREE,
-        "claude-3-5-sonnet": CLAUDE_TIER_FREE,
-        "claude-3-7-sonnet-latest": CLAUDE_TIER_FREE,
-        "claude-3-7-sonnet": CLAUDE_TIER_FREE,
+        "claude-haiku-4-5": CLAUDE_TIER_FREE,
         "claude-opus-5": CLAUDE_TIER_PRO,
         "claude-sonnet-5": CLAUDE_TIER_PRO,
-        "claude-fable-5-1": CLAUDE_TIER_TEAM,
-        "claude-fable-5": CLAUDE_TIER_TEAM,
+        # Fable is a subscription model, not an org-plan one — the "Team /
+        # Enterprise" gate previously here came from misreading the CLI's
+        # `cc-update-required-1` entry, which is a CLI *version* requirement.
+        "claude-fable-5": CLAUDE_TIER_PRO,
     },
     "claude-code": {
         "claude-code": CLAUDE_TIER_FREE,
-        "claude-3-5-sonnet": CLAUDE_TIER_FREE,
-        "claude-3-7-sonnet": CLAUDE_TIER_FREE,
+        "claude-haiku-4-5": CLAUDE_TIER_FREE,
         "claude-opus-5": CLAUDE_TIER_PRO,
         "claude-sonnet-5": CLAUDE_TIER_PRO,
-        "claude-fable-5-1": CLAUDE_TIER_TEAM,
+        "claude-fable-5": CLAUDE_TIER_PRO,
     },
     "cursor": {
         "cursor-fast": CURSOR_TIER_FREE,
         "cursor-small": CURSOR_TIER_FREE,
         "claude-opus-5": CURSOR_TIER_PRO,
-        "claude-3.7-sonnet": CURSOR_TIER_PRO,
+        "claude-sonnet-5": CURSOR_TIER_PRO,
         "gpt-5.6-terra": CURSOR_TIER_PRO,
     },
     "gemini": {
-        "gemini-2.0-flash": GEMINI_TIER_FREE,
+        "gemini-3.7-flash": GEMINI_TIER_FREE,
+        "gemini-3.6-flash": GEMINI_TIER_FREE,
         "gemini-2.5-flash": GEMINI_TIER_FREE,
+        "gemini-3.1-pro-preview": GEMINI_TIER_API,
         "gemini-2.5-pro": GEMINI_TIER_API,
     },
     "xai": {
-        "grok-2-1212": XAI_TIER_1,
-        "grok-2-latest": XAI_TIER_1,
-        "grok-2-vision-latest": XAI_TIER_1,
-        "grok-3-mini": XAI_TIER_1,
-        "grok-3": XAI_TIER_2,
+        "grok-4.3": XAI_TIER_1,
+        "grok-4.5": XAI_TIER_1,
+        "grok-4.6": XAI_TIER_2,
     },
     "subscription": {
         "gpt-5.6-terra": PlanTier("Standard", 10),
         "claude-opus-5": PlanTier("Standard", 10),
         "claude-sonnet-5": PlanTier("Standard", 10),
-        "claude-3-7-sonnet": PlanTier("Standard", 10),
-        "claude-fable-5-1": PlanTier("Enterprise", 30),
+        "claude-fable-5": PlanTier("Standard", 10),
     },
 }
 
@@ -177,13 +170,26 @@ def evaluate_model_entitlement(
     is_connected: bool,
     user_plan: str | None = None,
     context: dict[str, Any] | None = None,
+    provider_reported: tuple[bool, str | None] | None = None,
 ) -> tuple[bool, str | None]:
-    """Evaluate whether a model is unlocked for the user.
+    """Decide whether THIS user, on THEIR plan, can run this model.
 
-    Returns:
-        (locked: bool, plan_required: str | None)
-        - locked=False: Model is unlocked and immediately usable.
-        - locked=True: Model is locked; plan_required explains what is needed.
+    Authority runs strictly in this order — the first answer wins:
+
+      1. **Connection.** Nothing is usable until the user connects the provider.
+      2. **The provider's own answer** (`provider_reported`): what the account
+         itself says it can run — a live ``/v1/models`` query made with the
+         user's credential, the Codex models cache, the Claude CLI's model
+         options, the locally installed Ollama tags. This is the truth and it
+         is never second-guessed by the tables below.
+      3. **Static tier tables.** A conservative guess used ONLY when step 2 has
+         nothing to say: the user is not connected yet, or discovery failed and
+         a hardcoded fallback list is being shown.
+
+    Passing `provider_reported` is what makes availability match the user's real
+    plan on any machine, rather than whatever list was hardcoded at build time.
+
+    Returns (locked, plan_required); `plan_required` explains a lock.
     """
     pid = provider.lower()
     mid = model_id.lower()
@@ -212,7 +218,16 @@ def evaluate_model_entitlement(
         if d_pattern.lower() in mid:
             return True, reason or "Update Required"
 
-    # Gate 4: Provider Tier Requirements
+    # Gate 4: the account's own answer. A model the provider handed us for this
+    # user's credential is available to this user, whatever our tables guess.
+    if provider_reported is not None:
+        reported_locked, reported_plan = provider_reported
+        if reported_locked:
+            return True, reported_plan or "Not available on your plan"
+        return False, None
+
+    # Gate 5: static tier requirements — a fallback for models we are listing
+    # without having asked the provider (not connected, or discovery failed).
     prov_reqs = _MODEL_TIER_REQUIREMENTS.get(pid, {})
     # Exact match or normalized slug match
     req_tier = prov_reqs.get(model_id) or prov_reqs.get(mid)
@@ -256,11 +271,12 @@ def get_best_unlocked_model(
 
     # Priority preferences when choosing automatic default
     priority_order = [
-        "claude-opus-5", "claude-sonnet-5", "claude-3-7-sonnet",
+        "claude-opus-5", "claude-sonnet-5", "claude-fable-5",
         "gpt-6-astra", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna",
-        "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash",
+        "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.1-pro-preview",
+        "gemini-2.5-flash", "gemini-2.5-pro",
         "cursor-fast", "cursor-small",
-        "grok-3", "grok-3-mini",
+        "grok-4.6", "grok-4.5", "grok-4.3",
         "deepseek-chat", "deepseek-reasoner",
         "llama3.2", "qwen2.5",
     ]
@@ -273,14 +289,132 @@ def get_best_unlocked_model(
     return unlocked[0]
 
 
-def is_provider_connected(provider_id: str, api_key: str | None = None) -> tuple[bool, str | None, dict[str, Any]]:
-    """Determine whether a provider is connected, and retrieve user plan and metadata.
+# Providers that hold an account credential *and* an API key independently.
+_DUAL_CREDENTIAL_PROVIDERS = {"openai", "claude", "cursor"}
 
-    Returns:
-        (is_connected: bool, user_plan: str | None, account_info: dict[str, Any])
+_PROVIDER_KEY_ENV = {
+    "openai": "OPENAI_API_KEY",
+    "claude": "ANTHROPIC_API_KEY",
+    "cursor": "CURSOR_API_KEY",
+    "xai": "XAI_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+}
+
+
+def _stored_api_key(pid: str, api_key: str | None = None) -> str:
+    """The API key for this provider, ignoring one the user has disconnected."""
+    import os
+
+    from .base import _saved_key
+    from .connections import ConnectionStatus, get_connection
+
+    if api_key:
+        return api_key
+    env = _PROVIDER_KEY_ENV.get(pid)
+    if not env:
+        return ""
+    if get_connection(pid).api_key_status == ConnectionStatus.DISCONNECTED:
+        return ""
+    return os.environ.get(env) or _saved_key(env) or ""
+
+
+def _detect_account(pid: str) -> dict[str, Any]:
+    """Live account-credential state, independent of any API key."""
+    from .connections import ConnectionStatus, get_connection
+
+    conn = get_connection(pid)
+    if conn.account_status == ConnectionStatus.DISCONNECTED:
+        return {}
+
+    if pid in ("claude", "claude-code"):
+        # Finding a CLI or a config file on the machine is *detection*, not
+        # consent. The user must connect the provider before we will use it.
+        if not conn.account_connected:
+            return {}
+        from .accounts import detect_claude_account
+        acct = detect_claude_account()
+        if pid == "claude-code":
+            from .claude_code import find_claude
+            return acct if find_claude() else {}
+        return acct
+
+    if pid == "cursor":
+        from .accounts import detect_cursor_account
+        return detect_cursor_account() if conn.account_connected else {}
+
+    if pid == "openai":
+        from .chatgpt_auth import detect_chatgpt_local_session
+        session = detect_chatgpt_local_session(fetch_usage=False)
+        if session and (conn.account_connected or session.get("has_token")):
+            return session
+        return {}
+
+    if pid == "xai":
+        from .xai_auth import get_xai_access_token
+        try:
+            if get_xai_access_token():
+                return {"email": conn.email or "xAI Grok", "plan": "xAI Grok"}
+        except Exception:
+            pass
+        return {}
+
+    return {}
+
+
+def provider_credentials(provider_id: str, api_key: str | None = None) -> dict[str, dict[str, Any]]:
+    """Report each credential a provider holds, independently.
+
+    An account and an API key are separate things: removing one must never
+    disconnect the other, and connecting one must never claim the other is
+    connected. Everything downstream reads this, not a single shared status.
+    """
+    pid = provider_id.lower()
+    if pid == "anthropic":
+        pid = "claude"
+    elif pid == "google":
+        pid = "gemini"
+    elif pid == "grok":
+        pid = "xai"
+
+    from .capabilities import get_capabilities
+
+    caps = get_capabilities(pid)
+    # A key-only provider has no account credential by definition. xAI is the
+    # case that matters: an OAuth token authenticates but grants no api.x.ai
+    # credits, so counting it as "connected" would unlock models that fail on
+    # the first message.
+    account_supported = bool(caps and not caps.api_key_only) and (
+        pid in _DUAL_CREDENTIAL_PROVIDERS or pid == "claude-code")
+
+    key = _stored_api_key(pid, api_key)
+    account = _detect_account(pid) if account_supported else {}
+
+    return {
+        "api_key": {
+            "connected": bool(key),
+            "reference": _PROVIDER_KEY_ENV.get(pid, ""),
+            "supported": bool(_PROVIDER_KEY_ENV.get(pid)),
+        },
+        "account": {
+            "connected": bool(account),
+            "email": account.get("email"),
+            "plan": account.get("plan"),
+            "supported": account_supported,
+            "meta": account,
+        },
+    }
+
+
+def is_provider_connected(provider_id: str, api_key: str | None = None) -> tuple[bool, str | None, dict[str, Any]]:
+    """Whether a provider can run inference at all, plus plan and metadata.
+
+    Connected if **either** credential works. The API key wins for plan
+    reporting when both are present, matching how inference picks a path.
     """
     import os
-    from .base import _saved_key
+
     from .connections import ConnectionStatus, get_connection
 
     pid = provider_id.lower()
@@ -292,108 +426,121 @@ def is_provider_connected(provider_id: str, api_key: str | None = None) -> tuple
         pid = "xai"
 
     conn = get_connection(pid)
-    is_disconnected = (conn.connection_status == ConnectionStatus.DISCONNECTED)
 
+    # ── providers with no per-credential split ───────────────────────────
     if pid == "mock":
         return True, "Mock", {}
 
     if pid == "ollama":
-        # Check if Ollama daemon is reachable
         import httpx
         url = os.environ.get("OLLAMA_HOST") or "http://localhost:11434"
         try:
-            r = httpx.get(f"{url.rstrip('/')}/api/tags", timeout=1.5)
-            if r.status_code == 200:
+            if httpx.get(f"{url.rstrip('/')}/api/tags", timeout=1.5).status_code == 200:
                 return True, "Ollama Local", {"host": url}
         except Exception:
             pass
         return False, None, {}
 
-    if pid == "claude-code":
-        from .claude_code import find_claude
-        from .accounts import detect_claude_account
-        acct = detect_claude_account()
-        bin_path = find_claude()
-        if not bin_path or is_disconnected:
+    if pid == "subscription":
+        # Only "connected" once a gateway is actually configured — otherwise the
+        # catalog advertises models that every request would fail on.
+        base = os.environ.get("LODESTONE_SUBSCRIPTION_BASE_URL")
+        if not base or conn.connection_status == ConnectionStatus.DISCONNECTED:
             return False, None, {}
-        plan = acct.get("plan") if acct.get("found_on_computer") else "Claude CLI"
-        return True, plan, acct
-
-    if pid == "openrouter":
-        key = api_key or os.environ.get("OPENROUTER_API_KEY") or _saved_key("OPENROUTER_API_KEY")
-        if not key or is_disconnected:
-            return False, None, {}
-        return True, "OpenRouter Account", {"email": conn.email or "OpenRouter User"}
-
-    if pid == "deepseek":
-        key = api_key or os.environ.get("DEEPSEEK_API_KEY") or _saved_key("DEEPSEEK_API_KEY")
-        if not key or is_disconnected:
-            return False, None, {}
-        return True, "DeepSeek Account", {"email": conn.email or "DeepSeek User"}
-
-    if pid == "xai":
-        key = api_key or os.environ.get("XAI_API_KEY") or _saved_key("XAI_API_KEY")
-        if (not key and conn.connection_status not in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED)) or is_disconnected:
-            return False, None, {}
-        return True, "Grok Account", {"email": conn.email or "xAI Grok"}
+        return True, "Subscription Gateway", {"host": base}
 
     if pid == "gemini":
-        from .accounts import detect_google_account
-        key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or _saved_key("GEMINI_API_KEY")
-        acct = detect_google_account()
-        if is_disconnected:
+        if conn.api_key_status == ConnectionStatus.DISCONNECTED:
             return False, None, {}
-        if key:
-            return True, "Google AI Studio", {"email": conn.email or acct.get("email") or "Developer"}
-        if acct.get("connected"):
-            return True, acct.get("plan", "Google Gemini"), acct
-        if conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
-            return True, "Google Gemini", {"email": conn.email}
-        return False, None, {}
+        from .gemini import resolve_gemini_credentials
+        cred = resolve_gemini_credentials(api_key=api_key)
+        if cred.valid:
+            return True, "Google AI Studio", {
+                "email": cred.email or conn.email or "API Key User",
+                "source": "api_key",
+                "has_api_key": True,
+            }
+        return False, None, {
+            "source": "none",
+            "error_reason": cred.error_reason,
+            "has_api_key": False,
+        }
 
-    if pid == "claude":
-        from .accounts import detect_claude_account
-        key = api_key or os.environ.get("ANTHROPIC_API_KEY") or _saved_key("ANTHROPIC_API_KEY")
-        acct = detect_claude_account()
-        if is_disconnected:
-            return False, None, {}
-        if key:
-            return True, "Anthropic API", {"email": conn.email or acct.get("email") or "Developer"}
-        if acct.get("found_on_computer"):
-            return True, acct.get("plan", "Claude Pro"), acct
-        if conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
-            return True, "Claude Subscription", {"email": conn.email}
-        return False, None, {}
+    # ── the rest: either credential is enough ────────────────────────────
+    creds = provider_credentials(pid, api_key)
+    key_cred, account_cred = creds["api_key"], creds["account"]
 
-    if pid == "cursor":
-        from .accounts import detect_cursor_account
-        key = api_key or os.environ.get("CURSOR_API_KEY") or _saved_key("CURSOR_API_KEY")
-        acct = detect_cursor_account()
-        if is_disconnected:
-            return False, None, {}
-        if key:
-            return True, "Cursor API", {"email": conn.email or acct.get("email") or "Developer"}
-        if acct.get("found_on_computer"):
-            return True, acct.get("plan", "Cursor Free"), acct
-        if conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
-            return True, "Cursor", {"email": conn.email}
-        return False, None, {}
+    if key_cred["connected"]:
+        plans = {
+            "openai": "OpenAI Developer", "claude": "Anthropic API",
+            "cursor": "Cursor API", "xai": "xAI Grok",
+            "deepseek": "DeepSeek Account", "openrouter": "OpenRouter Account",
+        }
+        return True, plans.get(pid, "API Key"), {"email": conn.email or "Developer"}
 
-    if pid == "openai":
-        from .accounts import detect_openai_account
-        key = api_key or os.environ.get("OPENAI_API_KEY") or _saved_key("OPENAI_API_KEY")
-        acct = detect_openai_account()
-        if is_disconnected:
-            return False, None, {}
-        if key:
-            return True, "OpenAI Developer", {"email": conn.email or acct.get("email") or "Developer"}
-        if acct.get("found_on_computer") or acct.get("connected"):
-            return True, acct.get("plan", "ChatGPT Free"), acct
-        if conn.connection_status in (ConnectionStatus.ACCOUNT_CONNECTED, ConnectionStatus.API_KEY_CONNECTED):
-            return True, "ChatGPT Account", {"email": conn.email}
-        return False, None, {}
-
-    if pid == "subscription":
-        return True, "Codex Gateway", {}
+    if account_cred["connected"]:
+        meta = account_cred["meta"]
+        plan = account_cred["plan"] or {
+            "openai": "ChatGPT Account", "claude": "Claude Subscription",
+            "cursor": "Cursor", "claude-code": "Claude CLI",
+        }.get(pid)
+        return True, plan, {**meta, "email": account_cred["email"] or conn.email}
 
     return False, None, {}
+
+
+# Backends that accept any model string, so absence from a catalog means nothing.
+_ACCEPTS_ANY_MODEL = {"mock"}
+
+
+def resolve_usable_model(provider_id: str, model: str | None) -> tuple[str | None, str | None]:
+    """Map a *requested* model onto one this user can actually run right now.
+
+    A model id is chosen once and then persisted — in an agent's binding, in
+    localStorage — but the provider's catalog moves underneath it. Sending a
+    retired or plan-locked id straight through produces a provider 400 on the
+    user's next message, so every request is re-checked against what the
+    account currently offers.
+
+    Returns (usable_model, replaced) where `replaced` is the original id when a
+    substitution happened, else None. A `None` model means "let the provider
+    pick its own default".
+    """
+    if not model or provider_id.lower() in _ACCEPTS_ANY_MODEL:
+        return (model or None), None
+
+    try:
+        from .discovery import get_discovered_models
+        offered, _ = get_discovered_models(provider_id)
+    except Exception:
+        # Never block a turn on a discovery failure — honour what was asked.
+        return model, None
+
+    if not offered:
+        return model, None
+
+    by_id = {m["id"]: m for m in offered}
+    match = by_id.get(model)
+    if match is not None and not match.get("locked"):
+        return model, None
+
+    if match is None and any(m.get("is_fallback") for m in offered):
+        # We are showing a hardcoded list, not the account's real catalog, so an
+        # id being absent from it proves nothing. Substituting here would swap a
+        # model the user can legitimately run.
+        return model, None
+
+    substitute = get_best_unlocked_model(
+        provider=provider_id,
+        available_models=[m["id"] for m in offered],
+        is_connected=True,
+        user_plan=None,
+    ) or next((m["id"] for m in offered if not m.get("locked")), None)
+
+    if substitute and substitute != model:
+        return substitute, model
+    if substitute:
+        return substitute, None
+    # Nothing is usable — fall back to the provider's own default rather than
+    # sending an id we know the provider will reject.
+    return None, model
