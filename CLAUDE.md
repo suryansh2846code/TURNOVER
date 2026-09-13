@@ -820,6 +820,12 @@ commits to it.
   you rebase on `main`.
 - **Never touch another role's worktree or branch** — no rebase, no force-push, no
   cherry-pick out of it. Ask the Architect.
+- **Once a commit has been fast-forwarded into another worktree, never amend or
+  rebase it.** This bit during the fleet's own setup: amending the docs commit
+  after seven worktrees had already taken it left all seven diverged, and the only
+  clean exit was resetting each branch. The branches were pristine, so nothing was
+  lost — with real work in them it would have been a merge conflict per worktree.
+  Fix forward with a new commit instead.
 - Worktrees are siblings, deliberately **not** nested inside the repo: a checkout
   inside the checkout doubles every `grep` and `find` a session runs, and makes
   "is this my file or the other copy's?" a live question mid-debug.
