@@ -20,8 +20,6 @@ tools themselves.
 """
 from __future__ import annotations
 
-from . import login_processes
-
 import os
 import re
 import shutil
@@ -29,6 +27,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from . import login_processes
 from .base import ChatResult, LLMProvider, Message, _saved_key, parse_cli_json
 from .cache import ttl_cached
 from .errors import ErrorKind, ProviderError, classify_cli

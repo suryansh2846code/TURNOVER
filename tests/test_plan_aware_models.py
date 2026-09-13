@@ -12,10 +12,9 @@ from pathlib import Path
 import pytest
 
 from lodestone.models import discovery, entitlements
-from lodestone.models.discovery import (DiscoveredModel, clear_model_cache,
-                                        get_discovered_models)
+from lodestone.models.discovery import DiscoveredModel, clear_model_cache, get_discovered_models
 from lodestone.models.entitlements import evaluate_model_entitlement
-from lodestone.models.registry import MODEL_CATALOG, PRIMARY_PROVIDERS, _LOCALITY
+from lodestone.models.registry import _LOCALITY, MODEL_CATALOG, PRIMARY_PROVIDERS
 
 
 @pytest.fixture(autouse=True)
@@ -93,7 +92,7 @@ def test_locked_models_stay_visible_with_a_reason(monkeypatch):
            plan="ChatGPT Free")
     rows = get_discovered_models("openai")[0]
     assert len(rows) == 2
-    locked = [r for r in rows if r["locked"]][0]
+    locked = next(r for r in rows if r["locked"])
     assert locked["plan_required"] and locked["status"] == "locked"
 
 

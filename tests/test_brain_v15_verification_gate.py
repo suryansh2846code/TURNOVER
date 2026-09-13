@@ -27,22 +27,22 @@ from lodestone.core.store import MemoryStore
 
 @pytest.fixture
 def gate_env(tmp_path, monkeypatch):
-    import lodestone.config
-    import lodestone.core.store
     import lodestone.brain.brain
     import lodestone.brain.canonical.service
-    
+    import lodestone.config
+    import lodestone.core.store
+
     lodestone.config.get_settings.cache_clear()
     lodestone.core.store.get_store.cache_clear()
     monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
     monkeypatch.setenv("LODESTONE_MODEL_PROVIDER", "mock")
     monkeypatch.setenv("LODESTONE_MODEL_NAME", "mock-v1")
-    
+
     lodestone.brain.brain.get_brain.cache_clear()
     lodestone.brain.canonical.service.get_canonical.cache_clear()
-    
+
     yield tmp_path
-    
+
     lodestone.brain.brain.get_brain.cache_clear()
     lodestone.brain.canonical.service.get_canonical.cache_clear()
     lodestone.core.store.get_store.cache_clear()
@@ -206,7 +206,7 @@ def test_section_3_realistic_memory_30_queries(gate_env):
         recalled = b.recall(q, limit=5)
         text_block = (recalled["context"] + " " + " ".join(m["text"] for m in recalled["memory_hits"])).lower()
         matched = sum(1 for exp in expected if exp in text_block)
-        
+
         if matched == len(expected):
             cls = "CORRECT"
         elif matched > 0:

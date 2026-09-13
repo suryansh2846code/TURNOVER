@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 import sqlite3
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 
 from .config import get_settings
@@ -28,7 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due, done);
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 _WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday",

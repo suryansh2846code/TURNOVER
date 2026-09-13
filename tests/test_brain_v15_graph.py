@@ -2,6 +2,7 @@
 Entity types, aliases, relation confidence, temporal bounds, related entity traversal, and quality pruning.
 """
 import tempfile
+
 import pytest
 
 from lodestone.brain import Brain

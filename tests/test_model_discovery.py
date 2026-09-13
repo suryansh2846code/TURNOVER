@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
+
 from fastapi.testclient import TestClient
 
 from lodestone.api.app import app

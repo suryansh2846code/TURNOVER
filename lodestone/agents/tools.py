@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 from ..brain import get_brain
 from ..models.base import Tool
 

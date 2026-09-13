@@ -12,9 +12,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from lodestone.api.app import app
-from lodestone.models.auth_flows import (ApiKeyOnlyFlow, AuthStart, AuthStatus,
-                                         BrowserFlow, ChatGPTFlow, ClaudeFlow,
-                                         CursorFlow, GrokFlow, get_flow)
+from lodestone.models.auth_flows import (
+    ApiKeyOnlyFlow,
+    AuthStart,
+    AuthStatus,
+    BrowserFlow,
+    ChatGPTFlow,
+    ClaudeFlow,
+    CursorFlow,
+    GrokFlow,
+    get_flow,
+)
 
 PROVIDERS = ["openai", "claude", "cursor", "xai", "gemini", "deepseek", "ollama"]
 

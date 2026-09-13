@@ -16,8 +16,7 @@ import pytest
 from lodestone.models.auth_flows import ApiKeyOnlyFlow, AuthStart, AuthStatus, get_flow
 from lodestone.models.capabilities import CAPABILITIES_REGISTRY, get_capabilities
 from lodestone.models.discovery import normalize_provider_id
-from lodestone.models.registry import (_LOCALITY, _REGISTRY, MODEL_CATALOG,
-                                       PRIMARY_PROVIDERS)
+from lodestone.models.registry import _LOCALITY, _REGISTRY, MODEL_CATALOG, PRIMARY_PROVIDERS
 
 MODELS_DIR = Path(__file__).parent.parent / "lodestone/models"
 
@@ -236,7 +235,7 @@ def _login_spawns():
                     continue
                 argv = [c.value for c in ast.walk(call)
                         if isinstance(c, ast.Constant) and isinstance(c.value, str)]
-                if any("login" == a or a.endswith(" login") for a in argv):
+                if any(a == "login" or a.endswith(" login") for a in argv):
                     found.append((path.name, func.name, func))
     return found
 

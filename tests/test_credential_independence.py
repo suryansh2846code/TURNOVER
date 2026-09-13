@@ -10,9 +10,15 @@ from fastapi.testclient import TestClient
 
 from lodestone.api.app import app
 from lodestone.config import get_settings
-from lodestone.models.connections import (ACCOUNT, API_KEY, ConnectionStatus,
-                                          ProviderConnection, get_connection,
-                                          save_connection, split_legacy_status)
+from lodestone.models.connections import (
+    ACCOUNT,
+    API_KEY,
+    ConnectionStatus,
+    ProviderConnection,
+    get_connection,
+    save_connection,
+    split_legacy_status,
+)
 from lodestone.models.entitlements import provider_credentials
 from lodestone.models.registry import clear_provider_cache
 

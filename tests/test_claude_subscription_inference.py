@@ -12,11 +12,14 @@ import httpx
 import pytest
 
 from lodestone.models.anthropic import AnthropicProvider
-from lodestone.models.base import ChatResult, Message
-from lodestone.models.base import parse_cli_json
-from lodestone.models.connections import (ACCOUNT, ConnectionStatus,
-                                          ProviderConnection, get_connection,
-                                          save_connection)
+from lodestone.models.base import ChatResult, Message, parse_cli_json
+from lodestone.models.connections import (
+    ACCOUNT,
+    ConnectionStatus,
+    ProviderConnection,
+    get_connection,
+    save_connection,
+)
 from lodestone.models.registry import clear_provider_cache
 
 CLI = "/opt/homebrew/bin/claude"

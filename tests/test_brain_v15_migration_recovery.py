@@ -5,7 +5,6 @@ import tempfile
 from lodestone.brain import Brain
 from lodestone.core.store import MemoryStore
 
-
 OLD_V1_SCHEMA = """
 CREATE TABLE IF NOT EXISTS memories (
     id          TEXT PRIMARY KEY,

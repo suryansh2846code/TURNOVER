@@ -11,6 +11,7 @@ Non-negotiable rules (enforced here, not left to the model):
 from __future__ import annotations
 
 import hashlib
+from datetime import UTC
 from typing import Any
 
 from .store import CanonicalStore, _norm
@@ -212,8 +213,8 @@ class Curator:
             source_uri=source_uri, excerpt=cand.get("evidence_excerpt"))
 
     def _timeline_change(self, entity_id, summary, source_timestamp):
-        from datetime import datetime, timezone
-        occurred = (source_timestamp or datetime.now(timezone.utc).isoformat())[:10]
+        from datetime import datetime
+        occurred = (source_timestamp or datetime.now(UTC).isoformat())[:10]
         if not self.store.event_exists("change", occurred, summary):
             self.store.add_event(event_type="change", occurred_at=occurred,
                                  summary=summary, entity_id=entity_id,

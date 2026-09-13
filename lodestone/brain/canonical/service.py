@@ -5,9 +5,11 @@ first-build Gmail curation + ongoing conversation learning.
 from __future__ import annotations
 
 import re
+from datetime import UTC
 from functools import lru_cache
 
-from . import evaluation, export as _export, extract, freshness, recall, redact
+from . import evaluation, extract, freshness, recall, redact
+from . import export as _export
 from .curate import Curator
 from .store import CanonicalStore, get_canonical_store
 
@@ -61,19 +63,19 @@ class CanonicalBrain:
         """Grow the Brain from an ongoing chat turn. User self-disclosure is
         trusted (source_type='chat'); we do NOT mine the assistant's own words
         as fact about the user."""
-        from datetime import datetime, timezone
+        from datetime import datetime
         return self.learn_from_text(
             user_text, source_type="chat", source_uri="chat://turn",
-            source_timestamp=datetime.now(timezone.utc).isoformat(),
+            source_timestamp=datetime.now(UTC).isoformat(),
             actor="user", provider=provider, provider_name=provider_name,
             model_name=model_name)
 
     def remember(self, text: str, *, provider=None, **kw) -> dict:
         """Explicit 'remember this' — highest trust (source_type='manual')."""
-        from datetime import datetime, timezone
+        from datetime import datetime
         return self.learn_from_text(
             text, source_type="manual", source_uri="manual://note",
-            source_timestamp=datetime.now(timezone.utc).isoformat(),
+            source_timestamp=datetime.now(UTC).isoformat(),
             actor="user", provider=provider, **kw)
 
     # ── first-build Gmail curation (metadata-first, bounded body) ──────────
@@ -85,34 +87,6 @@ class CanonicalBrain:
             ranked.append({**m, "_score": _thread_score(m)})
         ranked.sort(key=lambda m: m["_score"], reverse=True)
         return ranked
-
-    def first_build_from_messages(self, messages: list[dict], *, top: int = 40,
-                                  provider=None, provider_name=None,
-                                  model_name=None) -> dict:
-        """Rank all metadata, read bodies only for the top-N, extract candidates.
-        `messages` must include a 'body' for the high-signal ones (or this reads
-        the provided body). Connector-sourced → everything routes via review."""
-        if provider is None:
-            provider = _provider_or_none(provider_name, model_name)
-        ranked = self.rank_threads(messages)
-        processed = 0
-        summary = {"added": 0, "queued": 0, "skipped": 0}
-        for m in ranked[:top]:
-            body = m.get("body") or ""
-            if not body:
-                summary["skipped"] += 1
-                continue
-            res = self.learn_from_text(
-                body, source_type="gmail",
-                source_uri=m.get("uri") or f"gmail://{m.get('id','')}",
-                source_timestamp=m.get("date"), actor="external",
-                provider=provider)
-            summary["added"] += res.get("added", 0)
-            summary["queued"] += res.get("queued", 0)
-            processed += 1
-        summary["processed"] = processed
-        summary["ranked"] = len(ranked)
-        return summary
 
     # ── read path ─────────────────────────────────────────────────────────
     def recall_block(self, query: str, **kw) -> dict:
@@ -186,7 +160,9 @@ _NONHUMAN = re.compile(
 
 
 def _is_human(sender: str | None) -> bool:
-    return bool(sender) and not _NONHUMAN.search(sender)
+    if not sender:
+        return False
+    return not _NONHUMAN.search(sender)
 
 
 def _thread_score(m: dict) -> int:

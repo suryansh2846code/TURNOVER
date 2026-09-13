@@ -7,7 +7,9 @@ from unittest.mock import patch
 
 import pytest
 
+from lodestone.models.accounts import connect_local_account, detect_google_account
 from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
+from lodestone.models.entitlements import is_provider_connected
 from lodestone.models.gemini import (
     GeminiCredentialSource,
     GeminiErrorCode,
@@ -16,8 +18,6 @@ from lodestone.models.gemini import (
     has_gemini_scope,
     resolve_gemini_credentials,
 )
-from lodestone.models.accounts import detect_google_account, connect_local_account
-from lodestone.models.entitlements import is_provider_connected
 
 
 @pytest.fixture(autouse=True)
@@ -189,7 +189,7 @@ def test_entitlements_and_account_detection(clean_gemini_env, monkeypatch):
 
     # 3. With API key provided, entitlements and account detection report connected
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-789")
-    connected, plan, meta = is_provider_connected("gemini")
+    connected, _plan, meta = is_provider_connected("gemini")
     assert connected is True
     assert meta["source"] == "api_key"
 

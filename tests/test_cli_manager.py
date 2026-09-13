@@ -15,10 +15,16 @@ from unittest.mock import patch
 import pytest
 
 from lodestone.models import cli_manager
-from lodestone.models.cli_manager import (PROVIDER_CLI, SPECS, install_cli,
-                                          install_status, installed_version,
-                                          managed_bin_dir, managed_binary,
-                                          uninstall_cli)
+from lodestone.models.cli_manager import (
+    PROVIDER_CLI,
+    SPECS,
+    install_cli,
+    install_status,
+    installed_version,
+    managed_bin_dir,
+    managed_binary,
+    uninstall_cli,
+)
 
 
 @pytest.fixture

@@ -3,7 +3,7 @@ fact stays confirmed forever — we never lower confidence with age. What ages i
 whether a *current* time-sensitive claim can still be trusted as current."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .curate import TIME_SENSITIVE
 from .store import CanonicalStore
@@ -18,8 +18,8 @@ def _age_days(iso: str | None) -> float | None:
     try:
         dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return (datetime.now(timezone.utc) - dt).total_seconds() / 86400
+            dt = dt.replace(tzinfo=UTC)
+        return (datetime.now(UTC) - dt).total_seconds() / 86400
     except Exception:
         return None
 

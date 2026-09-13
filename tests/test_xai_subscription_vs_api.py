@@ -25,8 +25,7 @@ def _oauth_only():
     with patch("lodestone.models.xai_auth.get_xai_access_token", return_value="oauth-token"), \
          patch("lodestone.models.base._saved_key", return_value=""), \
          patch.dict("os.environ", {}, clear=False):
-        p = XAIProvider(api_key=None)
-    return p
+        return XAIProvider(api_key=None)
 
 
 def test_an_oauth_token_is_not_treated_as_an_api_key():

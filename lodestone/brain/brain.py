@@ -7,13 +7,15 @@ knowing the user.
 """
 from __future__ import annotations
 
+from datetime import UTC
 from functools import lru_cache
 from typing import Any
 
 from ..core.chunk import chunk_text
 from ..core.store import MemoryStore, get_store
+from ..log import suppressed
 from . import extract as extractor
-from .graph import GraphStore
+from .graph import ENTITY_TYPES, GraphStore
 
 _CHARS_PER_TOKEN = 4
 
@@ -24,7 +26,7 @@ class Brain:
         self.graph = GraphStore(self.store)
         import threading
         self._enrich_lock = threading.Lock()
-        self._enrich_state = {
+        self._enrich_state: dict[str, Any] = {
             "running": False, "stop": False, "processed": 0, "entities": 0,
             "facts": 0, "tokens_in": 0, "tokens_out": 0, "estimated": False,
             "provider": None, "found": [], "started": None, "remaining": 0}
@@ -104,8 +106,8 @@ class Brain:
         use_llm = False
         if not fast:
             try:
-                from ..models.registry import get_provider
                 from ..config import get_settings
+                from ..models.registry import get_provider
                 p = get_provider(provider_name or get_settings().model_provider, model_name)
                 use_llm = p.name != "mock" and p.is_ready()[0]
             except Exception:
@@ -136,8 +138,15 @@ class Brain:
         def _collect(data, mem):
             for e in data.get("entities", []):
                 if e.get("name") and extractor.is_good_entity(e["name"]):
+                    # Constrain the type here, not only in `upsert_entity`.
+                    # This list is sent straight to the UI for the live "found"
+                    # chips, where it lands in a class attribute — so an
+                    # extraction model that returned markup instead of a type
+                    # would be writing markup into the page. `upsert_entity`
+                    # applies the same allowlist; this path skipped it.
+                    raw_type = str(e.get("type", "thing") or "thing").lower()
                     found.append({"name": extractor._clean_name(e["name"]),
-                                  "type": e.get("type", "thing")})
+                                  "type": raw_type if raw_type in ENTITY_TYPES else "thing"})
             if mem is not None:
                 sources[mem.source] = sources.get(mem.source, 0) + 1
 
@@ -196,7 +205,8 @@ class Brain:
 
         self.store.mark_graphed(done, level=level)
         # de-dup found names, keep the most recent handful for the live feed
-        seen, uniq = set(), []
+        seen: set[str] = set()
+        uniq: list[dict[str, Any]] = []
         for f in reversed(found):
             k = f["name"].lower()
             if k and k not in seen:
@@ -371,7 +381,14 @@ class Brain:
         if not cls or not cls().is_configured()[0]:
             return [], ""
         conn = get_connector(src)
-        fetched = conn.search_and_ingest(terms, **{kw: 8 if src == "gmail" else 5})
+        # Duck-typed, like every connector capability: `search_and_ingest` lives
+        # on the sources that support live search, not on the base class. Asking
+        # first turns "this source cannot do that" into an empty result instead
+        # of an AttributeError in the middle of an agent turn.
+        search = getattr(conn, "search_and_ingest", None)
+        if not callable(search):
+            return [], ""
+        fetched = search(terms, **{kw: 8 if src == "gmail" else 5})
         return fetched, src
 
     def _escape_hatch(self, query: str):
@@ -385,6 +402,7 @@ class Brain:
         if re.search(r"\bsync\b.*\b(all|full|entire|everything)\b", ql) or \
            re.search(r"\b(all|full|entire)\b.*\b(email|mail|inbox|archive)\b.*\bsync\b", ql):
             import threading
+
             from ..connectors import get_connector
             threading.Thread(
                 target=lambda: get_connector("gmail").sync(full_history=True),
@@ -565,12 +583,10 @@ class Brain:
         )
         if res.get("memory_ids"):
             res["id"] = res["memory_ids"][0]
-        try:
+        with suppressed("from .canonical import get_canonical …"):
             from .canonical import get_canonical
             cres = get_canonical().remember(text)
             res["canonical"] = cres
-        except Exception:
-            pass
         return res
 
     def forget(self, memory_id: str, *, soft: bool = True) -> bool:
@@ -722,22 +738,6 @@ class Brain:
             "total_hits_inspected": total_hits,
         }
 
-    _PROSE_EXT = (".md", ".markdown", ".txt", ".rst", ".org")
-
-    def _is_prose(self, mem) -> bool:
-        # Sources that build the knowledge graph. Must mirror what ingest() graphs
-        # at sync time (gcal/gdrive/notion/notes go through brain.ingest), so a
-        # rebuild doesn't silently drop them. Raw Gmail (HTML boilerplate) is added
-        # via store.add without graphing, so it's intentionally excluded here.
-        # High-signal, short, structured/curated sources only. Bulk Gmail (HTML)
-        # and Drive docs (long, heading-heavy PDFs) stay searchable as memories
-        # but are too noisy for the graph, so they're excluded.
-        if mem.source in {"notes", "agent", "manual", "notion", "gcal"}:
-            return True
-        if mem.uri and mem.uri.lower().endswith(self._PROSE_EXT):
-            return True
-        return mem.kind in {"note", "fact"}
-
     def rebuild_graph(self) -> dict[str, Any]:
         """Wipe the knowledge graph and queue every memory for re-extraction with
         the current extractor. The enricher (LLM-first) refills it — call enrich()
@@ -811,10 +811,8 @@ class Brain:
                     break
         finally:
             # sweep any junk entities the pass may have added before finishing
-            try:
+            with suppressed("self.prune()"):
                 self.prune()
-            except Exception:
-                pass
             with self._enrich_lock:
                 self._enrich_state["running"] = False
                 self._enrich_state["stop"] = False
@@ -843,10 +841,8 @@ class Brain:
         before = self.store.count()
         with self.store._lock:
             for tbl in ("relations", "entities", "connector_state", "memories"):
-                try:
+                with suppressed("self.store._conn.execute(f'DELETE FROM {tbl}')"):
                     self.store._conn.execute(f"DELETE FROM {tbl}")
-                except Exception:
-                    pass
             self.store._conn.commit()
         # invalidate the in-memory vector cache so recall reflects the wipe
         self.store._dirty = True
@@ -884,11 +880,11 @@ class Brain:
     def export(self) -> dict[str, Any]:
         """A portable snapshot of the whole brain — the user owns their data and
         can back it up or move it to another machine."""
-        from datetime import datetime, timezone
+        from datetime import datetime
         mems = self.store.export_all()
         return {
             "lodestone_backup": 1,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "count": len(mems),
             "memories": mems,
         }

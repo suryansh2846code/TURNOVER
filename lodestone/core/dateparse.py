@@ -47,8 +47,10 @@ def parse_date_range(text: str, today: date | None = None) -> tuple[str, str] | 
     if re.search(rf"\blast week{_s}\b", t):
         start = today - timedelta(days=today.weekday() + 7)
         return _iso(start), _iso(start + timedelta(days=6))
-    if re.search(r"\b(past|last)\s+(\d+)\s+days?\b", t):
-        n = int(re.search(r"(\d+)\s+days?", t).group(1))
+    if m := re.search(r"\b(past|last)\s+(\d+)\s+days?\b", t):
+        # Reuse the match rather than searching again with a looser pattern:
+        # the second search could legitimately find nothing and crash on .group.
+        n = int(m.group(2))
         return _iso(today - timedelta(days=n)), _iso(today)
     if re.search(rf"\bthis month{_s}\b", t):
         start = today.replace(day=1)

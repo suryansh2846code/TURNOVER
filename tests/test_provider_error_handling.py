@@ -15,9 +15,8 @@ from lodestone.models.anthropic import AnthropicProvider
 from lodestone.models.base import Message
 from lodestone.models.claude_code import ClaudeCodeProvider
 from lodestone.models.cursor import CursorProvider
-from lodestone.models.errors import (ErrorKind, classify_cli, classify_http, extract_detail, redact)
-from lodestone.models.openai_compat import (OllamaProvider, OpenAICompatProvider,
-                                            OpenRouterProvider)
+from lodestone.models.errors import ErrorKind, classify_cli, classify_http, extract_detail, redact
+from lodestone.models.openai_compat import OllamaProvider, OpenAICompatProvider, OpenRouterProvider
 from lodestone.models.xai import XAIProvider
 
 HELLO = [Message(role="user", content="hi")]

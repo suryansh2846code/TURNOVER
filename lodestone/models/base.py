@@ -7,8 +7,9 @@ Message / ToolCall shapes so the agent runtime is model-agnostic — this is the
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 
 def _saved_key(env_key: str) -> str:

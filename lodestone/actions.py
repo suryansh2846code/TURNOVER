@@ -51,7 +51,23 @@ def _send_email(params: dict) -> dict:
         return {"ok": False,
                 "error": f"'{to}' is not a valid email address" if to
                 else "a recipient (to) is required"}
-    return get_connector("gmail").send_email(to, subject, body)
+    gmail = _writer("gmail", "send_email")
+    if gmail is None:
+        return {"ok": False, "error": "Gmail is not connected for sending mail."}
+    return gmail.send_email(to, subject, body)
+
+
+def _writer(source: str, capability: str):
+    """The connector for `source`, only if it can actually perform `capability`.
+
+    Connectors are duck-typed: `send_email` and `create_event` live on the Gmail
+    and Calendar classes, not on the base `Connector`. If a source is connected
+    read-only — or a future connector simply does not implement the write — the
+    bare call raises AttributeError, and the user is shown a 500 with a Python
+    traceback in it. Returning None instead lets the caller say what happened.
+    """
+    connector = get_connector(source)
+    return connector if callable(getattr(connector, capability, None)) else None
 
 
 def _set_reminder(params: dict) -> dict:
@@ -93,7 +109,10 @@ def _create_event(params: dict) -> dict:
     attendees = params.get("attendees")
     if isinstance(attendees, str):
         attendees = [a.strip() for a in attendees.split(",") if a.strip()]
-    return get_connector("gcal").create_event(
+    gcal = _writer("gcal", "create_event")
+    if gcal is None:
+        return {"ok": False, "error": "Google Calendar is not connected for creating events."}
+    return gcal.create_event(
         title, start, params.get("end"), params.get("description", ""), attendees)
 
 
@@ -141,6 +160,7 @@ def execute(action_type: str, params: dict) -> dict:
     at = (params.get("at") or "").strip()
     if at and action_type in ("send_email", "create_event"):
         from datetime import datetime
+
         from .reminders import parse_when
         from .scheduled import get_scheduled
         fire_at = parse_when(at)

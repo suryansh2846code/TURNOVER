@@ -62,10 +62,10 @@ def test_account_detection_is_not_repeated_within_one_drawer_open():
         return {"provider": "claude", "connected": False, "found_on_computer": False}
 
     with patch.object(accounts, "detect_claude_account", counting), \
-         patch.object(accounts, "detect_cursor_account", lambda: {}), \
-         patch.object(accounts, "detect_openai_account", lambda: {}), \
-         patch.object(accounts, "detect_xai_account", lambda: {}), \
-         patch.object(accounts, "detect_google_account", lambda: {}):
+         patch.object(accounts, "detect_cursor_account", dict), \
+         patch.object(accounts, "detect_openai_account", dict), \
+         patch.object(accounts, "detect_xai_account", dict), \
+         patch.object(accounts, "detect_google_account", dict):
         accounts.detect_all_accounts()
         accounts.detect_all_accounts()
         accounts.detect_all_accounts()
@@ -101,10 +101,10 @@ def test_a_credential_change_flushes_every_probe_cache():
     from lodestone.models.registry import clear_provider_cache
 
     with patch.object(accounts, "detect_claude_account", lambda: {"x": 1}), \
-         patch.object(accounts, "detect_cursor_account", lambda: {}), \
-         patch.object(accounts, "detect_openai_account", lambda: {}), \
-         patch.object(accounts, "detect_xai_account", lambda: {}), \
-         patch.object(accounts, "detect_google_account", lambda: {}):
+         patch.object(accounts, "detect_cursor_account", dict), \
+         patch.object(accounts, "detect_openai_account", dict), \
+         patch.object(accounts, "detect_xai_account", dict), \
+         patch.object(accounts, "detect_google_account", dict):
         accounts.detect_all_accounts()
         clear_provider_cache("claude")
         calls = {"n": 0}

@@ -4,6 +4,7 @@ Evaluates recall precision, temporal correctness, open loop retrieval,
 provenance completeness, and deduplication stability against Section 38/39 requirements.
 """
 import tempfile
+
 import pytest
 
 from lodestone.brain import Brain

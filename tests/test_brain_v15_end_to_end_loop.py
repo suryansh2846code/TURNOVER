@@ -12,9 +12,9 @@ Also validates:
 """
 import pytest
 
-from lodestone.core.models import MemoryStatus, MemoryType, OpenLoopPriority
 from lodestone.agents.runtime import run_turn
 from lodestone.config import get_settings
+from lodestone.core.models import MemoryStatus, MemoryType, OpenLoopPriority
 
 
 @pytest.fixture

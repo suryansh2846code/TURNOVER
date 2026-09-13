@@ -14,13 +14,13 @@ import pytest
 
 from lodestone.models.accounts import _claude_plan_label, connect_local_account
 from lodestone.models.anthropic import AnthropicProvider
-from lodestone.models.connections import (ConnectionStatus,
-                                          ProviderConnection, get_connection,
-                                          save_connection)
-from lodestone.models.entitlements import (evaluate_model_entitlement,
-                                           is_provider_connected,
-                                           normalize_plan_tier,
-                                           provider_credentials)
+from lodestone.models.connections import ConnectionStatus, ProviderConnection, get_connection, save_connection
+from lodestone.models.entitlements import (
+    evaluate_model_entitlement,
+    is_provider_connected,
+    normalize_plan_tier,
+    provider_credentials,
+)
 from lodestone.models.registry import clear_provider_cache
 
 
@@ -86,7 +86,7 @@ def test_user_can_deliberately_connect_claude_code():
         ok, msg, _ = connect_local_account("claude-code")
         assert ok, msg
         clear_provider_cache()
-        connected, plan, _ = is_provider_connected("claude-code")
+        connected, _plan, _ = is_provider_connected("claude-code")
     assert connected is True
     assert get_connection("claude-code").account_connected is True
 

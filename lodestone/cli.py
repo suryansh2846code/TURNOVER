@@ -34,6 +34,7 @@ def mcp():
 def mcp_install():
     """Print the command to connect the Lodestone brain to Claude Code."""
     import sys
+
     from .config import get_settings
     py = sys.executable
     home = get_settings().home
@@ -144,8 +145,8 @@ def reembed():
 @app.command()
 def providers():
     """List model providers and readiness."""
-    from .models import list_providers
     from .config import get_settings
+    from .models import list_providers
     t = Table(title=f"Model providers (active: {get_settings().model_provider})")
     t.add_column("provider"); t.add_column("ready"); t.add_column("note")
     for p in list_providers():

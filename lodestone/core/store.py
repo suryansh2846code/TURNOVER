@@ -7,6 +7,7 @@ importance, reinforcement, lifecycle status, provenance, and open loops.
 """
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 import logging
@@ -16,10 +17,11 @@ import sqlite3
 import threading
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 
@@ -41,7 +43,7 @@ log = logging.getLogger("lodestone.store")
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _content_hash(text: str, uri: str | None) -> str:
@@ -275,7 +277,7 @@ class MemoryStore:
             self._dirty = True
         return mem
 
-    def add_many(self, items: list[dict[str, Any]]) -> int:
+    def add_many(self, items: builtins.list[dict[str, Any]]) -> int:
         added = 0
         for item in items:
             if self.add(**item):
@@ -375,7 +377,7 @@ class MemoryStore:
             self._conn.commit()
             return True
 
-    def record_access(self, memory_ids: list[str]) -> None:
+    def record_access(self, memory_ids: builtins.list[str]) -> None:
         """Track memory access on recall hits without blocking callers."""
         if not memory_ids:
             return
@@ -397,13 +399,6 @@ class MemoryStore:
             self._dirty = True
             return cur.rowcount > 0
 
-    def delete_source(self, source: str) -> int:
-        with self._lock:
-            cur = self._conn.execute("DELETE FROM memories WHERE source=?", (source,))
-            self._conn.commit()
-            self._dirty = True
-            return cur.rowcount
-
     # ── reading ──────────────────────────────────────────────────────────
     def get(self, memory_id: str) -> Memory | None:
         row = self._conn.execute(
@@ -419,9 +414,9 @@ class MemoryStore:
         memory_type: str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[Memory]:
+    ) -> builtins.list[Memory]:
         clauses = []
-        params: list[Any] = []
+        params: builtins.list[Any] = []
         if source:
             clauses.append("source=?")
             params.append(source)
@@ -438,9 +433,9 @@ class MemoryStore:
         rows = self._conn.execute(sql, params).fetchall()
         return [_row_to_memory(r) for r in rows]
 
-    def export_all(self) -> list[dict[str, Any]]:
+    def export_all(self) -> builtins.list[dict[str, Any]]:
         """Every memory as a portable dict (no vectors — re-embedded on import)."""
-        out: list[dict[str, Any]] = []
+        out: builtins.list[dict[str, Any]] = []
         offset = 0
         while True:
             rows = self.list(limit=500, offset=offset)
@@ -475,7 +470,7 @@ class MemoryStore:
         return sql, [*full, below, cap]
 
     def list_ungraphed(self, limit: int = 40, below: int = 2,
-                       cap: int = 0, full: tuple = ()) -> list[Memory]:
+                       cap: int = 0, full: tuple = ()) -> builtins.list[Memory]:
         if cap and cap > 0:
             sub, args = self._cap_cte(below, cap, full)
             rows = self._conn.execute(
@@ -493,7 +488,7 @@ class MemoryStore:
         return self._conn.execute(
             "SELECT COUNT(*) AS c FROM memories WHERE graphed<? AND status != 'retracted'", (below,)).fetchone()["c"]
 
-    def mark_graphed(self, ids: list[str], level: int = 1) -> None:
+    def mark_graphed(self, ids: builtins.list[str], level: int = 1) -> None:
         if not ids:
             return
         with self._lock:
@@ -539,7 +534,7 @@ class MemoryStore:
             "WHERE embedding IS NOT NULL AND status != 'retracted'"
         ).fetchall()
         self._ids = []
-        mats: list[np.ndarray] = []
+        mats: builtins.list[np.ndarray] = []
         target_dim = self._embedder.dim
         for r in rows:
             dim = r["embed_dim"]
@@ -558,12 +553,12 @@ class MemoryStore:
         *,
         limit: int = 8,
         source: str | None = None,
-        prefer: list[str] | None = None,
+        prefer: builtins.list[str] | None = None,
         date_start: str | None = None,
         date_end: str | None = None,
         min_score: float = 0.0,
         include_superseded: bool | None = None,
-    ) -> list[RecallHit]:
+    ) -> builtins.list[RecallHit]:
         """Hybrid multi-signal recall engine for Brain v1.5 with explainability.
 
         Formula:
@@ -619,8 +614,8 @@ class MemoryStore:
             "FROM memories WHERE status != 'retracted'"
         ).fetchall()
 
-        now_dt = datetime.now(timezone.utc)
-        scored_hits: list[RecallHit] = []
+        now_dt = datetime.now(UTC)
+        scored_hits: builtins.list[RecallHit] = []
 
         for row in cand_rows:
             mid = row["id"]
@@ -771,7 +766,7 @@ class MemoryStore:
         confidence: float = 0.8,
         due_at: str | None = None,
         source: str = "manual",
-        related_entities: list[str] | None = None,
+        related_entities: builtins.list[str] | None = None,
         related_project: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> OpenLoop | None:
@@ -821,7 +816,7 @@ class MemoryStore:
         allowed = {"description", "status", "priority", "confidence", "due_at",
                    "related_entities", "related_project", "metadata"}
         clauses = []
-        params: list[Any] = []
+        params: builtins.list[Any] = []
         for k, v in fields.items():
             if k in allowed:
                 if k in ("related_entities", "metadata"):
@@ -856,9 +851,9 @@ class MemoryStore:
         status: str | None = None,
         related_project: str | None = None,
         limit: int = 50,
-    ) -> list[OpenLoop]:
+    ) -> builtins.list[OpenLoop]:
         clauses = []
-        params: list[Any] = []
+        params: builtins.list[Any] = []
         if status == "active":
             clauses.append("status IN ('open', 'waiting', 'blocked')")
         elif status:
@@ -882,7 +877,9 @@ class MemoryStore:
             chunk = rows[i : i + batch]
             vecs = self._embedder.embed([r["text"] for r in chunk])
             with self._lock:
-                for r, v in zip(chunk, vecs):
+                # strict=: a short embedding batch would otherwise write
+                # vectors onto the wrong rows in silence.
+                for r, v in zip(chunk, vecs, strict=True):
                     self._conn.execute(
                         "UPDATE memories SET embedding=?, embed_dim=?, embed_model=? "
                         "WHERE id=?",
@@ -969,7 +966,7 @@ _STOP = {
 }
 
 
-def _tokenize(text: str) -> list[str]:
+def _tokenize(text: str) -> builtins.list[str]:
     return [t for t in _TOKEN.findall(text.lower()) if t not in _STOP]
 
 

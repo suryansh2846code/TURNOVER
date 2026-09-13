@@ -1,9 +1,9 @@
 """Unit tests for Native AI Account detection, sign-in flows, and Gemini OAuth reflection."""
 from __future__ import annotations
 
-import pytest
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from lodestone.api.app import app
@@ -14,7 +14,6 @@ from lodestone.models.accounts import (
 )
 from lodestone.models.connections import ConnectionStatus, get_connection
 from lodestone.models.gemini import GeminiProvider
-
 
 client = TestClient(app)
 
@@ -36,8 +35,9 @@ def test_detect_all_accounts():
 
 def test_gemini_oauth_reflection(monkeypatch):
     """Verify that Google Workspace OAuth does NOT reflect into Gemini model provider (Gemini is pure API key)."""
-    from lodestone.config import get_settings
     import json
+
+    from lodestone.config import get_settings
 
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
@@ -170,7 +170,11 @@ def test_signin_endpoints():
 
 def test_openai_chatgpt_oauth_flow():
     """Verify OpenAI signin starts ChatGPT OAuth PKCE flow with official client."""
-    from lodestone.models.chatgpt_auth import CLIENT_ID, detect_chatgpt_local_session, adopt_local_chatgpt_session
+    from lodestone.models.chatgpt_auth import (
+        CLIENT_ID,
+        adopt_local_chatgpt_session,
+        detect_chatgpt_local_session,
+    )
 
     resp = client.post("/api/providers/openai/signin")
     assert resp.status_code == 200
@@ -186,7 +190,7 @@ def test_openai_chatgpt_oauth_flow():
     # Verify local session detection and adoption
     info = detect_chatgpt_local_session()
     if info and info.get("email"):
-        ok, msg, conn_dict = adopt_local_chatgpt_session()
+        ok, _msg, conn_dict = adopt_local_chatgpt_session()
         assert ok is True
         assert conn_dict.get("email") == info["email"]
         assert conn_dict.get("connection_status") == ConnectionStatus.ACCOUNT_CONNECTED
@@ -194,8 +198,8 @@ def test_openai_chatgpt_oauth_flow():
 
 def test_disconnect_provider():
     """Verify disconnecting a provider clears account email, tokens and sets status to DISCONNECTED."""
-    from lodestone.models.connections import get_connection, ConnectionStatus
     from lodestone.models.accounts import detect_openai_account
+    from lodestone.models.connections import ConnectionStatus, get_connection
 
     # 1. Connect or simulate connected account
     conn = get_connection("openai")
@@ -243,8 +247,9 @@ def test_openai_oauth_callback_handler(monkeypatch):
     import base64
     import json
     import urllib.request
-    from lodestone.models.chatgpt_auth import start_chatgpt_oauth_flow, _GLOBAL_AUTH_STATE
-    from lodestone.models.connections import get_connection, ConnectionStatus
+
+    from lodestone.models.chatgpt_auth import _GLOBAL_AUTH_STATE, start_chatgpt_oauth_flow
+    from lodestone.models.connections import ConnectionStatus, get_connection
 
     # Mock httpx.post for token exchange
     dummy_payload = base64.urlsafe_b64encode(json.dumps({
@@ -271,7 +276,7 @@ def test_openai_oauth_callback_handler(monkeypatch):
     # for that reason teaches nothing.
     monkeypatch.setattr("lodestone.models.chatgpt_auth.REDIRECT_PORT", 0)
 
-    ok, auth_url, msg = start_chatgpt_oauth_flow()
+    ok, _auth_url, msg = start_chatgpt_oauth_flow()
     assert ok is True, msg
     port = _GLOBAL_AUTH_STATE.server.server_address[1]
 
@@ -294,6 +299,7 @@ def test_openai_oauth_callback_handler(monkeypatch):
 def test_openai_local_session_token_retrieval(tmp_path, monkeypatch):
     """Verify that OpenAICompatProvider and get_chatgpt_access_token resolve tokens from local sessions."""
     import json
+
     from lodestone.models.chatgpt_auth import get_chatgpt_access_token
     from lodestone.models.openai_compat import OpenAICompatProvider
 
@@ -314,7 +320,7 @@ def test_openai_local_session_token_retrieval(tmp_path, monkeypatch):
     assert token == "valid_mock_access_token_123"
 
     p = OpenAICompatProvider(api_key="")
-    ready, reason = p.is_ready()
+    ready, _reason = p.is_ready()
     assert ready is True
 
 

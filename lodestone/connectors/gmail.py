@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import re
+from datetime import UTC
 from typing import Any
 
 from .base import Connector, SyncResult
@@ -201,9 +202,9 @@ class GmailConnector(Connector):
         event_date = None
         try:
             if msg.get("internalDate"):
-                from datetime import datetime, timezone
+                from datetime import datetime
                 event_date = datetime.fromtimestamp(
-                    int(msg["internalDate"]) / 1000, timezone.utc).date().isoformat()
+                    int(msg["internalDate"]) / 1000, UTC).date().isoformat()
         except (ValueError, TypeError, OSError):
             event_date = None       # bad internalDate → just omit the date
         mem = self.store.add(

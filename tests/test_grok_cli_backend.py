@@ -197,9 +197,8 @@ def test_status_reports_waiting_then_success():
     from fastapi.testclient import TestClient
 
     from lodestone.api.app import app
-    from lodestone.models.connections import ProviderConnection, get_connection, save_connection
-
     from lodestone.models import grok_cli as mod
+    from lodestone.models.connections import ProviderConnection, get_connection, save_connection
 
     save_connection(ProviderConnection(provider="xai"))
     client = TestClient(app)

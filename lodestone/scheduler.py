@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from .config import get_settings
@@ -115,7 +115,7 @@ class Scheduler:
         except Exception:
             log.exception("routine sweep after sync failed")
 
-        self.last_run = datetime.now(timezone.utc).isoformat()
+        self.last_run = datetime.now(UTC).isoformat()
         self.last_result = summary
         return summary
 
@@ -166,6 +166,7 @@ class Scheduler:
         # 2) scheduled actions (auto-send email / create event) — fire + notify
         try:
             import json
+
             from .actions import run_now
             from .scheduled import get_scheduled
             sched = get_scheduled()

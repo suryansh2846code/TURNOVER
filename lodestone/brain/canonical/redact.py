@@ -61,7 +61,3 @@ def is_sensitive(text: str) -> bool:
     """True if the text is a credential/notification we should not curate at all."""
     return bool(_HARD_DROP.search(text or ""))
 
-
-def contained_secret(original: str, redacted: str) -> bool:
-    """Whether redaction actually removed something (for logging/telemetry)."""
-    return original != redacted

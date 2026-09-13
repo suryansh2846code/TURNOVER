@@ -2,17 +2,17 @@
 import json
 from unittest.mock import MagicMock, patch
 
+from lodestone.models.anthropic import AnthropicProvider
 from lodestone.models.base import Message, Tool
-from lodestone.models.gemini import GeminiProvider
-from lodestone.models.xai import XAIProvider
 from lodestone.models.cursor import CursorProvider
 from lodestone.models.deepseek import DeepSeekProvider
-from lodestone.models.anthropic import AnthropicProvider
+from lodestone.models.gemini import GeminiProvider
 from lodestone.models.registry import (
-    get_provider,
-    get_model_catalog,
     context_window,
+    get_model_catalog,
+    get_provider,
 )
+from lodestone.models.xai import XAIProvider
 
 
 def test_provider_registration_and_aliases():
@@ -114,7 +114,7 @@ def test_context_window_lookup():
 def test_gemini_provider_chat():
     """Test Gemini provider OpenAI-compatible chat response and tool call handling."""
     p = GeminiProvider(api_key="fake-gemini-key")
-    ready, why = p.is_ready()
+    ready, _why = p.is_ready()
     assert ready is True
 
     mock_resp = MagicMock()
@@ -228,6 +228,7 @@ def test_deepseek_provider():
 def test_provider_test_endpoint():
     """Verify POST /api/providers/{name}/test endpoint."""
     from fastapi.testclient import TestClient
+
     from lodestone.api.app import app
 
     client = TestClient(app)

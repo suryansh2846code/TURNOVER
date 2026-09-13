@@ -257,7 +257,7 @@ class _Bridge:
         if nswin is None:
             return False
         try:
-            wanted = max(_MIN_HEIGHT, min(_MAX_HEIGHT, int(round(float(height)))))
+            wanted = max(_MIN_HEIGHT, min(_MAX_HEIGHT, round(float(height))))
         except (TypeError, ValueError):
             return False
         from PyObjCTools import AppHelper

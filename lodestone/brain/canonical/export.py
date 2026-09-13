@@ -7,7 +7,7 @@ in the body — so a future 'import edits' can round-trip frontmatter safely.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from . import freshness
@@ -30,7 +30,7 @@ def export(store: CanonicalStore, out_dir: Path | None = None) -> dict:
 
     # About You
     au = store.current_claims(entity_id=None, section="about_you")
-    body = [_fm({"section": "about_you", "generated_at": datetime.now(timezone.utc).isoformat()}),
+    body = [_fm({"section": "about_you", "generated_at": datetime.now(UTC).isoformat()}),
             "# About You\n"]
     for c in au:
         f = freshness.compute(c)

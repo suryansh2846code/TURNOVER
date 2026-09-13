@@ -1,18 +1,18 @@
 """Connectors ingest external data sources into the local brain."""
 from __future__ import annotations
 
+from .apple_calendar import AppleCalendarConnector
+from .apple_mail import AppleMailConnector
 from .base import Connector, SyncResult
 from .files import FilesConnector
-from .notes import NotesConnector
-from .gmail import GmailConnector
-from .notion import NotionConnector
-from .gdrive import GoogleDriveConnector
 from .gcal import GoogleCalendarConnector
-from .imessage import IMessageConnector
-from .apple_mail import AppleMailConnector
-from .apple_calendar import AppleCalendarConnector
-from .linear import LinearConnector
+from .gdrive import GoogleDriveConnector
 from .github import GitHubConnector
+from .gmail import GmailConnector
+from .imessage import IMessageConnector
+from .linear import LinearConnector
+from .notes import NotesConnector
+from .notion import NotionConnector
 
 REGISTRY: dict[str, type[Connector]] = {
     FilesConnector.name: FilesConnector,
@@ -42,4 +42,4 @@ def get_connector(name: str) -> Connector:
     return REGISTRY[name]()
 
 
-__all__ = ["Connector", "SyncResult", "REGISTRY", "get_connector"]
+__all__ = ["REGISTRY", "Connector", "SyncResult", "get_connector"]

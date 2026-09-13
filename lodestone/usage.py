@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 _lock = threading.Lock()
@@ -45,7 +45,7 @@ def record(provider: str, model: str | None, tin: int, tout: int, calls: int = 1
         if model:
             e["model"] = model
         d["total"]["in"] += int(tin); d["total"]["out"] += int(tout); d["total"]["calls"] += calls
-        d["updated"] = datetime.now(timezone.utc).isoformat()
+        d["updated"] = datetime.now(UTC).isoformat()
         st.set_meta("usage", json.dumps(d))
 
 

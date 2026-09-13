@@ -6,10 +6,10 @@ os.environ.setdefault("LODESTONE_EMBEDDING_PROVIDER", "hash")
 os.environ.setdefault("LODESTONE_MODEL_PROVIDER", "mock")
 os.environ["LODESTONE_HOME"] = tempfile.mkdtemp()
 
+from lodestone.agents import list_agents, run_turn
 from lodestone.brain import Brain
 from lodestone.core.store import MemoryStore
-from lodestone.agents import run_turn, list_agents
-from lodestone.models import get_provider, Message, Tool
+from lodestone.models import Message, Tool, get_provider
 
 
 def _brain():
@@ -61,6 +61,7 @@ def test_provider_registry():
 def test_task_store_due_parsing():
     import tempfile
     from datetime import date, timedelta
+
     from lodestone.tasks import TaskStore
     ts = TaskStore(db_path=tempfile.mktemp(suffix=".db"))
     t = ts.add("finish the launch page tomorrow")

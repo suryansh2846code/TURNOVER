@@ -20,14 +20,13 @@ from the context Lodestone injects rather than calling tools themselves.
 """
 from __future__ import annotations
 
-from . import login_processes
-
 import os
 import shutil
 import subprocess
 import time
 from pathlib import Path
 
+from . import login_processes
 from .base import ChatResult, LLMProvider, Message, parse_cli_json
 from .cache import ttl_cached
 from .errors import ErrorKind, ProviderError, classify_cli

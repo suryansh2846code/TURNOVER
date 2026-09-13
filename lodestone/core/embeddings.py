@@ -103,9 +103,9 @@ class SentenceTransformerEmbedder(Embedder):
             os.environ.pop("TRANSFORMERS_OFFLINE", None)
             self._model = SentenceTransformer(self.model_name)  # downloads + caches
         try:
-            self.dim = self._model.get_embedding_dimension()
+            self.dim = int(self._model.get_embedding_dimension())
         except AttributeError:  # older sentence-transformers
-            self.dim = self._model.get_sentence_embedding_dimension()
+            self.dim = int(self._model.get_sentence_embedding_dimension())
         # retrieval models rank far better with an instruction on the QUERY only
         low = self.model_name.lower()
         if "bge" in low:

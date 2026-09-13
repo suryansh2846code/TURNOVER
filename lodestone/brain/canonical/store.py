@@ -6,7 +6,7 @@ import json
 import sqlite3
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -16,7 +16,7 @@ from .db import connect
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _uid() -> str:
@@ -52,18 +52,6 @@ class CanonicalStore:
     def get_entity(self, entity_id: str) -> dict | None:
         r = self._conn.execute("SELECT * FROM entities WHERE id=?", (entity_id,)).fetchone()
         return dict(r) if r else None
-
-    def rename_entity(self, entity_id: str, name: str) -> None:
-        with self._lock:
-            self._conn.execute("UPDATE entities SET canonical_name=?, updated_at=? WHERE id=?",
-                               (name.strip(), _now(), entity_id))
-            self._conn.commit()
-
-    def set_entity_status(self, entity_id: str, status: str) -> None:
-        with self._lock:
-            self._conn.execute("UPDATE entities SET status=?, updated_at=? WHERE id=?",
-                               (status, _now(), entity_id))
-            self._conn.commit()
 
     def entity_by_name(self, type: str, name: str) -> dict | None:
         r = self._conn.execute(
@@ -150,12 +138,6 @@ class CanonicalStore:
                 (_now(), source_timestamp, claim_id))
             self._conn.commit()
 
-    def resolve_claim(self, claim_id: str) -> None:
-        with self._lock:
-            self._conn.execute("UPDATE claims SET state='resolved', valid_to=? WHERE id=?",
-                               (_now(), claim_id))
-            self._conn.commit()
-
     def set_freshness(self, claim_id: str, freshness: str) -> None:
         with self._lock:
             self._conn.execute("UPDATE claims SET freshness=? WHERE id=?",
@@ -181,11 +163,6 @@ class CanonicalStore:
             args.append(section)
         q += " ORDER BY created_at DESC"
         return [self._claim_row(r) for r in self._conn.execute(q, args).fetchall()]
-
-    def claim_history(self, claim_key: str) -> list[dict]:
-        return [self._claim_row(r) for r in self._conn.execute(
-            "SELECT * FROM claims WHERE claim_key=? ORDER BY created_at ASC",
-            (claim_key,)).fetchall()]
 
     @staticmethod
     def _claim_row(r: sqlite3.Row) -> dict:
@@ -270,12 +247,6 @@ class CanonicalStore:
                  _now(), _now()))
             self._conn.commit()
         return tid
-
-    def set_task_state(self, task_id: str, state: str) -> None:
-        with self._lock:
-            self._conn.execute("UPDATE tasks SET state=?, last_confirmed_at=? WHERE id=?",
-                               (state, _now(), task_id))
-            self._conn.commit()
 
     def open_tasks(self, entity_id: str | None = None) -> list[dict]:
         if entity_id:

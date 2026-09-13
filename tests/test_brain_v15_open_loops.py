@@ -2,6 +2,7 @@
 Lifecycle, priority, status transitions, recall integration, and agent tool access.
 """
 import tempfile
+
 import pytest
 
 from lodestone.brain import Brain
@@ -74,7 +75,7 @@ def test_open_loops_injected_into_recall_context(brain):
 
 
 def test_open_loops_agent_tools(brain, monkeypatch):
-    from lodestone.agents.tools import _create_open_loop, _list_open_loops, _complete_open_loop
+    from lodestone.agents.tools import _complete_open_loop, _create_open_loop, _list_open_loops
     monkeypatch.setattr("lodestone.agents.tools.get_brain", lambda: brain)
 
     # 1. Create via tool

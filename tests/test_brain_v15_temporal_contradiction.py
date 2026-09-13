@@ -1,5 +1,6 @@
 """Tests for Brain v1.5 Temporal Reasoning and Contradiction Management."""
 import tempfile
+
 import pytest
 
 from lodestone.brain import Brain

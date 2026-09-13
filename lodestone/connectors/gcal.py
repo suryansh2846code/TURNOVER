@@ -1,7 +1,7 @@
 """Google Calendar connector — ingests recent + upcoming events (read-only)."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .base import Connector, SyncResult
@@ -21,8 +21,9 @@ class GoogleCalendarConnector(Connector):
         """Create a calendar event (WRITE). Only after user confirmation.
         `start`/`end` are ISO datetimes; if end is missing, defaults to +1h."""
         try:
-            from googleapiclient.discovery import build
             from datetime import datetime, timedelta
+
+            from googleapiclient.discovery import build
         except ImportError:
             return {"ok": False, "error": "pip install .[gdrive] for Calendar"}
         try:
@@ -67,7 +68,7 @@ class GoogleCalendarConnector(Connector):
         try:
             creds = get_credentials(interactive=interactive)
             service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             time_min = (now - timedelta(days=days_back)).isoformat()
             time_max = (now + timedelta(days=days_ahead)).isoformat()
             events = (

@@ -73,9 +73,6 @@ class ProviderConnection:
     def api_key_connected(self) -> bool:
         return self.api_key_status in CONNECTED_STATUSES
 
-    def status_for(self, kind: str) -> str:
-        return self.account_status if kind == ACCOUNT else self.api_key_status
-
     def set_credential(self, kind: str, status: str) -> None:
         """Set one credential's state and refresh the rollup. The other
         credential is left exactly as it was."""

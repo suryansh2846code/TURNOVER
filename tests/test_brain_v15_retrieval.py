@@ -2,6 +2,7 @@
 Hybrid ranking, explainability, source weighting, recency, and historical queries.
 """
 import tempfile
+
 import pytest
 
 from lodestone.brain import Brain

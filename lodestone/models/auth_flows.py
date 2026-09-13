@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import webbrowser
 from dataclasses import asdict, dataclass, field
+from datetime import UTC
 from typing import Any, Protocol
 
 from .capabilities import get_capabilities
@@ -67,7 +68,7 @@ class AuthFlow(Protocol):
 
 def _mark_account_connected(pid: str, email: str | None, plan: str) -> None:
     """Record a CLI sign-in as a connected account credential."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from .connections import ACCOUNT, ConnectionStatus, get_connection, save_connection
     from .registry import clear_provider_cache
@@ -75,7 +76,7 @@ def _mark_account_connected(pid: str, email: str | None, plan: str) -> None:
     conn = get_connection(pid)
     if conn.account_connected and (not email or conn.email == email):
         return
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.auth_method = "cli"
     conn.email = email or conn.email or plan
     conn.account_display_name = conn.account_display_name or plan
@@ -200,7 +201,7 @@ class CursorFlow:
             provider_id=self.provider_id, started=ok, brand_name="Cursor",
             browser_opened=ok, cli_found=True,
             auth_url="https://cursor.com/docs/cli/overview",
-            detail=msg if ok else msg)
+            detail=msg)
 
     def cancel(self) -> None:
         from .cursor import cancel_cli_login

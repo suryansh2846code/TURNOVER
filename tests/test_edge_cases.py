@@ -106,7 +106,7 @@ def test_chunk_text_bounds(text, expect_empty):
 # ── connectors: every registered connector instantiates + reports readiness ─
 def test_all_connectors_instantiate():
     from lodestone.connectors import REGISTRY
-    for name, cls in REGISTRY.items():
+    for _name, cls in REGISTRY.items():
         inst = cls()
         ready, reason = inst.is_configured()
         assert isinstance(ready, bool)
@@ -115,7 +115,7 @@ def test_all_connectors_instantiate():
 
 # ── custom apps: storage round-trip (create → get → delete), no network ─────
 def test_custom_app_storage_roundtrip():
-    from lodestone.connectors.custom_api import upsert_app, get_app, delete_app
+    from lodestone.connectors.custom_api import delete_app, get_app, upsert_app
     app = upsert_app({"name": "T", "base_url": "https://ex.com", "endpoint": "/x"},
                      token="secret123")
     aid = app["id"]
@@ -156,6 +156,7 @@ def test_reminder_fires_once(tmp_path, monkeypatch):
     monkeypatch.setattr(notify, "desktop_notify", lambda t, m: calls.append((t, m)) or True)
 
     from datetime import datetime, timedelta
+
     import lodestone.reminders as reminders_mod
     from lodestone.reminders import get_reminders
     from lodestone.scheduler import Scheduler
@@ -179,8 +180,8 @@ def test_reminder_fires_once(tmp_path, monkeypatch):
 # ── migrations: idempotent, version-bump triggered, empty-safe ─────────────
 def test_migrations_idempotent_and_bump_triggered(tmp_path, monkeypatch):
     monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
-    from lodestone.config import get_settings
     from lodestone.brain import get_brain
+    from lodestone.config import get_settings
     from lodestone.core.store import get_store
     get_settings.cache_clear()
     get_brain.cache_clear()
@@ -207,6 +208,7 @@ def test_migrations_idempotent_and_bump_triggered(tmp_path, monkeypatch):
 # ── Gmail: base64url body decode must tolerate missing padding ──────────────
 def test_gmail_decode_handles_unpadded_base64():
     import base64
+
     from lodestone.connectors.gmail import _decode
     padded = base64.urlsafe_b64encode("café ☕".encode()).decode()
     assert _decode(padded) == "café ☕"
@@ -216,6 +218,7 @@ def test_gmail_decode_handles_unpadded_base64():
 
 def test_gmail_extract_body_from_unpadded_html():
     import base64
+
     from lodestone.connectors.gmail import _extract_body
     raw = base64.urlsafe_b64encode(b"<p>Hi <b>there</b></p>").decode().rstrip("=")
     payload = {"mimeType": "text/html", "body": {"data": raw}}
@@ -239,8 +242,8 @@ def test_google_auth_corrupt_token_selfheals(tmp_path, monkeypatch):
 
 # ── model providers: unreachable/misconfigured → clean message, no traceback ─
 def test_openai_compat_unreachable_returns_clean_message():
-    from lodestone.models.openai_compat import OllamaProvider, OpenAICompatProvider
     from lodestone.models.base import Message
+    from lodestone.models.openai_compat import OllamaProvider, OpenAICompatProvider
     r = OllamaProvider(base_url="http://localhost:59999/v1").chat(
         [Message(role="user", content="hi")])
     assert r.text.startswith("⚠️") and "ollama" in r.text.lower()
@@ -256,6 +259,7 @@ def test_api_input_validation(tmp_path, monkeypatch):
     from lodestone.config import get_settings
     get_settings.cache_clear()
     from fastapi.testclient import TestClient
+
     from lodestone.api.app import app
     client = TestClient(app)
 
@@ -276,8 +280,8 @@ def test_api_input_validation(tmp_path, monkeypatch):
 # ── brain export / import round-trip (you own your data) ───────────────────
 def test_brain_export_import_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("LODESTONE_HOME", str(tmp_path / "a"))
-    from lodestone.config import get_settings
     from lodestone.brain import get_brain
+    from lodestone.config import get_settings
     from lodestone.core.store import get_store
     get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()
 
@@ -305,8 +309,8 @@ def test_brain_export_import_roundtrip(tmp_path, monkeypatch):
 # ── MCP server: brain tools work + about() rejects non-matches ─────────────
 def test_mcp_tools(tmp_path, monkeypatch):
     monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
-    from lodestone.config import get_settings
     from lodestone.brain import get_brain
+    from lodestone.config import get_settings
     from lodestone.core.store import get_store
     get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()
     import lodestone.mcp_server.server as S

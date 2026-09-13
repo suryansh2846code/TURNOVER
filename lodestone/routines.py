@@ -11,11 +11,12 @@ disable-able, and their runs are logged + notified.
 """
 from __future__ import annotations
 
+import builtins
 import json
 import logging
 import sqlite3
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from .config import get_settings
 
@@ -55,7 +56,7 @@ class RoutineStore:
             "instruction,enabled,created_at) VALUES (?,?,?,?,?,?,1,?)",
             (rid, name.strip() or "Routine", agent_id, trigger,
              int(interval_min or 60), instruction.strip(),
-             datetime.now(timezone.utc).isoformat()))
+             datetime.now(UTC).isoformat()))
         self._c.commit()
         return self.get(rid)
 
@@ -63,11 +64,11 @@ class RoutineStore:
         r = self._c.execute("SELECT * FROM routines WHERE id=?", (rid,)).fetchone()
         return dict(r) if r else None
 
-    def list(self) -> list[dict]:
+    def list(self) -> builtins.list[dict]:
         return [dict(r) for r in self._c.execute(
             "SELECT * FROM routines ORDER BY created_at").fetchall()]
 
-    def enabled(self) -> list[dict]:
+    def enabled(self) -> builtins.list[dict]:
         return [dict(r) for r in self._c.execute(
             "SELECT * FROM routines WHERE enabled=1").fetchall()]
 
@@ -77,7 +78,7 @@ class RoutineStore:
 
     def mark_run(self, rid, result: str) -> None:
         self._c.execute("UPDATE routines SET last_run=?, last_result=? WHERE id=?",
-                        (datetime.now(timezone.utc).isoformat(), result[:400], rid))
+                        (datetime.now(UTC).isoformat(), result[:400], rid))
         self._c.commit()
 
     def delete(self, rid) -> bool:
@@ -101,11 +102,10 @@ def _new_emails_since(iso: str | None) -> list:
     """Gmail memories created after `iso` (the routine's last run)."""
     from .brain import get_brain
     store = get_brain().store
-    rows = store._conn.execute(
+    return store._conn.execute(
         "SELECT title, text, created_at FROM memories WHERE source='gmail' "
         "AND created_at > ? ORDER BY created_at DESC LIMIT 10",
         (iso or "1970-01-01",)).fetchall()
-    return rows
 
 
 def run_routine(r: dict, trigger_context: str = "") -> dict:
@@ -136,7 +136,7 @@ def run_routine(r: dict, trigger_context: str = "") -> dict:
 def sweep(new_email_count: int = 0) -> None:
     """Called by the scheduler each cycle: fire due routines."""
     store = get_routines()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for r in store.enabled():
         try:
             if r["trigger"] == "schedule":

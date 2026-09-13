@@ -94,7 +94,7 @@ class AppleMailConnector(Connector):
         try:
             files: list[Path] = []
             for root in _mail_dirs():
-                for dp, dn, fn in os.walk(root):
+                for dp, _dn, fn in os.walk(root):
                     if "/Trash.mbox/" in dp or "/Junk.mbox/" in dp:
                         continue
                     files += [Path(dp) / f for f in fn if f.endswith(".emlx")]

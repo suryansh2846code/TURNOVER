@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -12,7 +12,7 @@ from ..core.embeddings import get_embedder
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _norm(name: str) -> str:
@@ -24,6 +24,20 @@ ENTITY_TYPES = {
     "person", "organization", "project", "place", "product",
     "technology", "concept", "event", "thing", "tool", "topic"
 }
+
+
+
+def _num(value: object, default: float) -> float:
+    """A numeric column, or `default` when it is missing or NULL.
+
+    Rows here are `sqlite3.Row`, where `"col" in row` tests the row's VALUES
+    rather than its keys — so the `if "importance" in row else 0.5` guards this
+    replaces were almost always False, and every entity silently kept the
+    default importance and confidence no matter what had been stored. The
+    columns themselves are NOT NULL with defaults and are backfilled by
+    `core/db.py::_migrate`, so the only case left to defend against is NULL.
+    """
+    return default if value is None else float(value)
 
 
 class GraphStore:
@@ -75,8 +89,8 @@ class GraphStore:
                 merged_aliases = list(set(existing_aliases + new_aliases))
                 new_summary = summary or row["summary"]
                 new_type = row["type"] if row["type"] != "thing" else etype
-                new_imp = min(1.0, (row["importance"] if "importance" in row.keys() else 0.5) + 0.05)
-                new_conf = max(float(row["confidence"] if "confidence" in row.keys() else 0.8), confidence)
+                new_imp = min(1.0, _num(row["importance"], 0.5) + 0.05)
+                new_conf = max(_num(row["confidence"], 0.8), confidence)
 
                 self._conn.execute(
                     """UPDATE entities SET
@@ -116,7 +130,7 @@ class GraphStore:
         if not row:
             return None
         d = dict(row)
-        d["aliases"] = json.loads(d["aliases"]) if "aliases" in d and d["aliases"] else []
+        d["aliases"] = json.loads(d["aliases"]) if d.get("aliases") else []
         d.pop("embedding", None)
         return d
 
@@ -182,7 +196,7 @@ class GraphStore:
                 if any(a in ql for a in aliases):
                     score += 0.4
             # Importance nudge
-            imp = r["importance"] if "importance" in r.keys() and r["importance"] is not None else 0.5
+            imp = _num(r["importance"], 0.5)
             score += 0.1 * imp
             scored.append((score, r))
 
@@ -194,8 +208,8 @@ class GraphStore:
                 "type": r["type"],
                 "summary": r["summary"],
                 "mentions": r["mentions"],
-                "confidence": r["confidence"] if "confidence" in r.keys() else 0.8,
-                "importance": r["importance"] if "importance" in r.keys() else 0.5,
+                "confidence": _num(r["confidence"], 0.8),
+                "importance": _num(r["importance"], 0.5),
                 "score": round(s, 3),
             }
             for s, r in scored[:limit] if s > 0.05

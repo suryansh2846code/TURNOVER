@@ -77,7 +77,7 @@ def test_01_provider_connection_gating():
         save_connection(conn)
         with patch.dict(os.environ, {}, clear=True):
             with patch("lodestone.config.Settings.get_secret", return_value=None):
-                connected, plan, _ = is_provider_connected("openai", api_key=None)
+                connected, _plan, _ = is_provider_connected("openai", api_key=None)
                 assert connected is False
 
                 locked, plan_req = evaluate_model_entitlement("openai", "gpt-5.6-terra", is_connected=False)
@@ -451,7 +451,7 @@ def test_17_existing_cli_provider_functional():
 def test_18_dynamic_discovery_failure_falls_back_safely():
     with patch("httpx.get", side_effect=Exception("Network connection failed")):
         # When remote API discovery errors, fallback models are returned seamlessly
-        models, meta = get_discovered_models("openai", force_refresh=True, api_key="sk-test")
+        models, _meta = get_discovered_models("openai", force_refresh=True, api_key="sk-test")
         assert len(models) > 0
         slugs = [m["id"] for m in models]
         assert "gpt-5.6-terra" in slugs
@@ -487,7 +487,7 @@ def test_20_provider_reported_availability_overrides_fallback():
         mock_resp.json.return_value = mock_or_data
         mock_get.return_value = mock_resp
 
-        models, meta = get_discovered_models("openrouter", force_refresh=True, api_key="sk-or-test")
+        models, _meta = get_discovered_models("openrouter", force_refresh=True, api_key="sk-or-test")
         assert len(models) == 1
         assert models[0]["id"] == "anthropic/claude-3.7-sonnet"
         assert models[0]["name"] == "Claude 3.7 Sonnet (Self-reported)"
@@ -506,7 +506,7 @@ def test_21_credentials_never_appear_in_traces():
     conn = get_connection("openai")
     conn_dict = conn.to_dict()
     # Verify no raw secrets in connection dict
-    for k, v in conn_dict.items():
+    for _k, v in conn_dict.items():
         assert "secret" not in str(v).lower()
         assert "bearer" not in str(v).lower()
 
@@ -533,7 +533,7 @@ def test_23_brain_does_not_perform_agent_routing():
 def test_24_tool_argument_validation_passes():
     from lodestone.agents.tools import validate_tool_arguments
 
-    valid, err, clean_args = validate_tool_arguments("search_brain", {"query": "project turnover deadline"})
+    valid, _err, clean_args = validate_tool_arguments("search_brain", {"query": "project turnover deadline"})
     assert valid is True
     assert clean_args["query"] == "project turnover deadline"
 

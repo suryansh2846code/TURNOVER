@@ -23,7 +23,7 @@ def build_block(store: CanonicalStore, query: str, *, max_claims: int = 8,
     If the query is generic (few tokens), falls back to the freshest current
     facts so 'who am I / what am I working on' still gets a real answer.
     """
-    qtokens = {t for t in re.findall(r"[a-z0-9]{3,}", (query or "").lower())}
+    qtokens = set(re.findall(r"[a-z0-9]{3,}", (query or "").lower()))
 
     claims = store.current_claims()
     # score by lexical relevance to the query; entity name adds signal
@@ -32,14 +32,17 @@ def build_block(store: CanonicalStore, query: str, *, max_claims: int = 8,
     for c in claims:
         text = f"{ent_names.get(c.get('entity_id'), '')} {c['value']}"
         score = _relevant(text, qtokens)
-        # always keep some baseline so generic queries still surface top facts
-        recency = 0 if c.get("type") in freshness.TIME_SENSITIVE else 0
-        scored.append((score, recency, c))
-    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        scored.append((score, c))
+    # Stable sort, so equally-relevant claims keep the order the store returned
+    # them in. (There used to be a second sort key here computed as
+    # `0 if time_sensitive else 0` — always zero, so it never ordered anything.
+    # Dropping it changes no output; deciding whether time-sensitive claims
+    # *should* win a tie is a product question, not a cleanup.)
+    scored.sort(key=lambda x: x[0], reverse=True)
 
-    picked = [c for s, _, c in scored if s > 0][:max_claims]
+    picked = [c for s, c in scored if s > 0][:max_claims]
     if not picked:  # generic query → freshest current claims
-        picked = [c for _, _, c in scored][:max_claims]
+        picked = [c for _, c in scored][:max_claims]
 
     lines: list[str] = []
     claim_ids: list[str] = []

@@ -1,18 +1,18 @@
 """Data models for the memory brain — Brain v1.5."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
-class MemoryType(str, Enum):
+class MemoryType(StrEnum):
     EPISODIC = "episodic"
     SEMANTIC = "semantic"
     PREFERENCE = "preference"
@@ -22,7 +22,7 @@ class MemoryType(str, Enum):
     OBSERVATION = "observation"
 
 
-class MemoryStatus(str, Enum):
+class MemoryStatus(StrEnum):
     ACTIVE = "active"
     SUPERSEDED = "superseded"
     UNCERTAIN = "uncertain"
@@ -31,7 +31,7 @@ class MemoryStatus(str, Enum):
     RETRACTED = "retracted"
 
 
-class OpenLoopStatus(str, Enum):
+class OpenLoopStatus(StrEnum):
     OPEN = "open"
     WAITING = "waiting"
     BLOCKED = "blocked"
@@ -40,7 +40,7 @@ class OpenLoopStatus(str, Enum):
     STALE = "stale"
 
 
-class OpenLoopPriority(str, Enum):
+class OpenLoopPriority(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -129,9 +129,7 @@ class Memory(BaseModel):
         td = target_date[:10]
         if self.valid_from and self.valid_from[:10] > td:
             return False
-        if self.valid_until and self.valid_until[:10] < td:
-            return False
-        return True
+        return not (self.valid_until and self.valid_until[:10] < td)
 
     def compute_activation(self, now_iso: str | None = None) -> float:
         """Non-destructive activation / decay score (0.0 to 1.0).

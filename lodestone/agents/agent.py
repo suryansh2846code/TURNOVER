@@ -9,7 +9,7 @@ from __future__ import annotations
 import sqlite3
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ..config import get_settings
 
@@ -130,7 +130,7 @@ class AgentMemory:
             "INSERT INTO agent_messages (id,agent_id,role,content,tool_json,ts) "
             "VALUES (?,?,?,?,?,?)",
             (str(uuid.uuid4()), agent_id, role, content, tool_json,
-             datetime.now(timezone.utc).isoformat()),
+             datetime.now(UTC).isoformat()),
         )
         self._c.commit()
 

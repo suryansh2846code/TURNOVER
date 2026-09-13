@@ -10,7 +10,6 @@ from typing import Any
 
 from ..core.models import Memory, MemoryStatus
 
-
 _PREF_PATTERNS = [
     re.compile(r"\b(?:prefer|likes?|loves?|favor|uses?|chose|switched to)\s+([A-Za-z0-9#+.-]+)", re.I),
     re.compile(r"\b(?:moving away from|stopped using|hate|dislike|no longer use|dropped)\s+([A-Za-z0-9#+.-]+)", re.I),
@@ -127,6 +126,5 @@ def resolve_conflict(store, conflict: dict[str, Any], auto_supersede: bool = Tru
     if conflict.get("recommendation") == "supersede_older" and auto_supersede:
         store.supersede(older_id, newer_id)
         return {"action": "superseded", "superseded_id": older_id, "active_id": newer_id}
-    else:
-        store.update_status(older_id, MemoryStatus.DISPUTED.value)
-        return {"action": "disputed", "disputed_id": older_id, "active_id": newer_id}
+    store.update_status(older_id, MemoryStatus.DISPUTED.value)
+    return {"action": "disputed", "disputed_id": older_id, "active_id": newer_id}

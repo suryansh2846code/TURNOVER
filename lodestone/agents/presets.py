@@ -22,7 +22,7 @@ PRESETS: dict[str, Agent] = {
             "user's voice and aware of their commitments. Pull real messages with "
             "gmail_search when useful."
         ),
-        tools=_BASE_TOOLS + ["gmail_search", "web_search"],
+        tools=[*_BASE_TOOLS, "gmail_search", "web_search"],
         recall_sources=["gmail", "gcal"],
     ),
     "launch": Agent(
@@ -35,7 +35,7 @@ PRESETS: dict[str, Agent] = {
             "when — grounded in the user's actual projects from the brain. Capture "
             "action items as tasks."
         ),
-        tools=_BASE_TOOLS + ["web_search", "add_task", "list_tasks", "complete_task"],
+        tools=[*_BASE_TOOLS, "web_search", "add_task", "list_tasks", "complete_task"],
     ),
     "research": Agent(
         id="research",
@@ -46,7 +46,7 @@ PRESETS: dict[str, Agent] = {
             "compare options, and synthesize findings — combining the public web "
             "with what the user already knows in their brain. Cite sources."
         ),
-        tools=_BASE_TOOLS + ["web_search"],
+        tools=[*_BASE_TOOLS, "web_search"],
     ),
     "personal": Agent(
         id="personal",
@@ -59,7 +59,7 @@ PRESETS: dict[str, Agent] = {
             "add it as a task; when they ask what's on, list their tasks. Warm, "
             "discreet, and proactive."
         ),
-        tools=_BASE_TOOLS + ["add_task", "list_tasks", "complete_task"],
+        tools=[*_BASE_TOOLS, "add_task", "list_tasks", "complete_task"],
     ),
 }
 

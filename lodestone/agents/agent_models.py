@@ -7,7 +7,7 @@ Research, Personal, or custom agents) so users can say:
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..config import get_settings
@@ -48,7 +48,7 @@ def set_agent_model(agent_id: str, provider: str, model: str | None = None) -> d
     conn = _get_db()
     provider = provider.strip().lower()
     model = (model or "").strip() or None
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         """
         INSERT INTO agent_model_configs (agent_id, provider, model, updated_at)

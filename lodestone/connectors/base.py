@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..core.store import MemoryStore, get_store
@@ -64,6 +64,6 @@ class Connector:
             self.name,
             status="ok" if not result.errors else "error",
             detail=result.detail or f"+{result.added} added, {result.skipped} skipped",
-            last_sync=datetime.now(timezone.utc).isoformat(),
+            last_sync=datetime.now(UTC).isoformat(),
         )
         return result
