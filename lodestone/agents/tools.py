@@ -389,7 +389,7 @@ def describe_tools() -> list[dict[str, str]]:
     connectors instead of listing them among the built-ins as if they shipped
     with the app.
     """
-    rows = [{"name": n, "description": t.description,
+    rows = [{"name": n, "description": t.description, "label": n,
              "source": "builtin", "connector": ""}
             for n, t in TOOL_DEFS.items()]
     rows.extend(mcp_tools.describe())

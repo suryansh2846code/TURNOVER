@@ -95,7 +95,7 @@ def test_harness_catches_provenance_being_dropped(tmp_path):
     """Reintroduce "every tool is a builtin" and the harness must notice."""
     broken = _mutated(
         tmp_path,
-        'if (!t || !t.source || t.source === "builtin") return "";',
+        'if (!t || !t.source || t.source === "builtin" || isCategoryRow(t)) return "";',
         'if (t) return "";')
     names = [g["name"] for g in render(SCENARIO, broken)["groups"]]
     assert "Linear" not in names, (

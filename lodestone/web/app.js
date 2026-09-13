@@ -2903,8 +2903,10 @@ $("#rmCreate").onclick = async () => {
 // ── create custom agent ─────────────────────────────────────────────────
 async function openAgentModal() {
   const { tools } = await api("/api/agents/tools");
+  // The value is the id the agent stores; the text is what a person reads.
+  // They differ for a connector tool, whose id is a qualified name we minted.
   $("#amTools").innerHTML = tools.map((t) =>
-    `<label class="am-tool"><input type="checkbox" value="${t.name}" ${["search_brain", "remember", "web_search"].includes(t.name) ? "checked" : ""}/> ${t.name}</label>`).join("");
+    `<label class="am-tool"><input type="checkbox" value="${esc(t.name)}" ${["search_brain", "remember", "web_search"].includes(t.name) ? "checked" : ""}/> ${esc(toolLabel(t))}</label>`).join("");
   $("#amName").value = ""; $("#amRole").value = ""; $("#amPrompt").value = "";
   $("#agentModal").hidden = false;
 }
@@ -3345,11 +3347,23 @@ const DRAWER_TITLES = { sources: "Connectors", tasks: "Tasks", model: "AI model"
 // Linear; the user sees Linear.
 const BUILTIN_GROUP = "Built in";
 
+// What a person reads for this tool. `name` is an id — for a connector tool it
+// is a qualified one we minted — and an id on screen is an internal surfaced.
+function toolLabel(t) {
+  return ((t && (t.label || t.name)) || "").trim();
+}
+
+// A row that grants a whole category rather than naming one connector's tool.
+// It belongs in the agent builder, where it is the switch a user flips, and not
+// in a list of skills, where the concrete tools are already shown under their
+// own connector.
+function isCategoryRow(t) { return !!t && t.source === "category"; }
+
 function toolConnector(t) {
   // Anything that is not explicitly a builtin came in with a connector —
   // including source kinds that do not exist yet, which is the whole point of
   // asking the question this way round.
-  if (!t || !t.source || t.source === "builtin") return "";
+  if (!t || !t.source || t.source === "builtin" || isCategoryRow(t)) return "";
   const label = (t.connector || "").trim();
   // A connector that did not name itself still must not be named after its
   // protocol. Vague is survivable; the acronym is not.
@@ -3385,7 +3399,10 @@ function renderToolList(boxEl, tools, connectors) {
     if (!g) { g = { name, tools: [] }; seen.set(key, g); groups.push(g); }
     return g;
   };
-  for (const t of rows) groupFor(toolConnector(t) || BUILTIN_GROUP).tools.push(t);
+  for (const t of rows) {
+    if (isCategoryRow(t)) continue;   // the tools behind it are listed already
+    groupFor(toolConnector(t) || BUILTIN_GROUP).tools.push(t);
+  }
 
   // A connector the user configured that cannot answer contributes no tools —
   // so without this it would simply be absent, and absent reads as "Lodestone
@@ -3413,7 +3430,7 @@ function renderToolList(boxEl, tools, connectors) {
     // Names and descriptions of connector tools are written by whoever wrote
     // the connector, not by us. Escape both, always.
     const items = g.tools.map((t) =>
-      `<div class="tool"><div class="tool-nm">${esc(t.name)}</div><div class="tool-ds">${esc(t.description || "")}</div></div>`).join("");
+      `<div class="tool"><div class="tool-nm">${esc(toolLabel(t))}</div><div class="tool-ds">${esc(t.description || "")}</div></div>`).join("");
     return `<div class="tool-group${down ? " down" : ""}">
       <div class="tool-group-head">${down ? `<span class="dot off"></span>` : ""}<span class="tool-group-nm">${esc(g.name)}</span>${count ? `<span class="tool-group-ct">${esc(count)}</span>` : ""}</div>
       ${why}${items}</div>`;

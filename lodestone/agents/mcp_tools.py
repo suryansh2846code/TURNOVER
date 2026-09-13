@@ -204,6 +204,7 @@ def _build() -> tuple[dict[str, Tool], list[dict[str, str]]]:
                            parameters=_schema(ref),
                            handler=_caller(qualified, label))
         rows.append({"name": name, "description": built[name].description,
+                     "label": str(getattr(ref, "tool", "") or name),
                      "source": "mcp", "connector": label})
     return built, rows
 
@@ -251,8 +252,16 @@ def describe() -> list[dict[str, str]]:
         return []
     return [{
         "name": SENTINEL,
+        # `name` is the value an agent stores; `label` is the only part a
+        # person reads. They are different strings on purpose: the sentinel's
+        # name is our internal switch, and rendering it verbatim put the
+        # protocol's acronym on screen as though it were a skill.
+        "label": "Everything my connectors can read",
         "description": ("Everything the user's connectors can read. Stays "
                         "correct as connectors are added or removed."),
-        "source": "mcp",
+        # Not "mcp": this row grants the whole category rather than naming one
+        # connector's tool, so a consumer that groups by connector must be able
+        # to tell it apart instead of inventing a group to put it in.
+        "source": "category",
         "connector": "",
     }, *[dict(r) for r in rows]]
