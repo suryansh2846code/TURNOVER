@@ -1021,6 +1021,36 @@ function isProviderConnected(pid) {
   return false;
 }
 
+// Record a model choice everywhere the app reads one.
+//
+// The composer picker used to save only the agent's binding, and the composer
+// then sent `$("#provider").value` — a hidden select in the Models drawer that
+// nobody had updated. On the server the request wins over the agent binding, so
+// the stale value overrode the fresh choice: the pill said xAI and the turn ran
+// on whatever the drawer last held. The agent was answering honestly; it really
+// was running on that provider.
+//
+// Three places read a selection (the hidden select, the two localStorage keys)
+// and one writes it, which is exactly how they drifted. They are set together
+// now, so "what the pill shows" and "what the turn uses" cannot disagree.
+function setActiveModel(providerId, modelId) {
+  const sel = $("#provider");
+  if (sel && providerId) {
+    // The select only holds options the catalog rendered; a provider missing
+    // from it would silently keep the previous value, so add it rather than
+    // assign into nothing.
+    if (!Array.from(sel.options || []).some((o) => o.value === providerId)) {
+      const opt = document.createElement("option");
+      opt.value = providerId; opt.textContent = providerId;
+      sel.appendChild(opt);
+    }
+    sel.value = providerId;
+  }
+  if (providerId) localStorage.setItem("lodestone_provider", providerId);
+  if (modelId) localStorage.setItem("lodestone_model", modelId);
+  else localStorage.removeItem("lodestone_model");   // "Auto" is the absence of one
+}
+
 function closeAllPickerFlyouts() {
   const pf = $("#cmpProvFlyout");
   const mf = $("#cmpModelFlyout");
@@ -1072,6 +1102,7 @@ function renderProviderFlyout() {
 
       activePickerProvider = pid;
       activePickerModel = null;
+      setActiveModel(pid, null);          // Auto: provider chosen, model unset
       if ($("#cmpSelectedProvLabel")) $("#cmpSelectedProvLabel").textContent = pLabel;
       if ($("#cmpSelectedModelLabel")) $("#cmpSelectedModelLabel").textContent = "Auto";
       const pillLabel = $("#cmpModelLabel");
@@ -1179,6 +1210,7 @@ function renderModelFlyout() {
         chosen = customName.trim();
       }
       activePickerModel = chosen || null;
+      setActiveModel(activePickerProvider, activePickerModel);
       const displayLabel = chosen ? (items.find((x) => x.id === chosen)?.name || chosen) : "Auto";
       if ($("#cmpSelectedModelLabel")) $("#cmpSelectedModelLabel").textContent = displayLabel;
       const pillLabel = $("#cmpModelLabel");
@@ -1692,6 +1724,12 @@ async function loadProviders() {
     if ($("#provider")) {
       $("#provider").innerHTML = (MODEL_CATALOG || []).map((p) =>
         `<option value="${p.id}" ${p.id === active ? "selected" : ""}>${p.label}${p.ready ? " (Ready)" : " (not ready)"}</option>`).join("");
+      // If the saved provider is not in the catalog — a fallback list that has
+      // not loaded yet, a provider that went away — none of the options above
+      // matched, and the select silently falls back to its first entry. That is
+      // a different provider from the one the user chose, and it is what the
+      // composer would then send.
+      setActiveModel(active, localStorage.getItem("lodestone_model"));
       $("#modelName").value = localStorage.getItem("lodestone_model") || "";
       applyModelHint();
       $("#provider").onchange = () => {
