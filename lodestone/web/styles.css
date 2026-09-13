@@ -84,17 +84,29 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .orb-xl { width: 80px; height: 80px; }
 
 /* ── sidebar ──────────────────────────────────────────────────────────── */
-.sidebar { display: flex; flex-direction: column; gap: 4px; padding: 18px 14px 14px;
-  background: var(--rail); overflow-y: auto; min-height: 0; }
+/* The rail is a panel, not the ground. It used to be painted --rail, the same
+   colour as the window behind the chat card, so it read as empty space with
+   icons floating in it while the conversation next to it was a raised card.
+   Both are cards of the same material now, separated by a gutter — which is
+   what "two different sections" has to mean when neither has a border. */
+.sidebar { display: flex; flex-direction: column; gap: 4px;
+  margin: 9px 0 9px 9px; padding: 16px 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 18px; box-shadow: 0 18px 50px rgba(0,0,0,.45);
+  overflow-y: auto; min-height: 0; }
 .collapse-btn { margin-left: auto; width: 22px; height: 22px; border-radius: 6px; background: transparent;
   color: var(--muted); font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .collapse-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
 
 /* collapsed sidebar (icon rail) */
-.app.collapsed { grid-template-columns: 66px 1fr; }
-.app.collapsed .sidebar { padding: 18px 9px; }
+.app.collapsed { grid-template-columns: 74px 1fr; }   /* 9px gutter + 65px card */
+.app.collapsed .sidebar { padding: 14px 8px; }
 .app.collapsed .brand { justify-content: center; gap: 0; }
 .app.collapsed .brand-mark, .app.collapsed .brand-word, .app.collapsed .side-label,
+/* .del-agent is opacity:0 with margin-left:auto — invisible but still laying
+   out, and still claiming the right-hand side of the row. That is what pushed
+   every collapsed orb left of centre. Zero opacity is not gone. */
+.app.collapsed .del-agent,
 .app.collapsed .a-meta, .app.collapsed .agent .dot, .app.collapsed .na-tx,
 .app.collapsed .snav-tx, .app.collapsed .user-nm { display: none; }
 .app.collapsed .collapse-btn { margin-left: 0; }
@@ -144,13 +156,16 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .new-agent:hover { background: rgba(255,255,255,.04); color: var(--text); }
 .na-plus { width: 26px; height: 26px; border-radius: 50%; border: 1px dashed var(--border2);
   display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
-.side-nav { display: flex; flex-direction: column; gap: 1px; margin-top: 14px;
+.side-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 12px;
   border-top: 1px solid var(--line); padding-top: 12px; }
 .snav { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 10px;
   background: transparent; color: var(--muted); font-size: 13.5px; text-align: left; }
 .snav:hover { background: rgba(255,255,255,.04); color: var(--text); }
 .snav-ic { width: 18px; text-align: center; opacity: .8; }
-.side-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
+/* Not `margin-top: auto`. Pinning the account to the floor left a long empty
+   strip between it and the navigation, and in a rail that is mostly icons
+   that gap reads as something failing to load. */
+.side-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .user-chip { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
   border-radius: 12px; background: transparent; color: var(--text); font-size: 13.5px; }
 .user-chip:hover { background: rgba(255,255,255,.04); }
@@ -160,7 +175,7 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* ── chat ─────────────────────────────────────────────────────────────── */
 .chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative;
-  margin: 9px 9px 9px 0; border-radius: 18px;
+  margin: 9px; border-radius: 18px;
   background:
     radial-gradient(78% 58% at 84% 92%, rgba(40,52,76,.22), transparent 62%),
     radial-gradient(62% 44% at 10% 6%, rgba(46,50,68,.16), transparent 62%),
