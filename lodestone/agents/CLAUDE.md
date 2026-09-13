@@ -1,11 +1,17 @@
-# You are in the **agents** role's territory
+# `lodestone/agents/` — the loop
 
-Rules: [`.claude/fleet/agents/CLAUDE.md`](../../.claude/fleet/agents/CLAUDE.md) ·
-common law: [`/CLAUDE.md`](../../CLAUDE.md) ·
-who owns what: the ownership map in `/CLAUDE.md`.
+The turn loop, tools, effort, delegation, planning, approvals, permissions.
 
-The loop, tools, effort, delegation, planning, approvals, permissions. Providers, entitlements and wire formats belong to **Models** (seam 2); recall order belongs to **Brain** (seam 5). Every new capability gets a case in `evaluation.py`.
+- Effort is one gear selector (Low/Medium/High), not a settings screen — it
+  derives every budget at once, and it spends the *user's* money.
+- Tool calls in a round run in parallel; results reassemble by `tool_call_id`.
+  Delegation guards live in a `ContextVar`, so it is one `copy_context()` **per
+  call**.
+- Compress old turns, never drop them.
+- A routine pre-authorises the routine, not the stranger who wrote the email it
+  read. Outbound actions need a recipient on the explicit allow-list; everything
+  else queues for one tap. Interactive chat is deliberately not gated.
+- Every new capability gets a case in `evaluation.py`.
 
-**No rules live in this file.** A duplicated rule drifts, and the copy that drifts
-is always the one you read. If you are another role: do not edit files here — write
-a handoff in `.claude/fleet/HANDOFF.md`.
+Providers and entitlements belong to `../models/`; recall order belongs to
+`../brain/`. Rules: [`/CLAUDE.md`](../../CLAUDE.md).

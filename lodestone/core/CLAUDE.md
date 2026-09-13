@@ -1,11 +1,11 @@
-# You are in the **brain** role's territory
+# `lodestone/core/` — store, DB, chunking, embeddings, dates
 
-Rules: [`.claude/fleet/brain/CLAUDE.md`](../../.claude/fleet/brain/CLAUDE.md) ·
-common law: [`/CLAUDE.md`](../../CLAUDE.md) ·
-who owns what: the ownership map in `/CLAUDE.md`.
+`store.search()` runs on **every** agent turn and is linear in memory count
+(~0.05 ms each): 3k ≈ 120 ms, 10k ≈ 430 ms, 50k ≈ 2.5 s. 95% of that is the
+eight-factor Python scoring loop and 0.1% is the vector matmul — so an ANN index
+would optimise the wrong thing.
 
-Store, DB, chunking, embeddings, date parsing. `store.search()` runs on **every** agent turn and is linear in memory count — measure with `scripts/benchmark_recall.py` before and after touching its scoring (`docs/SCALING.md`).
+Measure with `scripts/benchmark_recall.py` before and after touching the scoring.
+Analysis: [`docs/SCALING.md`](../../docs/SCALING.md).
 
-**No rules live in this file.** A duplicated rule drifts, and the copy that drifts
-is always the one you read. If you are another role: do not edit files here — write
-a handoff in `.claude/fleet/HANDOFF.md`.
+`_migrate` is additive `ALTER TABLE` only, and idempotent.

@@ -1,11 +1,14 @@
-# You are in the **connectors** role's territory
+# `lodestone/connectors/` — the sources
 
-Rules: [`.claude/fleet/connectors/CLAUDE.md`](../../.claude/fleet/connectors/CLAUDE.md) ·
-common law: [`/CLAUDE.md`](../../CLAUDE.md) ·
-who owns what: the ownership map in `/CLAUDE.md`.
+One class per source, registered in `__init__.py::REGISTRY`.
 
-One class per source, registered in `__init__.py::REGISTRY`. Sync idempotently, redact on ingest, survive a crash without taking the sync down, stay cancellable — and never gate graph enrichment on a connector name.
+- Sync idempotently, redact secrets on ingest, survive a crash without taking the
+  whole sync down, and stay cancellable.
+- Connectors are read-only by design. `mcp_source.py::MCPConnector.perform()` is
+  the one path that changes something at a vendor, and its `confirmed` gate is
+  required rather than defaulted, so a caller that forgets it fails closed.
+- `mcp_tools.py` exposes a server's **read** tools to the agent loop. Listing
+  starts every server, so it is TTL-cached; results are bounded and say so.
+- Never read another product's app-support directory for credentials or models.
 
-**No rules live in this file.** A duplicated rule drifts, and the copy that drifts
-is always the one you read. If you are another role: do not edit files here — write
-a handoff in `.claude/fleet/HANDOFF.md`.
+Rules: [`/CLAUDE.md`](../../CLAUDE.md) · [`docs/CONNECTORS.md`](../../docs/CONNECTORS.md).

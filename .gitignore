@@ -25,13 +25,8 @@ build/
 *.dmg
 *.spec.bak
 
-# another session's git worktree, and coverage output.
-# NOTE: .claude/ itself is NOT ignored — .claude/fleet/ holds the per-agent rules
-# every lane has to read, so it must be committed. Only the worktrees and the
-# transient claim files are ignored.
-.claude/worktrees/
-.claude/fleet/locks/*
-!.claude/fleet/locks/.gitkeep
+# Claude Code scratch state; the repo's own rules live in CLAUDE.md files.
+.claude/
 .coverage
 .coverage.*
 htmlcov/

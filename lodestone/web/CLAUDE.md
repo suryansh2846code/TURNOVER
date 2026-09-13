@@ -1,11 +1,18 @@
-# You are in the **frontend** role's territory
+# `lodestone/web/` — the frontend
 
-Rules: [`.claude/fleet/frontend/CLAUDE.md`](../../.claude/fleet/frontend/CLAUDE.md) ·
-common law: [`/CLAUDE.md`](../../CLAUDE.md) ·
-who owns what: the ownership map in `/CLAUDE.md`.
+Vanilla JS, **no build step**. `index.html` + `app.js` + `styles.css` are the
+workspace; `onboarding.html` and `signin_hud.html` are self-contained pages.
 
-Vanilla JS, no build step. Cmd+R reloads the frontend only. Relative API paths, never a host or port. If you add a render path or a click handler, **execute it in a test** (`tests/js/`) — `node --check` and source-order assertions both pass while these are broken.
+- Relative API paths only (`/api/…`). Never a host or port — the desktop app
+  binds a different loopback port per install.
+- `Cmd+R` reloads the frontend only. It cannot reload Python; without `--dev` a
+  new endpoint 404s until you relaunch.
+- **If you add a render path or a click handler, execute it in a test**
+  (`tests/js/`). `node --check` passes on the temporal-dead-zone `ReferenceError`
+  that blanked the whole drawer, and a source-order assertion passed while a card
+  was being written into a detached container.
+- Derive UI from capabilities, never from a `providerId === "x"` chain.
+- Any new `innerHTML` path must escape *before* applying inline markdown, the way
+  `md()` does.
 
-**No rules live in this file.** A duplicated rule drifts, and the copy that drifts
-is always the one you read. If you are another role: do not edit files here — write
-a handoff in `.claude/fleet/HANDOFF.md`.
+Rules for all of it: [`/CLAUDE.md`](../../CLAUDE.md).

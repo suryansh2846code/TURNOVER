@@ -1,11 +1,9 @@
-# You are in the **connectors** role's territory
+# `lodestone/mcp_server/` — the MCP server we expose
 
-Rules: [`.claude/fleet/connectors/CLAUDE.md`](../../.claude/fleet/connectors/CLAUDE.md) ·
-common law: [`/CLAUDE.md`](../../CLAUDE.md) ·
-who owns what: the ownership map in `/CLAUDE.md`.
+Lodestone's brain, offered to any MCP client.
 
-The MCP server we expose. The MCP *client* side lives in `connectors/mcp_source.py` — both belong to this role, and the client is `docs/ROADMAP.md` item 1, in progress separately.
+The **client** side — consuming someone else's MCP server — is not here: sources
+live in `../connectors/mcp_source.py` and the agent-facing read tools in
+`../connectors/mcp_tools.py`. Both shipped 2026-09-13.
 
-**No rules live in this file.** A duplicated rule drifts, and the copy that drifts
-is always the one you read. If you are another role: do not edit files here — write
-a handoff in `.claude/fleet/HANDOFF.md`.
+Rules: [`/CLAUDE.md`](../../CLAUDE.md).
