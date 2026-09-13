@@ -1873,7 +1873,10 @@ function actionCard(a) {
        <div class="ac-row"><b>When</b> ${esc(p.at || p.when || "")}</div>`;
   } else if (a.type === "create_routine") {
     title = "Create automation"; verb = "create";
-    const trig = p.trigger === "schedule" ? `every ${p.interval_min || 60} min` : "on every new email";
+    // Model-written attribute: force it to a number rather than trusting it.
+    const mins = Number.parseInt(p.interval_min, 10);
+    const trig = p.trigger === "schedule"
+      ? `every ${Number.isFinite(mins) && mins > 0 ? mins : 60} min` : "on every new email";
     rows = `<div class="ac-row"><b>Name</b> ${esc(p.name || "Automation")}</div>
        <div class="ac-row"><b>Runs</b> ${trig} · ${esc(p.agent || p.agent_id || "personal")}</div>
        <div class="ac-body">${esc(p.instruction || "")}</div>`;
@@ -2496,7 +2499,7 @@ async function loadRoutines() {
 }
 $("#newRoutineBtn").onclick = async () => {
   const { agents } = await api("/api/agents");
-  $("#rmAgent").innerHTML = agents.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join("");
+  $("#rmAgent").innerHTML = agents.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join("");
   $("#rmName").value = ""; $("#rmInstruction").value = ""; $("#rmInterval").value = "60";
   $("#routineModal").hidden = false;
 };
@@ -2879,7 +2882,7 @@ function renderEnrich(s) {
   if (meta) meta.innerHTML =
     `${(s.processed || 0).toLocaleString()} of ${total.toLocaleString()} memories${capNote} · +${s.entities || 0} entities · +${s.facts || 0} facts${eta}` + (tok ? `<br>${tok}` : "");
   if (foundEl && s.found && s.found.length)
-    foundEl.innerHTML = s.found.map((f) => `<span class="ep-chip ${f.type}">${esc(f.name)}</span>`).join("");
+    foundEl.innerHTML = s.found.map((f) => `<span class="ep-chip ${esc(f.type || "")}">${esc(f.name)}</span>`).join("");
 }
 function pollEnrich() {
   clearInterval(_enrichPoll);
