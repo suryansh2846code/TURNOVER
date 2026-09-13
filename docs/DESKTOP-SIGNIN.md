@@ -38,6 +38,18 @@ That is why an update changes the existing card and a second one cannot appear.
 runs on a worker thread; calling `setLevel_`/`setFrame_` from there hangs the
 process. This was diagnosed the hard way — a probe that looked like a deadlock.
 
+**Placed against `NSScreen.visibleFrame`, on the screen under the pointer.**
+`webview.screens[0]` is the *primary* display's **full** frame, which is wrong
+twice over: it puts the card on the wrong monitor at a multi-display desk, and
+it ignores the menu bar and the Dock, so "top-right of the screen" lands
+underneath the menu bar. `visibleFrame` is the usable area of the screen the
+user is actually looking at. Cocoa reports it in points, not pixels, so Retina
+and mixed-scale arrangements need no special case at all.
+
+**Timeout is 180s** (`hud.SIGNIN_TIMEOUT_SECONDS`), deliberately generous: an
+account switch with a password and 2FA blew past a 150s poll in practice. On
+expiry the card shows an error with **Try again** — never a dead spinner.
+
 ---
 
 ## What went wrong, in order
