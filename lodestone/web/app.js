@@ -1,51 +1,9 @@
-const $ = (s) => document.querySelector(s);
-const api = (p, o) => fetch(p, o).then((r) => r.ok ? r.json() : r.json().then((e) => Promise.reject(e.detail || r.statusText)));
+// The workspace's own state. Primitives ($, api, esc, md, toast, orbs, icons)
+// live in core.js, which index.html loads first.
 let current = null;
 let agents = [];
 let CONNECTORS = [];
 
-function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
-// Has the user asked the system for less motion? A *function declaration*, not
-// a const arrow: it is called from _bsDraw, which runs far above this point in
-// the file, and a temporal-dead-zone ReferenceError here would blank the brain
-// screen exactly the way one blanked the model drawer. Hoisting removes the
-// question entirely.
-function _lessMotion() {
-  return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-}
-function esc(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
-
-// gradient orb avatar per agent (stable colour from the id; the lead is always blue)
-const ORB_COLORS = [["#8fb0ff", "#2f3a5e"], ["#7fd8b0", "#1f4636"], ["#c3a0f5", "#382a54"],
-  ["#e0b489", "#48331f"], ["#e79aa0", "#48232e"], ["#9ad0e0", "#1e444f"], ["#b8c0cf", "#2b3140"]];
-function orbPair(id) {
-  if (id === "__lead") return ORB_COLORS[0];
-  let h = 0; for (const ch of String(id || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return ORB_COLORS[h % ORB_COLORS.length];
-}
-function orbStyle(id) { const [a, b] = orbPair(id); return `background:radial-gradient(circle at 32% 26%, ${a}, ${b} 74%)`; }
-
-// ── minimal line icons (no emoji) ───────────────────────────────────────────
-const _S = (p, s = 16) => `<svg viewBox="0 0 16 16" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
-const IC = {
-  brain: _S('<path d="M8 1.6l6.4 6.4L8 14.4 1.6 8z"/>'),
-  connectors: _S('<rect x="2.5" y="3" width="11" height="2.6" rx="1"/><rect x="2.5" y="6.7" width="11" height="2.6" rx="1"/><rect x="2.5" y="10.4" width="8" height="2.4" rx="1"/>'),
-  tasks: _S('<rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M5.4 8l1.7 1.7L11 5.9"/>'),
-  tools: _S('<path d="M2 5h6M11 5h3M2 11h3M8 11h6"/><circle cx="9.3" cy="5" r="1.5"/><circle cx="6" cy="11" r="1.5"/>'),
-  model: _S('<circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/>'),
-  help: _S('<circle cx="8" cy="8" r="6"/><path d="M6.2 6.2a1.9 1.9 0 0 1 3.6.7c0 1.3-1.8 1.5-1.8 2.7"/><circle cx="8" cy="11.4" r=".55" fill="currentColor" stroke="none"/>'),
-  message: _S('<path d="M2.5 4.5h11v6.5H7l-3 2v-2H2.5z"/>'),
-  search: _S('<circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2L14 14"/>'),
-  spark: _S('<path d="M8 1.6l1.5 4.9L14 8l-4.5 1.5L8 14.4 6.5 9.5 2 8l4.5-1.5z"/>'),
-  plus: _S('<path d="M8 3.5v9M3.5 8h9"/>', 18),
-  mic: _S('<rect x="6" y="2" width="4" height="7.5" rx="2"/><path d="M4 8a4 4 0 0 0 8 0M8 11.5V14"/>', 17),
-  arrowUp: _S('<path d="M8 12.5V4M4.5 7.5L8 4l3.5 3.5"/>', 17),
-  lock: _S('<rect x="3.5" y="7" width="9" height="6" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>', 13),
-  cloud: _S('<path d="M5 12a3 3 0 0 1 .3-6 3.5 3.5 0 0 1 6.6.8A2.6 2.6 0 0 1 11.5 12z"/>', 13),
-  clock: _S('<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.4"/>'),
-  bolt: _S('<path d="M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z"/>'),
-  attach: _S('<path d="M12 6.5l-5 5a2.4 2.4 0 0 1-3.4-3.4l5.2-5.2a1.6 1.6 0 0 1 2.3 2.3l-5.2 5.2a.8.8 0 0 1-1.1-1.1L9.5 5"/>', 17),
-};
 function applyIcons() {
   document.querySelectorAll(".snav").forEach((b) => {
     const el = b.querySelector(".snav-ic"); if (!el) return;
@@ -81,37 +39,6 @@ function agentDesc(a) {
   return "Helps you with " + (a.role || "your work") + ".";
 }
 
-// tiny, safe markdown renderer (escapes first, then applies a subset)
-function mdInline(s) {
-  return s
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    .replace(/(^|[\s(])((https?:\/\/[^\s<)]+))/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
-}
-function md(src) {
-  const lines = esc(src).split("\n");
-  let html = "", inList = false, inCode = false;
-  const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
-  for (const raw of lines) {
-    if (/^```/.test(raw)) {
-      if (inCode) { html += "</code></pre>"; inCode = false; }
-      else { closeList(); html += "<pre><code>"; inCode = true; }
-      continue;
-    }
-    if (inCode) { html += raw + "\n"; continue; }
-    const h = raw.match(/^(#{1,4})\s+(.*)/);
-    if (h) { closeList(); const lvl = Math.min(h[1].length + 2, 6); html += `<h${lvl}>${mdInline(h[2])}</h${lvl}>`; continue; }
-    const li = raw.match(/^\s*[-*]\s+(.*)/) || raw.match(/^\s*\d+\.\s+(.*)/);
-    if (li) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${mdInline(li[1])}</li>`; continue; }
-    if (raw.trim() === "") { closeList(); continue; }
-    closeList(); html += `<p>${mdInline(raw)}</p>`;
-  }
-  closeList(); if (inCode) html += "</code></pre>";
-  return html;
-}
 
 async function loadAgents() {
   const d = await api("/api/agents");
@@ -2743,7 +2670,6 @@ async function loadApprovals() {
   box.querySelectorAll("[data-aprno]").forEach((b) =>
     b.onclick = () => decide(b.dataset.aprno, "dismiss", "reject"));
 }
-
 
 
 // ── tasks ────────────────────────────────────────────────────────────────

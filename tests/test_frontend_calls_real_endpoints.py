@@ -14,12 +14,11 @@ because no test connects the two sides.
 `test_api_surface.py` pins the server's side of the contract. This pins the
 client's: the two lists have to meet.
 """
-import pathlib
 import re
 
-from lodestone.api.app import app
+from web_sources import app_source
 
-APP_JS = pathlib.Path(__file__).parent.parent / "lodestone/web/app.js"
+from lodestone.api.app import app
 
 #: `api("/api/x")`, `api(`/api/x/${y}`)`, and the bare `fetch("/api/…")` calls.
 _CALL = re.compile(r"""(?:\bapi|\bfetch)\(\s*(?:`([^`]+)`|"(/[^"]*)")""")
@@ -46,7 +45,7 @@ def _frontend_calls() -> set[tuple[str, str]]:
     whether or not anyone wrote the DELETE, so a path-only check would have gone
     green on the very bug this file exists for.
     """
-    src = APP_JS.read_text()
+    src = app_source()
     found = set()
     for m in _CALL.finditer(src):
         raw = m.group(1) or m.group(2)

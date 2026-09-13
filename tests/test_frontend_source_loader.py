@@ -79,9 +79,25 @@ def test_while_the_app_is_one_file_the_source_is_that_file_unchanged():
 
 def test_the_concatenation_cannot_glue_two_files_together():
     """Joined on a newline, so a file with no trailing newline stays separate."""
-    src = _probe("appSource(webDir)")
-    app_lines = (WEB / "app.js").read_text().splitlines()
+    scripts = [pathlib.Path(p) for p in _probe("appScripts(webDir)")]
+    src = _probe("appSource(webDir)").splitlines()
     assert src, "loader returned nothing"
-    # No line of a real file may be fused onto another's.
-    assert src.splitlines()[0] == app_lines[0]
-    assert src.splitlines()[-1] == app_lines[-1]
+    # The seams: the first line of the first file and the last of the last must
+    # survive intact, and every file's first line must appear somewhere.
+    assert src[0] == scripts[0].read_text().splitlines()[0]
+    assert src[-1] == scripts[-1].read_text().splitlines()[-1]
+    for s in scripts:
+        assert s.read_text().splitlines()[0] in src, f"{s.name} was fused or lost"
+
+
+def test_python_and_node_agree_on_what_the_app_is_made_of():
+    """Two loaders, one source of truth.
+
+    `tests/web_sources.py` mirrors `_app_source.mjs` for tests that read the
+    frontend instead of running it. Both parse `index.html`, so neither can
+    invent an order — but this is what stops the two regexes drifting.
+    """
+    from web_sources import app_scripts, app_source
+
+    assert [str(p) for p in app_scripts()] == _probe("appScripts(webDir)")
+    assert app_source() == _probe("appSource(webDir)")

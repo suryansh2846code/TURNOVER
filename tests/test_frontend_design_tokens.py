@@ -71,8 +71,10 @@ def test_reduced_motion_is_respected():
     """The brief asks for a static field. There is a canvas particle loop, a
     pulsing status dot and three spinners; none of it asked."""
     assert "@media (prefers-reduced-motion: reduce)" in CSS
-    app_js = (WEB / "app.js").read_text()
-    assert "prefers-reduced-motion" in app_js, (
+    # The app's JavaScript, not `app.js` — `_lessMotion` lives in core.js now,
+    # and a grep of one file out of several passes for the wrong reason.
+    from web_sources import app_source
+    assert "prefers-reduced-motion" in app_source(), (
         "the canvas is a rAF loop that CSS cannot reach — it has to ask too")
 
 
