@@ -212,3 +212,57 @@ def test_a_fresh_install_connects_nothing_remote():
             pytest.skip(f"{entry['id']} is genuinely connected in this environment")
         assert all(m["locked"] for m in entry["models"]), \
             f"{entry['id']} is disconnected but has unlocked models"
+
+
+MODELS_DIR = Path(__file__).resolve().parents[1] / "lodestone/models"
+
+
+def _login_spawns():
+    """Every `subprocess.Popen` in the model layer whose argv mentions `login`,
+    with the function that contains it."""
+    found = []
+    for path in sorted(MODELS_DIR.glob("*.py")):
+        tree = ast.parse(path.read_text())
+        for func in ast.walk(tree):
+            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for call in ast.walk(func):
+                if not isinstance(call, ast.Call):
+                    continue
+                target = call.func
+                name = (target.attr if isinstance(target, ast.Attribute)
+                        else getattr(target, "id", ""))
+                if name != "Popen":
+                    continue
+                argv = [c.value for c in ast.walk(call)
+                        if isinstance(c, ast.Constant) and isinstance(c.value, str)]
+                if any("login" == a or a.endswith(" login") for a in argv):
+                    found.append((path.name, func.name, func))
+    return found
+
+
+def test_every_cli_login_we_spawn_is_tracked():
+    """A vendor CLI's `login` waits for a browser callback that may never come.
+    Nothing reaped them and the handle lived in module state, so every launch
+    forgot the last one's: 158 were found alive on one machine, each holding the
+    vendor's OAuth callback port until sign-in stopped working.
+
+    Adding a fourth CLI without tracking it puts that straight back.
+    """
+    spawns = _login_spawns()
+    assert spawns, "no login spawns found — this check has stopped looking"
+    for module, func_name, func in spawns:
+        body = ast.dump(func)
+        assert "login_processes" in body and "track" in body, (
+            f"{module}:{func_name} starts a vendor login without registering it, "
+            "so nothing can clean it up after the app quits")
+
+
+def test_the_tracker_only_signals_what_it_recorded():
+    """PIDs are reused. Killing whatever inherited one is worse than the leak."""
+    from lodestone.models import login_processes
+
+    source = (MODELS_DIR / "login_processes.py").read_text()
+    assert "_command_of" in source, "no check that the PID is still our process"
+    assert hasattr(login_processes, "reap_all")
+    assert hasattr(login_processes, "release")
