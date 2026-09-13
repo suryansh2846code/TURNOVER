@@ -89,3 +89,26 @@ def test_tracking_never_breaks_a_sign_in():
     login_processes.track(NoPid(), "sleep")     # must not raise
     login_processes.release(None)
     assert login_processes.reap_all() == 0
+
+
+def test_a_vendor_login_never_reaches_the_vendor_binary():
+    """The suite itself was the biggest leaker.
+
+    `flow.start()` and POST /signin spawn `claude auth login` for real, and one
+    survived every pytest run. conftest swaps the argv for a command that exits
+    immediately; if that guard ever stops working this test spawns a browser
+    sign-in, which is exactly what it is here to prevent.
+    """
+    import conftest
+
+    before = len(conftest.spawned_logins)
+    proc = subprocess.Popen(["claude", "auth", "login"],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    assert proc.wait(timeout=10) == 0, "a real vendor login was started"
+    assert conftest.spawned_logins[before:] == [["claude", "auth", "login"]]
+
+
+def test_the_guard_still_runs_ordinary_commands():
+    """Blocking everything would be its own bug — only logins are diverted."""
+    out = subprocess.run(["echo", "hello"], capture_output=True, text=True)
+    assert out.stdout.strip() == "hello"

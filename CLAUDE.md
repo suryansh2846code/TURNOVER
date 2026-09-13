@@ -349,6 +349,16 @@ under `tests/js/`, driven by `tests/test_models_drawer_render.py`:
   clears the subtree — because the bug it exists to catch was a card written
   into a container a preceding re-render had already replaced.
 
+**A test must never start a real sign-in.** `flow.start()` and
+`POST /api/providers/{name}/signin` reach `claude auth login`, which opens a
+browser and then waits forever — and nothing reaped it, so **every pytest run
+left one alive**. That, more than the app, is how 158 accumulated. `conftest.py`
+swaps the argv of any `login` spawn for a command that exits immediately, so the
+flows still run their real code with the vendor binary kept out; the guard is
+itself covered, because a guard nobody exercises quietly stops working. This is
+the third time test hygiene has bitten here — the others wrote to the real
+Keychain and bound the fixed OAuth port 1455.
+
 Neither `node --check` nor source-order assertions catch these: a temporal
 dead-zone `ReferenceError` blanked the whole drawer and still passed
 `node --check`, and the detached-container bug passed a source-order test. **If

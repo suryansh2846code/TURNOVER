@@ -36,6 +36,56 @@ def _never_touch_the_real_keychain():
         Settings._keychain_ok = original
 
 
+# Attempts are recorded rather than merely blocked, so the guard itself can be
+# tested — a guard nobody exercises is the kind that quietly stops working.
+spawned_logins: list[list[str]] = []
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _never_start_a_real_vendor_login():
+    """A vendor CLI's `login` opens a browser and then waits forever.
+
+    `flow.start()` and POST /api/providers/{name}/signin reach `claude auth
+    login` for real, and nothing reaps it: one was left running by every single
+    pytest run, and 158 were found alive on the developer's machine, each
+    holding the OAuth callback port until sign-in stopped working.
+
+    The argv is swapped for a command that exits immediately rather than the
+    call being blocked, so the flows still run their real code — only the vendor
+    binary is kept out of it.
+    """
+    import subprocess
+
+    real = subprocess.Popen
+
+    class _Guard:
+        """Stands in for the class, not just the call: `subprocess.Popen[str]`
+        appears in annotations that are evaluated at runtime, so a plain
+        function here breaks unrelated code."""
+
+        def __call__(self, cmd, *args, **kwargs):
+            argv = [str(c) for c in (cmd if isinstance(cmd, (list, tuple)) else [cmd])]
+            if "login" in argv:
+                spawned_logins.append(argv)
+                cmd = ["true"]
+            return real(cmd, *args, **kwargs)
+
+        def __getitem__(self, item):
+            return real[item]
+
+        def __instancecheck__(self, obj):
+            return isinstance(obj, real)
+
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+    subprocess.Popen = _Guard()
+    try:
+        yield
+    finally:
+        subprocess.Popen = real
+
+
 @pytest.fixture(autouse=True)
 def _no_stale_cli_auth_cache():
     """CLI sign-in state is cached for a few seconds so polling doesn't spawn a
