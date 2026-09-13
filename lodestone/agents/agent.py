@@ -106,6 +106,16 @@ CREATE TABLE IF NOT EXISTS agent_messages (
     ts        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_agent_msgs ON agent_messages(agent_id, ts);
+
+-- What the agent remembers about turns that have fallen out of the verbatim
+-- window. One row per agent, rewritten as the conversation grows; `through_ts`
+-- marks how far it covers, so folding in newer turns never re-reads the lot.
+CREATE TABLE IF NOT EXISTS agent_summaries (
+    agent_id   TEXT PRIMARY KEY,
+    summary    TEXT NOT NULL,
+    through_ts TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -141,6 +151,43 @@ class AgentMemory:
         ).fetchall()
         return [dict(r) for r in reversed(rows)]
 
+    def messages_before(self, agent_id: str, ts: str | None,
+                        after: str | None = None) -> list[dict]:
+        """Turns older than `ts`, optionally newer than `after`.
+
+        `after` is what makes compaction incremental: only the slice that has
+        aged out since the summary was last written needs folding in.
+        """
+        sql = ("SELECT role,content,ts FROM agent_messages "
+               "WHERE agent_id=? AND role IN ('user','assistant')")
+        args: list = [agent_id]
+        if ts:
+            sql += " AND ts < ?"
+            args.append(ts)
+        if after:
+            sql += " AND ts > ?"
+            args.append(after)
+        sql += " ORDER BY ts ASC"
+        return [dict(r) for r in self._c.execute(sql, args).fetchall()]
+
+    def get_summary(self, agent_id: str) -> dict | None:
+        row = self._c.execute(
+            "SELECT summary,through_ts FROM agent_summaries WHERE agent_id=?",
+            (agent_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def set_summary(self, agent_id: str, summary: str, through_ts: str) -> None:
+        self._c.execute(
+            "INSERT INTO agent_summaries (agent_id,summary,through_ts,updated_at) "
+            "VALUES (?,?,?,?) ON CONFLICT(agent_id) DO UPDATE SET "
+            "summary=excluded.summary, through_ts=excluded.through_ts, "
+            "updated_at=excluded.updated_at",
+            (agent_id, summary, through_ts, datetime.now(UTC).isoformat()),
+        )
+        self._c.commit()
+
     def clear(self, agent_id: str) -> None:
         self._c.execute("DELETE FROM agent_messages WHERE agent_id=?", (agent_id,))
+        self._c.execute("DELETE FROM agent_summaries WHERE agent_id=?", (agent_id,))
         self._c.commit()

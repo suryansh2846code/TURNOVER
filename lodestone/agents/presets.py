@@ -9,7 +9,8 @@ import dataclasses
 from .agent import Agent
 from .agent_models import get_agent_model
 
-_BASE_TOOLS = ["search_brain", "remember", "list_entities", "web_search"]
+_BASE_TOOLS = ["search_brain", "remember", "list_entities", "web_search",
+               "ask_agent"]
 
 PRESETS: dict[str, Agent] = {
     "inbox": Agent(

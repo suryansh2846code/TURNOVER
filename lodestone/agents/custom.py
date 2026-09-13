@@ -66,7 +66,8 @@ class CustomAgentStore:
                               (aid,)).fetchone():
             aid = f"{base}-{n}"; n += 1
         # default toolset if none chosen
-        tools = tools or ["search_brain", "remember", "list_entities", "web_search"]
+        tools = tools or ["search_brain", "remember", "list_entities",
+                          "web_search", "ask_agent"]
         self._c.execute(
             "INSERT INTO custom_agents (id,name,role,system_prompt,tools,"
             "recall_sources,created_at) VALUES (?,?,?,?,?,?,?)",

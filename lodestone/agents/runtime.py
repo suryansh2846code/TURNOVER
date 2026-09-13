@@ -11,7 +11,9 @@ from ..config import get_settings
 from ..log import get_logger, suppressed
 from ..models import Message, get_provider
 from ..models.entitlements import resolve_usable_model
+from . import delegation
 from .agent import Agent, AgentMemory
+from .context import build_history
 from .effort import Effort, get_effort
 from .loop import BUDGET_PROMPT, STALL_LIMIT, ToolRunner
 from .presets import get_agent
@@ -62,15 +64,6 @@ class TurnResult:
         }
 
 
-def _load_history(mem: AgentMemory, agent: Agent) -> list[Message]:
-    msgs: list[Message] = []
-    # keep a short window — long histories confuse small models and let stale
-    # turns bleed into unrelated answers. Facts persist in the brain anyway.
-    for row in mem.history(agent.id, limit=6):
-        # replay only clean user/assistant turns for context (skip tool plumbing)
-        if row["role"] in ("user", "assistant") and row["content"]:
-            msgs.append(Message(role=row["role"], content=row["content"]))
-    return msgs
 
 
 _LEARN_SYS = (
@@ -260,7 +253,7 @@ def run_turn(agent_id: str, user_text: str, *,
             runtime_identity=identity,
         )
     mem = AgentMemory()
-    tools = build_tools(agent.tools)
+    tools = build_tools(agent.tools, self_id=agent.id)
 
     # Ground the agent in the present. LLMs have no clock, so without this they
     # hallucinate the date. Small models ignore mid-context system notes, so we
@@ -320,13 +313,14 @@ def run_turn(agent_id: str, user_text: str, *,
                 content="The user currently has NO open tasks. Do not claim otherwise.",
             ))
 
-    messages += _load_history(mem, agent)
+    messages += build_history(mem, agent, profile, provider)
     # model sees the date adjacent to the question; stored memory stays clean
     messages.append(Message(
         role="user", content=f"[Today is {date_line}.]\n{user_text}"))
     mem.append(agent.id, "user", user_text)
     runner = ToolRunner(effort=profile)
     budget = max(MIN_STEPS, profile.max_steps)
+    chain_token = delegation.enter(agent.id, profile)
     stalls = 0
     reply = ""
 
@@ -343,54 +337,61 @@ def run_turn(agent_id: str, user_text: str, *,
             runtime_identity=identity, effort=profile.name,
         )
 
-    for _step in range(budget):
-        # low temperature → more reliable instruction-following & tool use
-        try:
-            result = provider.chat(messages, tools=tools, temperature=0.15)
-        except Exception as exc:
-            return _failed(exc)
-        if not result.wants_tools:
-            reply = result.text
-            break
-
-        messages.append(Message(
-            role="assistant", content=result.text, tool_calls=result.tool_calls,
-        ))
-        outcomes = runner.run(result.tool_calls)
-        for outcome in outcomes:
-            call = outcome.call
-            trace.append(TraceStep(
-                kind="tool_call", name=call.name, arguments=call.arguments))
-            trace.append(TraceStep(kind="tool_result", name=call.name,
-                                   result=outcome.output, repeated=outcome.repeated))
-            messages.append(Message(
-                role="tool", content=outcome.output, tool_call_id=call.id,
-                name=call.name,
-            ))
-
-        # A round that learned nothing is the failure mode a deeper loop
-        # introduces: with budget left and no new information, a model will
-        # re-issue the same calls indefinitely.
-        if runner.round_was_all_repeats(outcomes):
-            stalls += 1
-            if stalls >= STALL_LIMIT:
-                log.debug("agent %s stalled after %d rounds; asking it to answer",
-                          agent_id, _step + 1)
-                messages.append(Message(role="system", content=BUDGET_PROMPT))
-                reply = _answer_without_tools(provider, messages, _failed)
-                if isinstance(reply, TurnResult):
-                    return reply
+    # The chain has to be left on every exit path, including a provider
+    # failure — a ContextVar that is set and never reset leaks this agent
+    # into whatever the caller does next.
+    try:
+        for _step in range(budget):
+            # low temperature → more reliable instruction-following & tool use
+            try:
+                result = provider.chat(messages, tools=tools, temperature=0.15)
+            except Exception as exc:
+                return _failed(exc)
+            if not result.wants_tools:
+                reply = result.text
                 break
+
+            messages.append(Message(
+                role="assistant", content=result.text, tool_calls=result.tool_calls,
+            ))
+            outcomes = runner.run(result.tool_calls)
+            for outcome in outcomes:
+                call = outcome.call
+                trace.append(TraceStep(
+                    kind="tool_call", name=call.name, arguments=call.arguments))
+                trace.append(TraceStep(kind="tool_result", name=call.name,
+                                       result=outcome.output, repeated=outcome.repeated))
+                messages.append(Message(
+                    role="tool", content=outcome.output, tool_call_id=call.id,
+                    name=call.name,
+                ))
+
+            # A round that learned nothing is the failure mode a deeper loop
+            # introduces: with budget left and no new information, a model will
+            # re-issue the same calls indefinitely.
+            if runner.round_was_all_repeats(outcomes):
+                stalls += 1
+                if stalls >= STALL_LIMIT:
+                    log.debug("agent %s stalled after %d rounds; asking it to answer",
+                              agent_id, _step + 1)
+                    messages.append(Message(role="system", content=BUDGET_PROMPT))
+                    reply = _answer_without_tools(provider, messages, _failed)
+                    if isinstance(reply, TurnResult):
+                        return reply
+                    break
+            else:
+                stalls = 0
         else:
-            stalls = 0
-    else:
-        # Budget spent while still calling tools. An agent that has looked
-        # things up for twenty rounds can usually answer — it has just never
-        # been told to stop.
-        messages.append(Message(role="system", content=BUDGET_PROMPT))
-        reply = _answer_without_tools(provider, messages, _failed)
-        if isinstance(reply, TurnResult):
-            return reply
+            # Budget spent while still calling tools. An agent that has looked
+            # things up for twenty rounds can usually answer — it has just never
+            # been told to stop.
+            messages.append(Message(role="system", content=BUDGET_PROMPT))
+            reply = _answer_without_tools(provider, messages, _failed)
+            if isinstance(reply, TurnResult):
+                return reply
+
+    finally:
+        delegation.leave(chain_token)
 
     reply = reply or "(the model returned nothing)"
     steps_used = len([s for s in trace if s.kind == "tool_call"])

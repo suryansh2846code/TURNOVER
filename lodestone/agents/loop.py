@@ -13,6 +13,7 @@ run this turn, and a way to notice that a round produced nothing new.
 """
 from __future__ import annotations
 
+import contextvars
 import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -100,10 +101,21 @@ class ToolRunner:
                 # Tools reach SQLite (WAL, serialized connections) and the
                 # network; `sqlite3.threadsafety` is 3 here, so sharing a
                 # connection across these threads is safe.
+                # A thread pool does NOT copy context. `ask_agent` reads the
+                # delegation chain from a ContextVar, so without carrying the
+                # context across, every parallel call would start at depth zero
+                # and the depth and cycle guards would be decoration.
+                #
+                # One copy *per call*, not one shared: a `Context` cannot be
+                # entered twice at once, so a single copy handed to several
+                # workers raises "cannot enter context" the moment two overlap.
                 with ThreadPoolExecutor(max_workers=width,
                                         thread_name_prefix="lodestone-tool") as pool:
-                    futures = {pool.submit(self._execute, call, key): i
-                               for i, call, key in pending}
+                    futures = {
+                        pool.submit(contextvars.copy_context().run,
+                                    self._execute, call, key): i
+                        for i, call, key in pending
+                    }
                     for future, i in futures.items():
                         outcomes[i] = future.result()
 

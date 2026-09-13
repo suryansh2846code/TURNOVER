@@ -10,6 +10,7 @@ from typing import Any
 
 from ..brain import get_brain
 from ..models.base import Tool
+from .effort import get_effort
 
 
 # ── brain tools (shared by every agent) ──────────────────────────────────
@@ -126,7 +127,32 @@ def _complete_open_loop(loop: str) -> str:
     return f"Completed open loop: {done.get('description')}" if done else f"Could not complete '{loop}'."
 
 
+def _ask_agent(agent_id: str, question: str) -> str:
+    """Put a question to another agent and return its answer.
+
+    The sub-agent runs a full turn — its own recall, its own tools — on a budget
+    derived from the caller's. Guards live in `delegation.py`, not in this
+    prompt, because a model cannot be relied on to decline.
+    """
+    from . import delegation
+    from .runtime import run_turn
+
+    target = (agent_id or "").strip()
+    why_not = delegation.refusal(target)
+    if why_not:
+        return why_not
+
+    chain = delegation.current_chain()
+    budget = (chain.effort or get_effort()).child()
+    result = run_turn(target, question, effort=budget)
+    used = ", ".join(sorted({s.name for s in result.trace if s.kind == "tool_call"}))
+    header = f"[{target} answered"
+    header += f", using: {used}]" if used else "]"
+    return f"{header}\n{result.reply}"
+
+
 TOOL_IMPLS = {
+    "ask_agent": _ask_agent,
     "search_brain": _search_brain,
     "remember": _remember,
     "list_entities": _list_entities,
@@ -141,6 +167,26 @@ TOOL_IMPLS = {
 }
 
 TOOL_DEFS: dict[str, Tool] = {
+    "ask_agent": Tool(
+        name="ask_agent",
+        description=(
+            "Ask another Lodestone agent a question and get its answer back. "
+            "Use this when the question belongs to someone else's speciality — "
+            "each agent has its own tools and its own slice of the brain. Ask "
+            "one focused, self-contained question; you stay responsible for the "
+            "final reply to the user."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string",
+                             "description": "Which agent to ask."},
+                "question": {"type": "string",
+                             "description": "A single, self-contained question."},
+            },
+            "required": ["agent_id", "question"],
+        },
+    ),
     "search_brain": Tool(
         name="search_brain",
         description="Search the user's personal brain (memories + knowledge graph) "
@@ -255,17 +301,30 @@ TOOL_DEFS: dict[str, Tool] = {
 }
 
 
-def build_tools(names: list[str]) -> list[Tool]:
+def build_tools(names: list[str], *, self_id: str | None = None) -> list[Tool]:
+    """The tools this agent may use.
+
+    `self_id` is only needed so `ask_agent` can name the other agents in its own
+    description — a model that has to guess an agent id guesses wrong, and a
+    round trip spent discovering the roster is a round trip not spent answering.
+    """
+    from .delegation import roster
+
     tools = []
     seen = set()
     for n in names:
-        if n in seen:
+        if n in seen or n not in TOOL_DEFS:
             continue
         seen.add(n)
-        if n in TOOL_DEFS:
-            t = TOOL_DEFS[n]
-            tools.append(Tool(name=t.name, description=t.description,
-                              parameters=t.parameters, handler=TOOL_IMPLS[n]))
+        t = TOOL_DEFS[n]
+        description = t.description
+        if n == "ask_agent":
+            others = roster(exclude=self_id)
+            if not others:
+                continue                 # nobody to ask; do not offer the tool
+            description = f"{description} Available agents: {others}."
+        tools.append(Tool(name=t.name, description=description,
+                          parameters=t.parameters, handler=TOOL_IMPLS[n]))
     return tools
 
 
