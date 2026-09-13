@@ -814,13 +814,28 @@ def chat_with_chatgpt_subscription(
     else:
         locked, plan_req = evaluate_model_entitlement("openai", req_model, is_connected=True, user_plan=user_plan)
         if locked or (supported_models and req_model not in supported_models):
-            req_plan = plan_req or "Pro"
+            # Only name a plan when the entitlement tables actually said one.
+            # This defaulted to "Pro", so a model the account simply does not
+            # list was reported as "requires Pro" — a specific, confident claim
+            # nobody had checked. We know it is not on this plan; we do not
+            # know which plan would have it.
+            req_plan = plan_req
             display_avail = [m for m in sorted(supported_models) if not m.startswith("codex-auto")] if supported_models else ["gpt-5.6-terra", "gpt-5.6-luna"]
             avail_str = ", ".join(f"`{m}`" for m in display_avail)
+            # Name the *other* way out, not just the one that failed. This path
+            # is only reached when there is no OpenAI API key — a user who has
+            # paid for API credits is told their ChatGPT plan is too small,
+            # which is true and useless, because the thing they can act on is
+            # the key they already have.
+            needs = f" (requires **{req_plan}**)" if req_plan else ""
             return ChatResult(
-                text=f"🔒 Model `{req_model}` is not supported on your **{user_plan}** plan (requires **{req_plan}**).\n\n"
-                     f"Available models on your plan: {avail_str}.\n\n"
-                     f"Please select an available model in the model selector."
+                text=f"🔒 Model `{req_model}` is not supported on your "
+                     f"**{user_plan}** plan{needs}.\n\n"
+                     f"On this plan you can use: {avail_str}.\n\n"
+                     "Pick one of those in the model selector — or, if you have "
+                     "OpenAI **API credits**, add your API key in Models & "
+                     "Accounts and this model will work. A ChatGPT plan and API "
+                     "credits are billed separately and cover different models."
             )
         chosen_model = req_model
 

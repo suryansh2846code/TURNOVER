@@ -503,6 +503,28 @@ def is_provider_connected(provider_id: str, api_key: str | None = None) -> tuple
 _ACCEPTS_ANY_MODEL = {"mock"}
 
 
+def _best_for_account(provider_id: str) -> str | None:
+    """The strongest model this account is actually offered, or None.
+
+    None is still the right answer when we cannot tell — a discovery failure or
+    a hardcoded fallback list is not evidence about this account, and guessing
+    from one would override a model the user can legitimately run.
+    """
+    try:
+        from .discovery import get_discovered_models
+        offered, _ = get_discovered_models(provider_id)
+    except Exception:
+        return None
+    if not offered or any(m.get("is_fallback") for m in offered):
+        return None
+    unlocked = [m["id"] for m in offered if not m.get("locked")]
+    if not unlocked:
+        return None
+    return get_best_unlocked_model(
+        provider=provider_id, available_models=unlocked,
+        is_connected=True, user_plan=None) or unlocked[0]
+
+
 def resolve_usable_model(provider_id: str, model: str | None) -> tuple[str | None, str | None]:
     """Map a *requested* model onto one this user can actually run right now.
 
@@ -516,8 +538,17 @@ def resolve_usable_model(provider_id: str, model: str | None) -> tuple[str | Non
     substitution happened, else None. A `None` model means "let the provider
     pick its own default".
     """
-    if not model or provider_id.lower() in _ACCEPTS_ANY_MODEL:
+    if provider_id.lower() in _ACCEPTS_ANY_MODEL:
         return (model or None), None
+
+    if not model:
+        # "Auto" has to mean "the best model this account can actually run",
+        # not "whatever id is hardcoded as the provider's default". Returning
+        # None here deferred to `registry.default_model`, which for OpenAI is
+        # `gpt-5.6-terra` — a model a ChatGPT Free account cannot run. The user
+        # then got "requires Pro" about a model they never chose, from the one
+        # setting that is supposed to be the safe choice.
+        return _best_for_account(provider_id), None
 
     try:
         from .discovery import get_discovered_models
@@ -540,12 +571,25 @@ def resolve_usable_model(provider_id: str, model: str | None) -> tuple[str | Non
         # model the user can legitimately run.
         return model, None
 
+    # Only ever choose among models discovery already marked unlocked. That
+    # flag was computed against what this account reports it can run
+    # (`discovery.py`: `locked = not is_supported`), and it is the only place
+    # the user's plan is actually known.
+    #
+    # This used to hand `get_best_unlocked_model` the *whole* list with
+    # `user_plan=None`, which re-derived entitlement with no plan to check
+    # against — so every model looked unlocked and the repair returned the
+    # highest-priority one. For a ChatGPT Free account that is `gpt-5.6-terra`:
+    # the function whose entire job is to replace a plan-locked model handed
+    # back a plan-locked model, and the user got "requires Pro" on a model they
+    # never chose.
+    unlocked = [m["id"] for m in offered if not m.get("locked")]
     substitute = get_best_unlocked_model(
         provider=provider_id,
-        available_models=[m["id"] for m in offered],
+        available_models=unlocked,
         is_connected=True,
         user_plan=None,
-    ) or next((m["id"] for m in offered if not m.get("locked")), None)
+    ) or (unlocked[0] if unlocked else None)
 
     if substitute and substitute != model:
         return substitute, model

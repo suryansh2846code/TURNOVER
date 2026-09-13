@@ -39,8 +39,22 @@ def test_a_live_model_passes_through_untouched(connected):
     assert resolve_usable_model("xai", "grok-4.5") == ("grok-4.5", None)
 
 
-def test_no_model_stays_no_model(connected):
-    assert resolve_usable_model("xai", None) == (None, None)
+def test_no_model_resolves_to_one_the_account_can_run(connected):
+    """"Auto" means the best model this account offers, not a hardcoded id.
+
+    This asserted `(None, None)` — "no model stays no model" — which sounds
+    conservative and was not. None means `registry.default_model` decides, and
+    that is a constant chosen long before any user had an account. A ChatGPT
+    Free account was refused for `gpt-5.6-terra` it had never selected, from
+    the one setting that is supposed to be the safe choice.
+
+    Inventing a model where we have *no evidence* is still wrong, and still
+    does not happen — a fallback catalog or a failed discovery returns None.
+    """
+    usable, replaced = resolve_usable_model("xai", None)
+
+    assert usable in {m.id for m in LIVE}
+    assert replaced is None, "nothing was replaced — the user asked for Auto"
 
 
 def test_a_plan_locked_model_is_replaced_with_one_the_user_can_run(monkeypatch):
