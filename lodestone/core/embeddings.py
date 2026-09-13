@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import hashlib
 import re
-from functools import lru_cache
 
 import numpy as np
 
 from ..config import get_settings
+from .once import once
 
 _TOKEN = re.compile(r"[a-z0-9]+")
 
@@ -179,7 +179,7 @@ class GeminiEmbedder(Embedder):
         return _normalize(np.asarray(out, dtype=np.float32))
 
 
-@lru_cache
+@once
 def get_embedder() -> Embedder:
     s = get_settings()
     provider = (s.embedding_provider or "hash").lower()

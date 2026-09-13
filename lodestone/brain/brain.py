@@ -8,10 +8,10 @@ knowing the user.
 from __future__ import annotations
 
 from datetime import UTC
-from functools import lru_cache
 from typing import Any
 
 from ..core.chunk import chunk_text
+from ..core.once import once
 from ..core.store import MemoryStore, get_store
 from ..log import suppressed
 from . import extract as extractor
@@ -924,6 +924,6 @@ class Brain:
         return s
 
 
-@lru_cache
+@once
 def get_brain() -> Brain:
     return Brain()

@@ -19,7 +19,6 @@ import uuid
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +37,7 @@ from .models import (
     RecallHit,
     map_kind_to_memory_type,
 )
+from .once import once
 
 log = logging.getLogger("lodestone.store")
 
@@ -970,6 +970,6 @@ def _tokenize(text: str) -> builtins.list[str]:
     return [t for t in _TOKEN.findall(text.lower()) if t not in _STOP]
 
 
-@lru_cache
+@once
 def get_store() -> MemoryStore:
     return MemoryStore()
