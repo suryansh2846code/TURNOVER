@@ -22,18 +22,31 @@ import secrets
 import threading
 import time
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 from ..config import get_settings
+from ..log import suppressed
 from .connections import ACCOUNT, ConnectionStatus, get_connection, save_connection
 
 logger = logging.getLogger(__name__)
 
 CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+
+# Who the authorization request says it is.
+#
+# This must match CLIENT_ID above. That client is the Codex CLI's public PKCE
+# client — the sanctioned way to reach a ChatGPT subscription, the same shape as
+# the Claude and Cursor backends — and its originator is `codex_cli_rs`.
+#
+# It used to read `opencode`, which is a different product's identifier. Sending
+# another project's name to the vendor misreports who is calling, and leaves
+# every Lodestone user's sign-in breakable by a decision aimed at somebody else.
+# An identifier is either the vendor's, or ours; it is never a third party's.
+ORIGINATOR = "codex_cli_rs"
 AUTH_BASE_URL = "https://auth.openai.com"
 REDIRECT_PORT = 1455
 REDIRECT_URI = f"http://localhost:{REDIRECT_PORT}/auth/callback"
@@ -52,20 +65,16 @@ def _load_stored_chatgpt_data() -> dict[str, Any] | None:
     settings = get_settings()
     raw = settings.get_secret(_SECRET_KEY_CHATGPT_TOKEN)
     if raw:
-        try:
+        with suppressed("return json.loads(raw)"):
             return json.loads(raw)
-        except Exception:
-            pass
     # Auto-migrate legacy plaintext file to keychain if present
     legacy = settings.home / "chatgpt_token.json"
     if legacy.exists():
-        try:
+        with suppressed("data = json.loads(legacy.read_text()) …"):
             data = json.loads(legacy.read_text())
             settings.set_secret(_SECRET_KEY_CHATGPT_TOKEN, json.dumps(data))
             legacy.unlink(missing_ok=True)
             return data
-        except Exception:
-            pass
     return None
 
 
@@ -102,7 +111,7 @@ def _decode_jwt_payload(jwt_token: str) -> dict[str, Any]:
         data = base64.urlsafe_b64decode(payload.encode("utf-8"))
         return json.loads(data.decode("utf-8"))
     except Exception as exc:
-        logger.warning(f"Failed to parse JWT payload: {exc}")
+        logger.warning("Failed to parse JWT payload: %s", exc)
         return {}
 
 
@@ -217,13 +226,11 @@ def get_chatgpt_subscription_usage(force_refresh: bool = False) -> dict[str, Any
 
     account_id = None
     plan_from_jwt = "free"
-    try:
+    with suppressed("claims = _decode_jwt_payload(token) …"):
         claims = _decode_jwt_payload(token)
         auth_claims = claims.get("https://api.openai.com/auth") or {}
         account_id = auth_claims.get("chatgpt_account_id")
         plan_from_jwt = auth_claims.get("chatgpt_plan_type") or "free"
-    except Exception:
-        pass
 
     try:
         import urllib.request
@@ -278,7 +285,7 @@ def get_chatgpt_subscription_usage(force_refresh: bool = False) -> dict[str, Any
                 _USAGE_CACHE_TIME = time.time()
                 return usage_res
     except Exception as exc:
-        logger.warning(f"ChatGPT live usage query failed: {exc}")
+        logger.warning("ChatGPT live usage query failed: %s", exc)
 
     if _USAGE_CACHE:
         return _USAGE_CACHE
@@ -290,7 +297,7 @@ def detect_chatgpt_local_session(fetch_usage: bool = True) -> dict[str, Any] | N
     # 1. First check Lodestone's own securely stored token in Keychain
     stored = _load_stored_chatgpt_data()
     if stored:
-        try:
+        with suppressed("plan_name, email, name = _identity_from_tokens(stored) …"):
             plan_name, email, name = _identity_from_tokens(stored)
             if email:
                 usage = get_chatgpt_subscription_usage() if fetch_usage else None
@@ -304,13 +311,11 @@ def detect_chatgpt_local_session(fetch_usage: bool = True) -> dict[str, Any] | N
                     "usage": usage,
                     "has_token": True,
                 }
-        except Exception:
-            pass
 
     # 2. Check ~/.codex/auth.json for existing local account presence metadata (NEVER copy tokens)
     codex_auth = _codex_auth_path()
     if codex_auth.exists():
-        try:
+        with suppressed("data = json.loads(codex_auth.read_text()) …"):
             data = json.loads(codex_auth.read_text())
             plan_name, email, name = _identity_from_tokens(data)
             if email:
@@ -322,8 +327,6 @@ def detect_chatgpt_local_session(fetch_usage: bool = True) -> dict[str, Any] | N
                     "usage": None,
                     "has_token": False,
                 }
-        except Exception:
-            pass
 
     return None
 
@@ -335,7 +338,7 @@ def adopt_local_chatgpt_session() -> tuple[bool, str, dict[str, Any]]:
         return False, "No local ChatGPT session found on this computer", {}
 
     # Bind connection state without duplicating another app's secret tokens
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn = get_connection("openai")
     source = info.get("source")
     conn.auth_method = "cli" if source == "codex_cli" else "account"
@@ -467,12 +470,12 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
                     "tokens": token_data,
                     "email": email,
                     "name": name,
-                    "last_refresh": datetime.now(timezone.utc).isoformat(),
+                    "last_refresh": datetime.now(UTC).isoformat(),
                 }
                 _save_stored_chatgpt_data(payload)
 
                 # Update DB connection record
-                now = datetime.now(timezone.utc).isoformat()
+                now = datetime.now(UTC).isoformat()
                 conn = get_connection("openai")
                 conn.auth_method = "account"
                 conn.email = email
@@ -483,11 +486,9 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
                 conn.last_verified_at = now
                 save_connection(conn)
 
-                try:
+                with suppressed("from .registry import clear_provider_cache …"):
                     from .registry import clear_provider_cache
                     clear_provider_cache()
-                except Exception:
-                    pass
 
                 with _GLOBAL_AUTH_STATE.lock:
                     _GLOBAL_AUTH_STATE.status = "success"
@@ -514,15 +515,13 @@ class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
             _stop_server_async()
         except Exception as top_exc:
             logger.exception("Unhandled error in ChatGPT OAuth callback handler")
-            try:
+            with suppressed("self._render_response("):
                 self._render_response(
                     title="Lodestone - Error",
                     heading="✕ Sign-In Processing Error",
                     message=str(top_exc),
                     is_error=True,
                 )
-            except Exception:
-                pass
             _stop_server_async()
 
     def _render_response(self, title: str, heading: str, message: str, is_error: bool = False):
@@ -603,11 +602,9 @@ def _stop_server_async():
         time.sleep(1.0)
         with _GLOBAL_AUTH_STATE.lock:
             if _GLOBAL_AUTH_STATE.server:
-                try:
+                with suppressed("_GLOBAL_AUTH_STATE.server.shutdown() …"):
                     _GLOBAL_AUTH_STATE.server.shutdown()
                     _GLOBAL_AUTH_STATE.server.server_close()
-                except Exception:
-                    pass
                 _GLOBAL_AUTH_STATE.server = None
                 _GLOBAL_AUTH_STATE.thread = None
 
@@ -622,11 +619,9 @@ def start_chatgpt_oauth_flow() -> tuple[bool, str, str]:
     with _GLOBAL_AUTH_STATE.lock:
         # Cleanly stop any existing server before starting a fresh one
         if _GLOBAL_AUTH_STATE.server:
-            try:
+            with suppressed("_GLOBAL_AUTH_STATE.server.shutdown() …"):
                 _GLOBAL_AUTH_STATE.server.shutdown()
                 _GLOBAL_AUTH_STATE.server.server_close()
-            except Exception:
-                pass
             _GLOBAL_AUTH_STATE.server = None
             _GLOBAL_AUTH_STATE.thread = None
 
@@ -648,7 +643,7 @@ def start_chatgpt_oauth_flow() -> tuple[bool, str, str]:
             "id_token_add_organizations": "true",
             "codex_cli_simplified_flow": "true",
             "state": state,
-            "originator": "opencode",
+            "originator": ORIGINATOR,
         }
         auth_url = f"{AUTH_BASE_URL}/oauth/authorize?{urllib.parse.urlencode(params)}"
 
@@ -658,7 +653,7 @@ def start_chatgpt_oauth_flow() -> tuple[bool, str, str]:
         except OSError as exc:
             # The redirect URI is registered against this exact port, so there is
             # no fallback — another sign-in already holds it.
-            logger.warning(f"Could not bind to port {REDIRECT_PORT}: {exc}")
+            logger.warning("Could not bind to port %s: %s", REDIRECT_PORT, exc)
             return False, auth_url, (
                 f"Port {REDIRECT_PORT} is already in use — another ChatGPT "
                 "sign-in is in progress (quit `codex login` and try again)."
@@ -708,12 +703,10 @@ def get_chatgpt_access_token() -> str | None:
         # written to Lodestone's own store, never back into ~/.codex.
         codex_auth = _codex_auth_path()
         if codex_auth.exists():
-            try:
+            with suppressed("d = json.loads(codex_auth.read_text()) …"):
                 d = json.loads(codex_auth.read_text())
                 if d.get("tokens", {}).get("access_token"):
                     data = d
-            except Exception:
-                pass
 
     if not data:
         return None
@@ -744,11 +737,11 @@ def get_chatgpt_access_token() -> str | None:
                     if r.status_code == 200:
                         new_toks = r.json()
                         data["tokens"] = new_toks
-                        data["last_refresh"] = datetime.now(timezone.utc).isoformat()
+                        data["last_refresh"] = datetime.now(UTC).isoformat()
                         _save_stored_chatgpt_data(data)
                         return new_toks.get("access_token")
                 except Exception as refresh_exc:
-                    logger.warning(f"Failed to refresh ChatGPT token: {refresh_exc}")
+                    logger.warning("Failed to refresh ChatGPT token: %s", refresh_exc)
 
         return tok
     except Exception:
@@ -764,6 +757,7 @@ def chat_with_chatgpt_subscription(
 ) -> Any:
     """Execute a chat completion request through ChatGPT Subscription backend."""
     import uuid
+
     from .base import ChatResult, ToolCall
 
     token = get_chatgpt_access_token()
@@ -859,7 +853,7 @@ def chat_with_chatgpt_subscription(
                 data_str = line[6:]
                 if data_str == "[DONE]":
                     break
-                try:
+                with suppressed("evt = json.loads(data_str) …"):
                     evt = json.loads(data_str)
                     etype = evt.get("type")
                     if etype == "response.output_text.delta":
@@ -875,8 +869,6 @@ def chat_with_chatgpt_subscription(
                             except Exception:
                                 parsed_args = {}
                             calls.append(ToolCall(id=cid, name=cname, arguments=parsed_args))
-                except Exception:
-                    pass
     except httpx.HTTPStatusError as exc:
         from .errors import ErrorKind, classify_http
 
