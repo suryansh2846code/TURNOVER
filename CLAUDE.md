@@ -24,7 +24,9 @@ What that means concretely, and what it has already changed:
 - **Never surface an internal.** No raw provider JSON, no stack traces, no
   internal ids in user-facing text. Errors say what happened and what to do
   (`models/errors.py`).
-- **A floating card is a Spaces problem, not a z-order problem.** The sign-in
+- **A floating card is a Spaces problem, not a z-order problem.** *(Full record,
+  with the measurements and the wrong turns:
+  [`docs/DESKTOP-SIGNIN.md`](docs/DESKTOP-SIGNIN.md).)* The sign-in
   card kept vanishing when the user switched to the browser. It was never
   *behind* anything — pywebview's `on_top` already gave it `NSStatusWindowLevel`
   (25), above every normal window. With the default collection behaviour a
@@ -144,6 +146,12 @@ what to do next? If not, it is not finished.
 ## Layout
 - `lodestone/api/app.py` — all HTTP routes (FastAPI). Serves `/` (workspace) and
   `/onboarding`, mounts `/static`, and the `/api/*` JSON API.
+- `lodestone/hud.py` + `lodestone/web/signin_hud.html` — the floating sign-in
+  card: one reused, transparent, frameless window that follows the user to the
+  browser. Read [`docs/DESKTOP-SIGNIN.md`](docs/DESKTOP-SIGNIN.md) before
+  changing it; nearly every line there is load-bearing for a bug that shipped.
+- `lodestone/models/login_processes.py` — every vendor-CLI login we spawn, tracked
+  to disk and reaped on launch and quit.
 - `lodestone/web/` — the entire frontend, **vanilla JS, no build step**:
   - `index.html` + `app.js` + `styles.css` — the workspace.
   - `onboarding.html` — the self-contained cinematic onboarding (Connect → Build →

@@ -21,6 +21,11 @@ knowledge-graph brain** on your own machine. Then spin up specialized **agents**
 > every part works, and why each decision was made — and
 > [`docs/CONCEPTS.md`](docs/CONCEPTS.md) — embeddings, vector search, semantic
 > search and the knowledge graph explained from scratch.
+>
+> 📖 **Working on the desktop window or sign-in?** Read
+> [`docs/DESKTOP-SIGNIN.md`](docs/DESKTOP-SIGNIN.md) first — the floating card,
+> the macOS window behaviour behind it, and the measured record of what went
+> wrong. Several of the obvious explanations turned out to be wrong.
 
 ---
 

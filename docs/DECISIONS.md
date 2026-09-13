@@ -266,6 +266,90 @@ or prefer the heuristic for single short ingests.
 
 ---
 
+## Desktop sign-in & window behaviour (W-series)
+
+> Full record, with measurements and the wrong turns:
+> [`DESKTOP-SIGNIN.md`](DESKTOP-SIGNIN.md).
+
+### W1 — The floating card is raised by the page, never by the API
+`window.pywebview.api.open_signin_hud(...)` from the frontend; the backend never
+creates a window.
+**Why:** under `lodestone app --dev` the backend is a separate uvicorn process
+with no handle on the webview, so a backend-initiated window silently did
+nothing. The frontend always runs inside the webview.
+
+### W2 — `NSFloatingWindowLevel`, not `NSStatusWindowLevel`
+pywebview's `on_top` gives status level (25). We set floating (3).
+**Why:** status level also covers the menu bar and system UI, which a sign-in
+card has no business claiming. Level was never the bug — see W3 — so the higher
+level bought nothing and cost correctness.
+
+### W3 — `CanJoinAllSpaces | FullScreenAuxiliary`, and NOT `Stationary`
+**Why:** the card "going behind other apps" was never z-order. A window with the
+default collection behaviour belongs to the Space it was created on, so switching
+Spaces left it behind — measured, `isOnActiveSpace` went `False`. `Stationary`
+pins a window to screen coordinates during Space transitions (for wallpaper-like
+overlays) and is redundant once a window joins every Space; tested, changed
+nothing. Applying every flag that sounds relevant is how a floating panel starts
+behaving like a screen-saver overlay.
+
+### W4 — Accept that the card cannot cover another app's full-screen Space
+**Why:** measured across levels 3/25/101, with and without `Stationary`, and with
+an accessory activation policy — none reach it. Apps that manage it are
+`LSUIElement` accessory apps using a non-activating `NSPanel`; pywebview creates
+a plain `NSWindow`, and making Lodestone dockless is not worth this. The in-app
+row in the Models panel is the fallback, which is why it stays on screen even
+when the floating card is up.
+
+### W5 — `orderFrontRegardless()` instead of the backend's `show()`
+**Why:** pywebview's `show()` is `makeKeyAndOrderFront_` +
+`activateIgnoringOtherApps_`, which pulls keyboard focus out of the browser the
+user is signing in to — on every card update. A click on the card still brings
+the app forward normally.
+
+### W6 — The window sizes itself to the card
+`_Bridge.fit` → `_resize_now`, driven by a `ResizeObserver` and re-run on
+`document.fonts.ready`, anchored at the **top** edge.
+**Why:** the copy differs per provider and per state, so a fixed height either
+leaves a hole under the text or clips it. Cocoa's origin is the bottom-left, so
+resizing naively walks the card up the screen. `overflow: hidden` on `html, body`
+is load-bearing: a window a pixel short grows a scrollbar, which rewraps the text
+and makes the card taller, so the window chases a height that keeps moving.
+
+### W7 — The webview's backdrop is cleared, not just the window
+**Why:** a transparent window is not enough. WKWebView fills its bounds with
+`underPageBackgroundColor` (opaque white, measured at alpha 1.0), which showed as
+a white block below the card. pywebview's transparency support predates that
+property and only clears the older `drawsBackground`.
+
+### W8 — Anything we spawn, we clean up — across runs
+`models/login_processes.py` records every vendor-CLI login to disk; `run_app`
+reaps on launch and on quit; only recorded PIDs are signalled, and only after
+re-checking the command line.
+**Why:** a CLI `login` waits for a browser callback that may never come, nothing
+reaped them, and the handle lived in module state so each launch forgot the last
+one's. **158 were found alive on one machine**, each holding the vendor's OAuth
+callback port until sign-in stopped working. A reused PID killed is worse than
+the leak, hence the command-line re-check.
+
+### W9 — The webview origin is user state, so the port is fixed
+`_reserve_port` binds the saved port the way uvicorn does (**`SO_REUSEADDR`**) and
+hands that socket to the server.
+**Why:** `localStorage` is keyed to the origin. The old probe bound without
+`SO_REUSEADDR`, so a port left in `TIME_WAIT` by the server that had just exited
+read as taken; the app moved to a random port and the onboarding flag, chosen
+model and lead agent all silently vanished. Symptom: **every other launch opened
+empty.**
+
+### W10 — Tests may never start a real sign-in
+`conftest.py` swaps the argv of any `login` spawn for a command that exits at once.
+**Why:** `flow.start()` and `POST /signin` reach `claude auth login` for real, and
+**every pytest run left one alive** — the dominant source of W8's 158. The flows
+still run their own code; only the vendor binary is kept out. Third test-hygiene
+incident here, after tests writing to the real Keychain and binding port 1455.
+
+---
+
 ## Deferred (tracked, do later)
 
 - **Tier 2 scaling**: sqlite-vec (ANN) + FTS5 + incremental indexing, for when the

@@ -150,6 +150,64 @@ SQLite `busy_timeout`, clean provider error messages, API input validation, and
 the test suite grown **6 → 58**. A machine-portability audit removed the last
 "works on my machine" gap (a gitignored OAuth client). Every fix stayed **systemic**.
 
+## Chapter 12 — The model layer, and the sign-in that followed the user
+The next demand was blunt: *"make the provider appear unlocked only when it is
+connected"* — and then the one that shaped everything after it, **"make a system
+that is dynamic, not only for my computer; everytime any user does that he have
+same experience like me."**
+
+That became the rule now at the top of `CLAUDE.md`: **model availability is
+resolved per user, never hardcoded.** Connection first, then the provider's own
+answer for *this account*, and only then a conservative static table. Hardcoded
+catalogs are fallbacks, flagged `is_fallback`, replaced the moment a credential
+exists. An audit found **13 dead model ids** being offered — 4 of 6 Claude, all 5
+xAI, the OpenRouter and Cursor defaults, and all 5 Cursor ids were fictional.
+Retired ids are worse than a short list: they render as selectable and fail at
+send time.
+
+Two things fell out of researching how competitors reach paid plans. First,
+**every subscription path is a vendor CLI** — `claude -p`, `agent -p`, `grok -p`,
+codex — because the OAuth client belongs to that CLI; there is no private API to
+find. Second, **a subscription is not an API key**: a SuperGrok plan grants no
+credits on `api.x.ai`, so an xAI OAuth token authenticates and then 402s on every
+request. It is reported as not-ready with an explanation rather than sold as
+working. Then: *"bundle them, because not every user had them installed"* — so we
+download and pin the CLIs ourselves, reading a vendor's install script as a
+*manifest* rather than piping it into a shell.
+
+### The sign-in card, and a week of wrong guesses
+The last stretch was one small window. A browser sign-in leaves the app, so the
+status had to follow — a floating card, like a system notification. It kept
+vanishing the moment the user switched to Chrome.
+
+I guessed "window level" twice and was wrong both times: pywebview already had it
+**above** every normal window. The real answer was **Spaces** — a window with the
+default collection behaviour belongs to the Space it was born on. We ended up
+*lowering* the level and fixing the collection behaviour instead. It still cannot
+cover another app's full-screen Space; that was measured across five
+level/behaviour/policy combinations before being written down as a limit rather
+than guessed at.
+
+Underneath it were four bugs that had nothing to do with windows. A
+**temporal-dead-zone `ReferenceError`** in `app.js` tore the card down the instant
+the browser opened — `node --check` passes on TDZ, and the click harness that
+existed had every fixture short-circuiting into a branch that never reached it. A
+port probe binding without `SO_REUSEADDR` made **every other launch open empty**,
+because `localStorage` is keyed to the origin and the app kept falling back to a
+random port. **158 live `claude auth login` processes** were slowly strangling the
+machine — and the biggest source was *the test suite*, spawning a real one on
+every run. And the Models drawer froze the app for ten seconds until it was
+**profiled** (after two more wrong guesses) and the subprocess probes cached:
+5.64s → 0.29s.
+
+The throughline of the chapter: **measure before explaining.** Reading the
+NSWindow directly, asking the window server who was actually on top, and
+measuring the page's own geometry settled in minutes what argument had got wrong
+for days. And every regression test here was validated by putting the old bug
+back and watching it fail. Full record in
+**[`DESKTOP-SIGNIN.md`](DESKTOP-SIGNIN.md)**, decisions as **W1–W10** in
+DECISIONS.md.
+
 ## What's next (tracked)
 MCP (brain-as-a-service — server already scaffolded) · encrypt-at-rest done, next
 transparency panel polish · on-demand fetch for Gmail · Tier-2 scaling (sqlite-vec +

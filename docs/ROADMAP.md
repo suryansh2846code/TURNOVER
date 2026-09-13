@@ -215,6 +215,17 @@ worth it.
         full set).
 
 ## Known constraints (not bugs, won't "fix")
+- **The floating sign-in card cannot cover another app's full-screen Space.**
+  Measured across levels 3/25/101, with and without `Stationary`, and with an
+  accessory activation policy — none reach it. Apps that manage this (Alfred,
+  Raycast) are `LSUIElement` accessory apps using a non-activating `NSPanel`;
+  pywebview creates a plain `NSWindow`, and making Lodestone dockless is not a
+  trade worth it. The in-app row in the Models panel is the fallback, which is
+  why it stays on screen even when the card is up. See
+  [`DESKTOP-SIGNIN.md`](DESKTOP-SIGNIN.md).
+- **Multi-display placement is correct by construction but unverified.** The card
+  is positioned against `NSScreen.visibleFrame` on the screen under the pointer;
+  only one display was available to test on.
 - **claude-code** backend: latency (spawns a Claude session per message) + your
   Claude usage/session limits. Fallback: switch to `ollama` (free, local).
 - Cloud models send the injected context to the provider at query time; only a
@@ -225,4 +236,9 @@ Agent-first workspace · BYO model (claude-code/ollama/…) · knowledge-graph b
 BGE semantic recall · Gmail (all-mail, HTML-stripped, dated) · Calendar · Drive
 (.docx/.pptx + Shared-with-me) · date-aware retrieval · source overviews ·
 continuous background sync · self-healing dedup · **on-demand Drive fetch (lazy
-loading)** · full docs (PROJECT/CONCEPTS/DECISIONS/JOURNEY).
+loading)** · full docs (PROJECT/CONCEPTS/DECISIONS/JOURNEY) · **per-user model
+entitlements (no hardcoded catalogs)** · **bundled vendor CLIs** · **independent
+account/API-key credentials** · **one sign-in protocol (`auth_flows`)** ·
+**translated provider errors** · **floating sign-in card that follows the user
+across Spaces** · **vendor-login process cleanup** · **model-layer freeze suites
+(42 invariants)**.
