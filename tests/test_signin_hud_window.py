@@ -9,6 +9,8 @@ These assert the AppKit calls the raise path makes, and just as importantly the
 ones it must not: activating the app would pull keyboard focus out of the
 browser mid-sign-in, every time the card updated.
 """
+import re
+
 import pytest
 
 AppKit = pytest.importorskip("AppKit", reason="macOS-only window behaviour")
@@ -228,3 +230,37 @@ def test_the_card_does_not_pad_itself_to_the_window():
     assert "margin-top: auto" not in css, "the button is spring-loaded again"
     assert "align-items: flex-start" in css, "the card stretches to the window"
     assert "ResizeObserver" in css, "nothing re-fits the window when the copy changes"
+
+
+# ── nothing opaque behind the card ───────────────────────────────────────
+def test_the_web_view_paints_no_backdrop():
+    """A transparent window is not enough. WKWebView fills its bounds with
+    underPageBackgroundColor — opaque white by default — which showed as a white
+    block below the card. pywebview only clears the older `drawsBackground`."""
+    view = FakeWindow()
+    hud._clear_webview_backdrop(view)
+
+    assert ("setValue_forKey_", (False, "drawsBackground")) in view.calls
+    backdrop = view.named("setUnderPageBackgroundColor_")
+    assert backdrop, "underPageBackgroundColor left at its opaque default"
+    assert float(backdrop[0][1][0].alphaComponent()) == 0.0
+
+
+def test_raising_the_card_clears_the_backdrop(monkeypatch):
+    """Clearing it once at creation is not enough — the page is reloaded for
+    every sign-in, and this is the path every one of them takes."""
+    view = FakeWindow()
+    monkeypatch.setattr(hud, "_native_webview", lambda: view)
+    hud._raise_now(FakeWindow(), 348, 219)
+    assert view.named("setUnderPageBackgroundColor_"), "backdrop not cleared on raise"
+
+
+def test_the_page_can_never_grow_a_scrollbar():
+    """A window a pixel shorter than the card grows a scrollbar, which narrows
+    the body, rewraps the text and makes the card taller — so the window chases
+    a height that keeps moving away from it."""
+    css = CARD_HTML.read_text()
+    rule = re.search(r"html,\s*body\s*\{([^}]*)\}", css)
+    assert rule, "no html/body rule at all"
+    assert "overflow: hidden" in rule.group(1), (
+        "html/body can grow a scrollbar, and the window will oscillate chasing it")

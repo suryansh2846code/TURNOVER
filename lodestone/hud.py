@@ -94,6 +94,40 @@ def _native_window():
         return None
 
 
+def _native_webview():
+    """The WKWebView inside the card's window, or None when there isn't one."""
+    if _hud_window is None:
+        return None
+    try:
+        from webview.platforms.cocoa import BrowserView
+
+        instance = BrowserView.instances.get(_hud_window.uid)
+        return instance.webview if instance is not None else None
+    except Exception:
+        return None
+
+
+def _clear_webview_backdrop(webview_) -> None:
+    """Stop the web view painting an opaque sheet behind the page.
+
+    A transparent window is not enough. WKWebView fills its bounds with
+    `underPageBackgroundColor` — opaque white by default — which is what showed
+    below the card as a white block. pywebview's transparency support predates
+    that property, so it sets `drawsBackground` and stops there.
+    """
+    import AppKit
+
+    try:
+        webview_.setValue_forKey_(False, "drawsBackground")
+    except Exception:
+        logger.debug("web view keeps its background", exc_info=True)
+    try:
+        webview_.setUnderPageBackgroundColor_(AppKit.NSColor.clearColor())
+    except Exception:
+        # macOS 12+ only; older systems have nothing to clear.
+        logger.debug("no underPageBackgroundColor on this system", exc_info=True)
+
+
 def _apply_float_behaviour(nswin) -> None:
     """Make the card a floating panel rather than an ordinary window.
 
@@ -199,6 +233,9 @@ def _raise_now(nswin, width: int, height: int) -> None:
     does and does not make."""
     try:
         _apply_float_behaviour(nswin)
+        webview_ = _native_webview()
+        if webview_ is not None:
+            _clear_webview_backdrop(webview_)
         nswin.setFrameOrigin_(_visible_corner(width, height))
         nswin.orderFrontRegardless()
     except Exception:

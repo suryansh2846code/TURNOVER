@@ -17,7 +17,11 @@
   /* The window itself is transparent, so the rounded card IS the card — there
      is no opaque window backing to show as a pale border around it. The body
      padding is the room the shadow needs to render, nothing more. */
-  html, body { height: 100%; margin: 0; background: transparent; }
+  /* overflow:hidden is load-bearing. If the window is ever a pixel shorter
+     than the card a scrollbar appears, which narrows the body, rewraps the
+     text and makes the card taller — so the window chases a height that keeps
+     moving away from it. */
+  html, body { height: 100%; margin: 0; background: transparent; overflow: hidden; }
   body {
     font-family: var(--sans);
     color: var(--text);
