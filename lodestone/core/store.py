@@ -26,7 +26,7 @@ import numpy as np
 
 from ..config import get_settings
 from .db import connect
-from .embeddings import get_embedder
+from .embeddings import Embedder, get_embedder
 from .models import (
     Memory,
     MemoryStatus,
@@ -132,11 +132,38 @@ class MemoryStore:
         self.db_path = Path(db_path) if db_path else settings.db_path
         self._conn = connect(self.db_path)
         self._lock = threading.Lock()
-        self._embedder = embedder or get_embedder()
+        # Built on first use, never at construction. The local embedding model
+        # takes ~10s to load, and almost nothing that opens a store needs it:
+        # listing connectors, reading stats and serving the page all touch this
+        # object and none of them embed anything. Loading eagerly meant the
+        # window painted in 0.24s and then sat dead for 15 seconds — which is
+        # "opening a panel must not block", one layer down.
+        self._injected_embedder = embedder
+        self._embedder_cache: Embedder | None = None
         # in-memory vector cache for fast recall
         self._vecs: np.ndarray | None = None
         self._ids: list[str] = []
         self._dirty = True
+
+    @property
+    def _embedder(self) -> Embedder:
+        """The embedder, loaded the first time something actually needs it."""
+        if self._embedder_cache is None:
+            self._embedder_cache = self._injected_embedder or get_embedder()
+        return self._embedder_cache
+
+    def embedder_name(self) -> str:
+        """Which embedder this store uses, without building it.
+
+        Reporting is not using. `stats()` wants a label for the UI, and paying
+        ten seconds of model load for a string is how a status endpoint becomes
+        the slowest thing in the app.
+        """
+        if self._embedder_cache is not None:
+            return self._embedder_cache.name
+        if self._injected_embedder is not None:
+            return self._injected_embedder.name
+        return (get_settings().embedding_provider or "hash").lower()
 
     # ── writing ────────────────────────────────────────────────────────────
     def add(
@@ -521,7 +548,11 @@ class MemoryStore:
             "by_status": {r["status"]: r["c"] for r in status_rows},
             "by_type": {r["memory_type"]: r["c"] for r in type_rows},
             "open_loops": {r["status"]: r["c"] for r in loop_rows},
-            "embedder": self._embedder.name,
+            # The configured name, not the loaded object's. Reading a string
+            # off the embedder forced the whole model to load — 16 seconds to
+            # answer "how many memories do I have", on the endpoint the header
+            # pill polls.
+            "embedder": self.embedder_name(),
             "home": str(get_settings().home),
         }
 

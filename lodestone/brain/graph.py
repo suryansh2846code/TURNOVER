@@ -47,9 +47,19 @@ class GraphStore:
         self._store = store
         self._conn = store._conn
         self._lock = store._lock
-        self._embedder = get_embedder()
+        # Lazy for the same reason as the store's: the graph is constructed on
+        # every `Brain()`, and reading entity counts does not embed anything.
+        self._embedder_cache = None
 
     # ── entities ─────────────────────────────────────────────────────────
+    @property
+    def _embedder(self):
+        """Loaded on first use — see MemoryStore._embedder."""
+        if self._embedder_cache is None:
+            self._embedder_cache = get_embedder()
+        return self._embedder_cache
+
+
     def upsert_entity(
         self,
         name: str,

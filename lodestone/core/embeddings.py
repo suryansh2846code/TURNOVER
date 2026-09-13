@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import threading
 
 import numpy as np
 
@@ -177,6 +178,37 @@ class GeminiEmbedder(Embedder):
             resp.raise_for_status()
             out.append(resp.json()["embedding"]["values"])
         return _normalize(np.asarray(out, dtype=np.float32))
+
+
+def warm_embedder() -> None:
+    """Load the embedding model in the background, so the first search is fast.
+
+    Making the model lazy fixed the window painting and then sitting dead for
+    fifteen seconds, but it moved the wait rather than removing it: nothing
+    loaded the model until the user's first search, which then took thirteen
+    seconds with no explanation.
+
+    So it is built off the critical path instead. The app answers immediately,
+    the model loads while the user is reading their workspace, and `once()`
+    means a search that arrives mid-load waits for *that* load rather than
+    starting a second one.
+
+    Skipped for the offline `hash` embedder, which has nothing to load and
+    would only cost a thread.
+    """
+    from ..config import get_settings
+    from ..log import get_logger
+
+    if (get_settings().embedding_provider or "hash").lower() == "hash":
+        return
+
+    def load() -> None:
+        from ..log import suppressed
+        with suppressed("warming the embedding model"):
+            get_embedder()
+
+    threading.Thread(target=load, name="embedder-warmup", daemon=True).start()
+    get_logger(__name__).debug("warming the embedding model in the background")
 
 
 @once

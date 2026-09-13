@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..config import get_settings
+from ..core.embeddings import warm_embedder
 from ..log import get_logger
 from ..scheduler import get_scheduler
 from .assets import WEB
@@ -34,6 +35,10 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     reload and two of them ran at once.
     """
     await _apply_thread_limit()
+    # Off the critical path on purpose: the model takes ~10s to load and the
+    # UI's own endpoints do not need it. Warming it here means the workspace
+    # answers immediately and the first search is fast anyway.
+    warm_embedder()
     get_scheduler().start()
     try:
         yield
