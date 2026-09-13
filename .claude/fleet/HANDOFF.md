@@ -486,3 +486,73 @@ CONTRACT:     additive — consumes fields that do not exist yet and degrades to
               ships, in either order.
 BLOCKING:     no
 ```
+
+---
+
+```
+TASK:         Integrate connector tools into the agent loop — four sessions
+OWNER:        Architect
+FILES:        merges of agent/{qa,connectors,agents,frontend} · plus, as
+              integration fixes: lodestone/agents/permissions.py,
+              lodestone/agents/mcp_tools.py, lodestone/agents/tools.py,
+              lodestone/web/app.js, tests/test_contract_tool_rows.py (new),
+              tests/test_mcp_tool_result_injection.py (markers),
+              tests/test_frontend_tool_provenance.py (one anchor string),
+              docs/ROADMAP.md, docs/AUDIT.md
+DEPENDENCIES: all four sessions' branches, landed in the order below
+CHANGES:      Landed as six commits, deliberately ordered:
+              1. QA's injection suite FIRST — zero production code, so the
+                 defences are pinned before the feature that widens them.
+              2. A8 fixed (see below), markers removed in the same commit.
+              3-5. Connectors, Agents, Frontend merged.
+              6. The contract fix neither side could have caught alone.
+
+              **A8.** Confirmed independently, not taken on report:
+              `recipients_of` took the first address per comma-token, so
+              `allowed@x attacker@y` reached the gate as the allowed address
+              alone. `send_email` survived by accident (its own re-validation);
+              `create_event` did not — the stranger was invited and Calendar
+              emails them. `_every_address_in()` enumerates every address and
+              still returns an unparseable token, so it fails closed.
+
+              **The contract defect, and it was mine.** I specified the row as
+              {name, description, source, connector} and named neither a display
+              name nor what a category row is. Result: Agents emitted a row for
+              the category, Frontend had no concept of one and rendered it as a
+              skill named for the protocol inside an invented group called "A
+              connected app" — beside real skills named `<proto>__github__list_issues`.
+              Both sides' suites were green throughout. Rows now carry `label`
+              (what a person reads) separately from `name` (the id an agent
+              stores), and the category row is marked `source: "category"`.
+
+              **One more integration defect:** the agents-side truncation cap
+              (6,000) sat *below* the connector's (8,000), so the connector's
+              own "showed the first N of M, ask something narrower" sentence was
+              deleted and replaced with a vaguer one. The backstop now sits
+              above the ceiling it backs up, with a test pinning the order.
+TESTS:        1423 passed, 18 skipped · ruff clean · mypy clean over 113 files ·
+              test_api_surface.py green (paths unchanged, the row shape is
+              additive) · server boots, serves the workspace, and the origin
+              guard still answers 403 to a foreign local origin.
+              tests/test_contract_tool_rows.py is the test that should have
+              existed when the contract was written: it runs the real producer
+              (`describe_tools()`) through the real consumer (`renderToolList`).
+              Mutation-verified — reverting either half turns it red.
+RISKS:        The Connectors↔Agents boundary is duck-typed by design, so a field
+              renamed on the supplier side makes tools vanish silently rather
+              than erroring. Two test files mirror that dataclass, which is what
+              turns a rename into a failure. Worth revisiting if the surface grows.
+HANDOFF:      Frontend: one anchor string in your own
+              test_frontend_tool_provenance.py was repointed — the assertion is
+              untouched, only the line it greps for, because your `toolConnector`
+              condition gained a clause. Nothing else of yours changed.
+              Agents: A8's fix and the cap live in your files; both are recorded
+              above rather than handed back, because they blocked the merge.
+              QA: A8 is closed in docs/AUDIT.md with your repro; A9-A11 are
+              still open and still yours to route.
+CONTRACT:     additive — `label` and `source: "category"` are new fields; `name`
+              and `description` are byte-identical to what they always were, and
+              no path moved.
+BLOCKING:     no
+```
+

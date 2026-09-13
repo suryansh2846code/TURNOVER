@@ -224,7 +224,23 @@ Worth doing before the log becomes the thing bug reports are read from.
 
 ---
 
-## A8 — The unattended-action gate only splits recipients on `,` and `;`
+## A8 — ~~The unattended-action gate only splits recipients on `,` and `;`~~ · **CLOSED**
+
+> **Closed 2026-09-13** by `permissions._every_address_in()`, which enumerates
+> every address in a recipient field whatever separates them, and still returns
+> an unparseable token so an unrecognisable recipient fails closed rather than
+> reading as nobody. The two `xfail(strict=True)` tests that recorded this bug
+> lost their markers in the same commit — which is what strict was for. Verified
+> load-bearing: reintroducing the old splitter turns 5 tests red.
+>
+> ```bash
+> ./.venv/bin/python -m pytest tests/test_mcp_tool_result_injection.py -q   # 37 passed
+> ```
+>
+> The original finding is kept below; the reasoning about *why* this shape is
+> what an injection reaches for is still the reason the fix looks as it does.
+
+### Original finding
 
 **Severity: high** · **Owner: Agents** · **Cost: low**
 
