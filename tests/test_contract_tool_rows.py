@@ -148,3 +148,38 @@ def test_each_connectors_tools_land_under_that_connector(rows):
     by_group = {g["name"]: g["tools"] for g in report["groups"]}
     assert by_group["GitHub"] == ["list_issues"]
     assert by_group["Linear"] == ["search_issues"]
+
+
+# ── who owns the ceiling ─────────────────────────────────────────────────────
+
+def test_the_agents_cap_is_a_backstop_not_the_ceiling():
+    """Two layers truncate, so the order between them decides what the model reads.
+
+    `connectors.mcp_tools` bounds a result and appends a sentence naming how
+    much it held back, which is what lets a model ask a narrower question rather
+    than assume it saw everything. The agents-side cap exists only for a
+    supplier that bounds nothing at all — set below the supplier's, it silently
+    deletes that sentence and substitutes a vaguer one.
+    """
+    from lodestone.connectors import mcp_tools as supplier
+
+    assert mcp_tools.MAX_RESULT_CHARS > supplier.MAX_RESULT_CHARS, (
+        f"the agents backstop ({mcp_tools.MAX_RESULT_CHARS}) cuts below the "
+        f"supplier's ceiling ({supplier.MAX_RESULT_CHARS}), so the supplier's "
+        "truncation notice is discarded before the model ever sees it")
+
+
+def test_a_supplier_that_bounds_nothing_is_still_caught(monkeypatch):
+    """The backstop has to actually catch something, or it is decoration."""
+    monkeypatch.setattr(mcp_tools, "_supplier", lambda: SimpleNamespace(
+        list_tools=lambda: [_ref("big", "dump", "Big")],
+        call_tool=lambda *a, **k: "x" * 100_000))
+    mcp_tools.clear_cache()
+    try:
+        tool = mcp_tools.lookup(f"{ACRONYM}__big__dump")
+        assert tool is not None
+        out = tool.handler()
+        assert len(out) < 100_000
+        assert "truncated" in out.lower()
+    finally:
+        mcp_tools.clear_cache()

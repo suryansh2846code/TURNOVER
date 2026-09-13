@@ -62,7 +62,12 @@ MAX_CONCURRENT_CALLS = 3
 
 #: A tool's answer is read by a model, so it is charged for. A server that
 #: returns its whole mailbox must not spend the turn's context on one call.
-MAX_RESULT_CHARS = 6000
+#: A backstop, not the ceiling. The supplier bounds its own results and says so
+#: in a sentence naming what it held back, which is what lets a model narrow its
+#: question instead of assuming it saw everything. Cutting below that ceiling
+#: deletes that sentence and replaces it with a vaguer one, so this sits
+#: deliberately *above* it and only catches a supplier that bounds nothing.
+MAX_RESULT_CHARS = 12000
 
 _gate = threading.BoundedSemaphore(MAX_CONCURRENT_CALLS)
 _lock = threading.Lock()
