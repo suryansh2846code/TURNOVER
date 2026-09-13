@@ -43,7 +43,7 @@ jobs:
         run: |
           uv venv
           uv pip install -e ".[gdrive,desktop]"
-          uv pip install pytest ruff mypy
+          uv pip install pytest pytest-cov ruff mypy
 
       - name: Lint
         run: uv run ruff check lodestone tests
@@ -58,7 +58,10 @@ jobs:
         run: node --check lodestone/web/app.js
 
       - name: Tests
-        run: uv run pytest -q
+        # Coverage prints, it does not gate. No threshold — a percentage invites
+        # tests written to raise it. The per-module table is the point: it says
+        # which code a change is moving, protected or not.
+        run: uv run pytest -q --cov --cov-report=term-missing:skip-covered
         env:
           # Never touch a real credential store or a developer's home.
           LODESTONE_MODEL_PROVIDER: mock

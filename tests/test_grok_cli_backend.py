@@ -265,7 +265,7 @@ def test_status_reports_waiting_then_success():
     class _Running:
         def poll(self): return None
 
-    mod._login_proc, mod._login_baseline = _Running(), {"authenticated": False}
+    mod._session.proc, mod._session.baseline = _Running(), {"authenticated": False}
     mod.reset_auth_cache()
     with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
          patch("subprocess.run", return_value=_cp(0, MODELS_OUT)):
@@ -282,3 +282,91 @@ def test_status_reports_waiting_then_success():
         assert client.get("/api/providers/xai/auth/status").json()["status"] == "success"
     assert get_connection("xai").account_connected is True
     save_connection(ProviderConnection(provider="xai"))
+
+
+# ── cancelling a sign-in ─────────────────────────────────────────────────────
+# `cancel_cli_login` is byte-identical to the Cursor copy and, unlike it, had no
+# test at all — `pytest --cov` put the whole body in the missing-lines column.
+# These pin what it does *before* the two copies are folded into one, so the
+# extraction has something to be measured against rather than a green suite that
+# never executed the code.
+#
+# The `finally: login_processes.release(...)` is the part that matters most: an
+# abandoned `login` waits for a browser callback that may never arrive, and 158
+# of them once accumulated on one machine.
+
+class _Spawned:
+    """A login process that is still waiting on the browser."""
+
+    def __init__(self, pid: int = 4242) -> None:
+        self.pid, self.terminated = pid, False
+
+    def poll(self):
+        return None                      # still running
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+
+class _AlreadyExited(_Spawned):
+    def poll(self):
+        return 0
+
+
+def _tracked_pids() -> list[int]:
+    from lodestone.models import login_processes
+
+    return [r["pid"] for r in login_processes._load()]
+
+
+def test_cancelling_terminates_the_login_and_stops_tracking_it():
+    from lodestone.models import grok_cli as mod
+    from lodestone.models import login_processes
+
+    proc = _Spawned()
+    login_processes.track(proc, "login")
+    assert proc.pid in _tracked_pids()
+
+    mod._session.proc, mod._session.baseline = proc, {"authenticated": False}
+    assert mod.cancel_cli_login() is True
+    assert proc.terminated is True
+    # Released from the on-disk record, or the next launch reaps a PID that is
+    # already gone — and, once reused, something else entirely.
+    assert proc.pid not in _tracked_pids()
+
+
+def test_cancelling_clears_the_in_flight_state():
+    from lodestone.models import grok_cli as mod
+
+    mod._session.proc, mod._session.baseline = _Spawned(), {"authenticated": False}
+    mod.cancel_cli_login()
+    assert mod._session.proc is None
+    assert mod._session.baseline is None
+
+
+def test_cancelling_with_nothing_in_flight_is_a_no_op():
+    from lodestone.models import grok_cli as mod
+
+    mod._session.proc = None
+    assert mod.cancel_cli_login() is False
+
+
+def test_cancelling_a_login_that_already_finished_reports_nothing_to_cancel():
+    """The user completed it in the browser a moment before clicking cancel."""
+    from lodestone.models import grok_cli as mod
+
+    mod._session.proc = _AlreadyExited()
+    assert mod.cancel_cli_login() is False
+
+
+def test_a_terminate_that_fails_still_stops_tracking_the_process():
+    """Bookkeeping must not be skipped because the signal did not land."""
+    from lodestone.models import grok_cli as mod
+    from lodestone.models import login_processes
+
+    proc = _Spawned(pid=4243)
+    login_processes.track(proc, "login")
+    with patch.object(_Spawned, "terminate", side_effect=OSError("gone")):
+        mod._session.proc = proc
+        assert mod.cancel_cli_login() is False
+    assert proc.pid not in _tracked_pids()

@@ -123,6 +123,33 @@ markers = [
 filterwarnings = ["ignore::DeprecationWarning"]
 
 
+# ── Coverage ─────────────────────────────────────────────────────────────────
+# There is no threshold here and there should not be one. A percentage invites
+# tests written to raise it, which is the opposite of the point: the question
+# this answers is *which* code a change is moving — protected, or not.
+#
+# It has already earned its place. `models/cursor.py` and `models/grok_cli.py`
+# hold ~90 byte-identical lines of the vendor-CLI login machine; the cursor copy
+# is covered and `grok_cli.cancel_cli_login()` is not covered at all. Reading
+# either file tells you nothing about that.
+#
+# Run it locally with:  pytest --cov --cov-report=term-missing
+#
+# Nothing is omitted. `desktop.py` sits at 31% because `run_app` needs a real
+# window, and that is worth seeing rather than hiding — a file excluded to keep
+# the number tidy is the number lying.
+[tool.coverage.run]
+source = ["lodestone"]
+
+[tool.coverage.report]
+# `pass`-only bodies and `if TYPE_CHECKING` are noise in the missing-lines list.
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.$",
+]
+
+
 # ── Type checking ────────────────────────────────────────────────────────────
 # Same philosophy as the lint gate: strict where it pays, lenient where it would
 # only produce suppressions. The app is full of deliberately dynamic code —
