@@ -171,6 +171,42 @@ Connectors are read-only today by design (decision C1). MCP tools write.
 
 ---
 
+## Phase 5 — What a server can answer, offered to the agent
+
+*`lodestone/connectors/mcp_tools.py`. The connector half only — how an agent
+loop presents these is Agents' call, and the contract between the two is
+`MCPToolRef` / `list_tools()` / `call_tool()` / `invalidate()`.*
+
+Phase 2 drew the line that makes this necessary: a server that can only
+`search_records` cannot seed a brain, so it is never synced — and until now that
+meant it was never used at all. It can still answer a question the user just
+asked, which is the third thing a server is good for.
+
+- [x] **5.1 — Asking what exists is cheap.** `list_tools()` is TTL-cached
+      (`models/cache.py::ttl_cached`, 5 minutes) because the loop asks on every
+      turn and each server costs a subprocess. Uncached this is the Models-drawer
+      freeze moved inside chat. `invalidate()` is called from `upsert_server()`
+      and `delete_server()`, so adding a connector or narrowing what it may read
+      is visible on the next turn rather than five minutes later.
+      Proof: `test_the_second_call_spawns_no_subprocess`.
+- [x] **5.2 — Reads only, failing closed.** A write tool is listed (a
+      confirmation card is built from something) and carries `writes=True`;
+      `call_tool()` refuses it, then refuses it again against the server's own
+      classification inside the session it opened, so a stale cache cannot let
+      one through. Writes keep the Phase 4 propose/confirm path — `mcp_action`
+      stays in `NEVER_UNATTENDED`.
+- [x] **5.3 — A reply a model can hold.** Truncated to 8 000 characters with the
+      truncation stated in the text, so a tool answering with megabytes of vendor
+      JSON cannot evict the conversation and the recall block before the model
+      reads it.
+- [x] **5.4 — One broken server costs one server's tools.** Every server is asked
+      at the same time under its own ceiling, so N connectors cost one timeout
+      rather than N; a crash, a missing binary or a stalled handshake contributes
+      nothing and takes nothing away from the others. Failures reach the model as
+      a sentence from `mcp_errors.explain()`, never as a raise.
+
+---
+
 ## Order, and why
 
 ```

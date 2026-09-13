@@ -12,6 +12,8 @@ server that exist in the wild:
     text      — returns a JSON document inside a text block, not structured
     prose     — returns plain text, no JSON at all
     writes    — carries a destructive tool, which a sync must never call
+    huge      — answers with far more text than a context window can hold
+    stall     — starts but never finishes the handshake
     crash     — exits during startup
     hang      — never answers
 """
@@ -23,6 +25,11 @@ import time
 from mcp.server.mcpserver import MCPServer
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else "listing"
+
+if MODE == "stall":
+    # Before any protocol at all, so the *handshake* is what hangs — the
+    # case a per-call timeout can never reach.
+    time.sleep(600)
 
 if MODE == "crash":
     sys.stderr.write("fatal: could not open the vendor database\n")
@@ -73,6 +80,13 @@ if MODE == "prose":
         """Records as plain prose, which is still worth keeping."""
         return ("Quarterly planning: ship the connector layer.\n"
                 "Launch checklist: notarise the build first.")
+
+if MODE == "huge":
+    @mcp.tool()
+    def read_everything() -> str:
+        """Answers with megabytes, the way a raw-JSON vendor tool does."""
+        return "x" * 200_000
+
 
 if MODE == "hang":
     @mcp.tool()

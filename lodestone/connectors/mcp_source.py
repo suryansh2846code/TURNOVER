@@ -120,10 +120,25 @@ def get_server(server_id: str) -> MCPServerSpec | None:
     return MCPServerSpec.from_dict(raw) if raw else None
 
 
+def _forget_tools() -> None:
+    """Drop the agent-facing tool cache after the saved servers change.
+
+    `mcp_tools.list_tools()` is TTL-cached because the agent loop asks on every
+    turn, so without this a server the user just added stays invisible — and a
+    tool they just disallowed stays callable — for the length of the TTL. Late
+    import: `mcp_tools` is built on this module.
+    """
+    with suppressed("flushing the MCP tool cache"):
+        from .mcp_tools import invalidate
+
+        invalidate()
+
+
 def upsert_server(spec: MCPServerSpec) -> MCPServerSpec:
     specs = _load()
     specs[spec.id] = spec.as_dict()
     _save(specs)
+    _forget_tools()
     return spec
 
 
@@ -133,6 +148,7 @@ def delete_server(server_id: str) -> bool:
         return False
     del specs[server_id]
     _save(specs)
+    _forget_tools()
     return True
 
 
