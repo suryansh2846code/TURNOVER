@@ -10,6 +10,7 @@ from typing import Any
 
 from ..brain import get_brain
 from ..models.base import Tool
+from . import mcp_tools
 from .effort import get_effort
 
 
@@ -339,13 +340,24 @@ def build_tools(names: list[str], *, self_id: str | None = None,
     `self_id` is only needed so `ask_agent` can name the other agents in its own
     description — a model that has to guess an agent id guesses wrong, and a
     round trip spent discovering the roster is a round trip not spent answering.
+
+    The built-ins are a fixed list; the user's connector tools are not, so they
+    are resolved here rather than read out of a stored list. An agent opts in
+    with `mcp_tools.SENTINEL`, or by naming one tool explicitly — see
+    `mcp_tools.py` for why a stored list cannot enumerate them.
     """
     from .delegation import roster
 
     tools = []
     seen = set()
     for n in names:
-        if n in seen or n not in TOOL_DEFS:
+        if n in seen:
+            continue
+        if n not in TOOL_DEFS:
+            extra = mcp_tools.lookup(n)      # an explicitly named connector tool
+            if extra is not None:
+                seen.add(n)
+                tools.append(extra)
             continue
         seen.add(n)
         t = TOOL_DEFS[n]
@@ -359,24 +371,53 @@ def build_tools(names: list[str], *, self_id: str | None = None,
             description = f"{description} Available agents: {others}."
         tools.append(Tool(name=t.name, description=description,
                           parameters=t.parameters, handler=TOOL_IMPLS[n]))
+
+    if mcp_tools.SENTINEL in names:
+        for extra in mcp_tools.available():
+            if extra.name in seen:
+                continue
+            seen.add(extra.name)
+            tools.append(extra)
     return tools
+
+
+def describe_tools() -> list[dict[str, str]]:
+    """Every tool an agent could be given, for the agent-builder UI.
+
+    Additive: `name` and `description` are what they always were, and `source`
+    ("builtin" | "mcp") plus `connector` let the UI group the user's own
+    connectors instead of listing them among the built-ins as if they shipped
+    with the app.
+    """
+    rows = [{"name": n, "description": t.description,
+             "source": "builtin", "connector": ""}
+            for n, t in TOOL_DEFS.items()]
+    rows.extend(mcp_tools.describe())
+    return rows
 
 
 def validate_tool_arguments(name: str, arguments: Any) -> tuple[bool, str, dict]:
     """Authoritative schema validation for model-generated tool arguments."""
     if not isinstance(arguments, dict):
         return False, f"Tool arguments for '{name}' must be a JSON object, got {type(arguments).__name__}", {}
-    defn = TOOL_DEFS.get(name)
+    defn = TOOL_DEFS.get(name) or mcp_tools.lookup(name)
     if not defn:
         return False, f"Unknown tool: {name}", {}
     params = defn.parameters or {}
-    props = params.get("properties", {})
+    props = params.get("properties")
     required = params.get("required", [])
 
     # Verify all required arguments are provided
     for req in required:
         if req not in arguments or arguments[req] is None:
             return False, f"Missing required parameter '{req}' for tool '{name}'", {}
+
+    if props is None:
+        # A schema that names no properties cannot say which arguments are
+        # unexpected. Built-in tools all declare theirs; a connector's server
+        # may not, and stripping every argument would turn its search tool into
+        # a tool that searches for nothing.
+        return True, "", dict(arguments)
 
     # Filter and validate against defined properties
     clean_args: dict[str, Any] = {}
@@ -402,6 +443,12 @@ def validate_tool_arguments(name: str, arguments: Any) -> tuple[bool, str, dict]
 
 def run_tool(name: str, arguments: dict) -> str:
     impl = TOOL_IMPLS.get(name)
+    if not impl:
+        # Not a built-in. It may be a connector's tool, which only exists on
+        # this machine — and if it is nothing at all, the model still gets a
+        # sentence back rather than an exception it cannot read.
+        connector_tool = mcp_tools.lookup(name)
+        impl = connector_tool.handler if connector_tool else None
     if not impl:
         return f"Unknown tool: {name}"
 

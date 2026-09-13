@@ -38,6 +38,7 @@ def test_every_check_ran(card):
     "depth", "effort", "no_repeat", "stall", "budget_answer", "parallel",
     "planning", "delegation", "delegation_guard", "grounding", "streaming",
     "unattended_outbound", "no_escalation", "reads_stay_free", "tool_validation",
+    "connector_tools", "connector_writes_withheld",
 ])
 def test_the_named_capabilities_are_all_covered(card, key):
     """Named individually so deleting one from the scorecard fails here rather

@@ -142,6 +142,50 @@ better spent answering.
 A failed tool call now says so explicitly, because left alone a model re-issues
 the same broken call and the memo then answers it from cache, so it never learns.
 
+## The user's own connectors, mid-turn
+
+The thirteen built-in tools are known when the app is built. A connector's tools
+are not: they arrive when the user adds an MCP server, they differ per install,
+and they change when the server updates. So an agent's stored tool list cannot
+name them — a list written today would name tools that do not exist until
+tomorrow, and `build_tools()` would drop them forever.
+
+An agent opts in to the **category** instead, with `mcp` in its tools list
+(`agents/mcp_tools.SENTINEL`; all four presets have it). The concrete tools are
+resolved when the turn starts, from
+`connectors.mcp_tools.list_tools()` → `MCPToolRef`, and called through
+`call_tool()`. Naming one tool explicitly still works, for a custom agent
+narrowed to a single tool.
+
+**Read-only, with no exception.** A ref whose `writes` flag is set is never
+offered, at any effort, to any agent. Connector writes stay on the propose →
+confirm path as `mcp_action`, which is in `permissions.NEVER_UNATTENDED` — there
+is no field to read a recipient out of on somebody else's server, so there is
+nothing an allow-list could check. Filtering here is that same decision applied
+one layer earlier: a model cannot propose what it was never handed.
+
+Four details that are load-bearing:
+
+- **Names are made provider-safe.** `notion:search` is a legal MCP name and an
+  illegal tool name upstream; a name a provider rejects fails the whole request,
+  not just the tool. It is offered as `notion_search`, and the qualified name is
+  what goes back to the connector.
+- **Discovery is cached for `CACHE_SECONDS` (20s).** Listing tools starts every
+  configured server as a subprocess, and a turn resolves names more than once.
+- **Connector calls have their own ceiling** (`MAX_CONCURRENT_CALLS`, 3). The
+  loop's parallel width (6 at High) is sized for SQLite reads; these are
+  subprocesses. Bounding them here keeps the width for the cheap tools.
+- **A server's answer is capped** at `MAX_RESULT_CHARS`, because whatever it
+  returns is read by a model and charged to the user.
+
+A failure — server missing, not signed in, timed out — comes back as the
+connector layer's own sentence (`connectors/mcp_errors.explain`), never a
+traceback, and never as an exception into the loop.
+
+`GET /api/agents/tools` describes every tool with `source` (`builtin` | `mcp`)
+and `connector`, so the agent builder can group the user's connectors instead of
+listing their tools as if they shipped with the app.
+
 ## Acting on the world
 
 Agents **propose**; the user **confirms**. A reply carries a tag the UI parses
@@ -221,7 +265,7 @@ tokens against a real server.
 ## Is it any good? — the scorecard
 
 `agents/evaluation.py` runs the real loop against a scripted model — no network,
-no keys, no spend — and scores fifteen capabilities.
+no keys, no spend — and scores seventeen capabilities.
 
 ```bash
 curl -s localhost:8787/api/agents/evaluate | jq .score
@@ -232,9 +276,9 @@ Deliberately **not** a benchmark of answer quality: that needs a real model and
 a human, and it moves when the model does. These check what the harness itself
 is responsible for, and those either work or they do not.
 
-The floor is all fifteen, and that was set by evidence rather than taste. It was
+The floor is all of them, and that was set by evidence rather than taste. It was
 written at 9.0 first; switching off the repeat guard scored **9.3**, because
-with fifteen checks each is worth 0.67 and a real regression fitted underneath
+with fifteen checks each was worth 0.67 and a real regression fitted underneath
 the gate. A scorecard that cannot fail measures nothing, so
 `test_the_scorecard_notices_when_a_capability_breaks` breaks one on purpose.
 
@@ -252,11 +296,11 @@ the gate. A scorecard that cannot fail measures nothing, so
 
 ## What is still missing
 
-1. **Tool range is the binding constraint.** Thirteen tools. The thing that
-   multiplies it is the **MCP client** — being able to consume any remote MCP
-   server, which the Turnstone teardown (F9) identifies as their advantage and
-   which is being built separately. Lodestone is an MCP *server* already.
-   **When that lands, the agents are a 9.**
+1. **Tool range now depends on what the user connects.** Thirteen built-ins,
+   plus every read tool the user's own MCP connectors expose (see *The user's
+   own connectors, mid-turn*). What is still missing is the other half of that
+   trade: a connector **write** is a propose → confirm action, so an agent
+   cannot complete a task inside someone else's app in one turn, by design.
 2. **No agent-level quality evaluation.** The scorecard measures the harness.
    Whether an answer is *good* still needs a real model and a person.
 3. **No settings UI for effort, permissions or approvals.** The API exists and

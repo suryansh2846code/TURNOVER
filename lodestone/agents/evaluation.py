@@ -110,6 +110,7 @@ def _scripted(script, **kw):
 def run(*, include_slow: bool = True) -> Scorecard:
     """Run every capability check and return the scorecard."""
     from . import delegation, runtime
+    from . import mcp_tools as mcp
     from . import tools as tools_mod
     from .effort import get_effort
 
@@ -124,6 +125,7 @@ def run(*, include_slow: bool = True) -> Scorecard:
     saved_impls = dict(tools_mod.TOOL_IMPLS)
     saved_provider = runtime.get_provider
     saved_resolve = runtime.resolve_usable_model
+    saved_supplier = mcp._supplier
 
     def use(provider) -> None:
         """Point the runtime at a scripted model for the next check."""
@@ -263,7 +265,42 @@ def run(*, include_slow: bool = True) -> Scorecard:
               "Model-written tool arguments are validated, not trusted")(
             "Schema validation error" in bad and "Unknown tool" in unknown)
 
+        # ── the user's connectors ────────────────────────────────────────
+        # Faked, because a real MCP server is a subprocess and a scorecard must
+        # not need one installed to say whether the wiring works. What is being
+        # measured is exactly the wiring: a connector's read tool reaches the
+        # model and its answer lands in the turn, and its write tools are never
+        # offered at all — those go through propose → confirm (permissions.py).
+        from types import SimpleNamespace
+
+        def _ref(tool: str, writes: bool) -> SimpleNamespace:
+            return SimpleNamespace(
+                qualified_name=f"demo:{tool}", server_id="demo",
+                server_label="Demo", tool=tool, description=f"{tool} on Demo.",
+                parameters={"type": "object", "properties": {}}, writes=writes)
+
+        fake_connectors = SimpleNamespace(
+            list_tools=lambda: [_ref("list_items", False), _ref("create_item", True)],
+            call_tool=lambda _name, _args: "one item")
+        _swap(mcp, "_supplier", lambda: fake_connectors)
+        mcp.clear_cache()
+
+        provider = _scripted([[("demo_list_items", {})], "there is one item"])
+        use(provider)
+        connected = runtime.run_turn("research", "what is in demo?", effort="medium")
+        offered = provider.tools_offered[0] if provider.tools_offered else []
+        check("connector_tools",
+              "An agent can read the user's own connectors mid-turn")(
+            any(s.name == "demo_list_items" and "one item" in s.result
+                for s in connected.trace if s.kind == "tool_result"))
+        check("connector_writes_withheld",
+              "A connector's write tools are never offered to a model")(
+            "demo_list_items" in offered
+            and not any("create_item" in n for n in offered))
+
     finally:
+        _swap(mcp, "_supplier", saved_supplier)
+        mcp.clear_cache()
         tools_mod.TOOL_IMPLS.clear()
         tools_mod.TOOL_IMPLS.update(saved_impls)
         _swap(runtime, "get_provider", saved_provider)
