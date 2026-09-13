@@ -4,6 +4,109 @@ Local-first AI **agent workspace**: a team of agents share one on-device "brain"
 (memories + a knowledge graph) built from the user's connected sources. Bring your
 own model. Everything runs and stays on the user's machine.
 
+## Eight Claude sessions build this repo. Know which one you are.
+
+Lodestone is built by a **team of specialised Claude sessions running in
+parallel**, each in its own git worktree, each owning a subsystem. The ownership
+boundary is not etiquette: two sessions editing one file is how a working
+`app.js` becomes a blank screen, and there is no upstream to blame.
+
+**Before you edit anything, open your role's file.** It is the operating manual
+for that subsystem and it is more specific than this one.
+
+| role | owns | rules |
+|---|---|---|
+| **A · Architect / Orchestrator** | decomposition, contracts, review, `main`, docs | [`.claude/fleet/architect/CLAUDE.md`](.claude/fleet/architect/CLAUDE.md) |
+| **B · Frontend** | `lodestone/web/**` — chat, agent UI, model drawer, onboarding, streaming UI | [`.claude/fleet/frontend/CLAUDE.md`](.claude/fleet/frontend/CLAUDE.md) |
+| **C · API / Backend** | `lodestone/api/**` — routes, schemas, security, concurrency, composition, runtime plumbing | [`.claude/fleet/api/CLAUDE.md`](.claude/fleet/api/CLAUDE.md) |
+| **D · Agents / Runtime** | `lodestone/agents/**` — loop, tools, delegation, planning, approvals, effort | [`.claude/fleet/agents/CLAUDE.md`](.claude/fleet/agents/CLAUDE.md) |
+| **E · Brain / Memory** | `lodestone/brain/**`, `lodestone/core/**` — recall, graph, canonical, enrichment | [`.claude/fleet/brain/CLAUDE.md`](.claude/fleet/brain/CLAUDE.md) |
+| **F · Models / Auth / Providers** | `lodestone/models/**` — providers, discovery, entitlements, auth flows, CLIs | [`.claude/fleet/models/CLAUDE.md`](.claude/fleet/models/CLAUDE.md) |
+| **G · Connectors** | `lodestone/connectors/**`, `lodestone/mcp_server/**` — sources, registry, ingestion | [`.claude/fleet/connectors/CLAUDE.md`](.claude/fleet/connectors/CLAUDE.md) |
+| **H · QA / Bug Hunter** | reads everything · owns repros, regression tests, `docs/AUDIT.md` | [`.claude/fleet/qa/CLAUDE.md`](.claude/fleet/qa/CLAUDE.md) |
+| **— · macOS Desktop** *(dormant specialist)* | `desktop.py`, `hud.py`, `packaging/**`, the build scripts | [`.claude/fleet/desktop/CLAUDE.md`](.claude/fleet/desktop/CLAUDE.md) |
+| **— · Custom Specialist** *(temporary)* | whatever a task scopes to it, and nothing after | [`.claude/fleet/_template/CLAUDE.md`](.claude/fleet/_template/CLAUDE.md) |
+
+A role is real only when it appears in the ownership map below. A session with no
+claimed paths has no authority to edit anything — see
+**[Creating a custom specialist](#creating-a-custom-specialist)** and
+**[Adding a permanent role](#adding-a-permanent-role)**.
+
+**This file is common law.** Everything below it applies to every role: the
+product rules, the model-availability doctrine, the agent-loop invariants, the
+conventions. A role file may *narrow* or *add*, never contradict; if the two
+disagree, this file wins and the Architect fixes the role file.
+**Only the Architect edits this file.**
+
+### The ownership map
+
+One path, one owner. This table is the authority; a path that is not listed is
+**the Architect's** until assigned.
+
+| owner | paths |
+|---|---|
+| **Architect** | `CLAUDE.md`, `README.md`, `context.md`, `docs/**` (except assigned below), `pyproject.toml`, `.gitignore`, `.github/**`, `.claude/fleet/**`, `main`, **every cross-layer contract** |
+| **Frontend** | `lodestone/web/**` · `docs/DESIGN-BRIEF.md`, `docs/hero-lab/**` · `tests/js/**`, `tests/test_frontend_*.py`, `test_models_drawer_render.py`, `test_connector_catalog_ui.py` |
+| **API** | `lodestone/api/**` (except the bodies of `routes/agents.py`) · `scheduler.py`, `usage.py`, `config.py`, `log.py`, `notify.py`, `cli.py` · `tests/test_api_surface.py`, `test_local_api_origin_guard.py`, `test_threadpool_isolation.py`, `test_failures_are_recorded.py` |
+| **Agents** | `lodestone/agents/**` · `routines.py`, `actions.py`, `tasks.py`, `reminders.py`, `scheduled.py` · bodies of `api/routes/agents.py` · `docs/AGENTS.md`, `docs/BUILD-PLAN-actions-agents.md` · `tests/test_agent_*.py`, approvals/routines suites |
+| **Brain** | `lodestone/brain/**` (incl. `canonical/**`), `lodestone/core/**` · `docs/BRAIN-V1.5.md`, `docs/SCALING.md` · `scripts/benchmark_*.py` · `tests/test_brain_v15_*.py`, `test_canonical_brain.py`, `test_core.py`, `test_sqlite_row_membership.py` |
+| **Models** | `lodestone/models/**` · `tests/test_model_*.py`, `test_provider_*.py`, `test_auth_flow_unification.py`, `test_plan_*.py`, `test_*subscription*.py`, `test_cli_manager.py`, `test_native_accounts.py`, `test_credential_independence.py`, `test_detection_is_not_consent.py`, `test_vendor_identity.py`, `test_stale_model_recovery.py`, `test_stored_model_is_rechecked.py`, `test_auto_model_is_runnable.py`, `test_gemini_auth_hardening.py`, `test_login_process_cleanup.py` |
+| **Connectors** | `lodestone/connectors/**`, `lodestone/mcp_server/**` · `docs/CONNECTORS.md` · `tests/connectors/**` |
+| **QA** | reads everything · writes `docs/AUDIT.md`, `tests/conftest.py`, `tests/agent_harness.py`, and new regression tests anywhere |
+| **Desktop** | `desktop.py`, `hud.py`, `packaging/**`, `scripts/build-*.sh` · `docs/DESKTOP-SIGNIN.md`, `docs/DISTRIBUTION.md` · `tests/test_signin_hud*.py`, `test_desktop_port.py` |
+
+`lodestone/web/signin_hud.html` is markup, so it stays **Frontend's**; Desktop
+consumes it. That is seam 4.
+
+### The six seams, and who arbitrates them
+
+These are the only places two roles genuinely meet. Each needs a written
+contract **before** implementation, and the Architect lands both sides in one
+commit with a test that fails if only one side ships:
+
+1. **`api/routes/agents.py`** — Agents writes the handler bodies; API owns the
+   mounting, the request shape, the security guard and the concurrency lane.
+2. **`entitlements.resolve_usable_model()` ↔ `agents/runtime.py`** — Models owns
+   resolution and repair; Agents must call it and must never send a stored id
+   straight to a provider.
+3. **`models/streaming.py` ↔ the browser's SSE reader** — two wire formats on the
+   server, one frame reassembler in the page. Event names are Architect-only.
+4. **`hud.py` ↔ the page** — the native window can only be raised *by the page*
+   (`window.pywebview.api.open_signin_hud`), because under `--dev` the backend is
+   a separate process with no handle on the webview. HUD work is always Desktop
+   **plus** Frontend.
+5. **`Brain.recall()` ↔ `agents/runtime.py`** — recall *order* (canonical facts →
+   graph → source excerpts) is Brain's contract; the injection point is Agents'.
+6. **connector sync ↔ `Brain.enrich()`** — source id, the `graphed` flag, the
+   recent-N bulk cap. Content-based and general: no connector-name branches in
+   graph logic, ever.
+
+### The ten rules of parallel work
+
+1. **Ownership is explicit.** If you cannot name your role, stop and ask.
+2. **Never edit a file another active session is editing.** Not one line.
+3. **No broad refactors inside another role's subsystem** — not even correct ones.
+4. **Before changing a cross-layer contract, inspect the consumers.** Grep for
+   every caller and every reader in `app.js`; there is no type system between
+   the two.
+5. **If a change needs another subsystem, define the interface it needs first**
+   and hand that over — do not implement their half speculatively.
+6. **Small focused commits**, one behaviour each.
+7. **Always read `git diff` before finishing.** Every time.
+8. **Never overwrite another session's work.**
+9. **Unexpected changes in the tree → stop** and work out whose they are before
+   touching anything. This has already happened here: three sessions were editing
+   one checkout on `main`.
+10. **Never "clean up" another session's unrelated modifications.**
+
+And the two this repo adds from experience:
+
+11. **Never break another role's test to make yours pass.** A red test you did
+    not write is a handoff, not an obstacle. Deleting, skipping or weakening it
+    is the one thing that is always wrong.
+12. **Leave the tree runnable.** `lodestone app` opens and your slice is green
+    before you report done. A broken tree blocks seven sessions, not one.
+
 ## This is a product, not a developer tool
 Lodestone ships to people who did not build it. **Every decision is a product
 decision** — when there is a trade-off between "correct for an engineer" and
@@ -645,3 +748,203 @@ Model/provider API: `GET /api/models/catalog` · `GET /api/providers` ·
 `POST /api/providers/{name}/auth/{start,status,code,cancel}` ·
 `POST /api/providers/{name}/disconnect?scope=account|api_key|all` ·
 `POST /api/providers/{name}/connect-local` · `POST /api/providers/{name}/refresh`.
+
+## Fleet operations
+
+*(The Architect owns this section. Every role obeys it.)*
+
+### Pick the narrowest mode that solves the problem
+
+Not every session writes code. Declare the mode in your first line of output, and
+do not silently widen it:
+
+**IMPLEMENT** · **REVIEW** · **DEBUG** · **TEST** · **AUDIT** · **PROFILE** ·
+**DESIGN** · **INVESTIGATE**
+
+An AUDIT that starts refactoring is no longer an audit, and its findings stop
+being trustworthy because they are now entangled with its own changes.
+
+### Handoffs
+
+A handoff is how work crosses an ownership boundary without two sessions editing
+one file. Append to **`.claude/fleet/HANDOFF.md`** — append-only, newest last, one
+block per handoff, never edit or delete another role's block:
+
+```
+TASK:         what is being implemented
+OWNER:        which role wrote this
+FILES:        the files you actually changed (owned by you)
+DEPENDENCIES: other roles or contracts this needed
+CHANGES:      what was implemented
+TESTS:        what you ran, and the result
+RISKS:        integration concerns
+HANDOFF:      what the receiving role must do
+CONTRACT:     additive | renamed | removed — and what breaks if only one side ships
+BLOCKING:     yes/no — yes means users see something broken until it lands
+```
+
+- **Additive first.** Ship the new thing alongside the old, let the consumer
+  migrate, then remove. Three landings, never one.
+- **Name the proof.** A handoff with no test is a rumour.
+- **Close your own loop:** a one-line `DONE:` block referencing the original when
+  you have acted on it. The Architect prunes closed handoffs at release.
+
+### Two sessions, one file: the claim
+
+For unplanned crossings — you are about to touch something hot, or the Architect
+has put two roles on adjacent work — write
+`.claude/fleet/locks/<path-with-dashes>.lock` containing your role, your intent
+and the time. Check for a claim before a multi-file edit in a shared area; delete
+your own when you land. A courtesy protocol, not enforcement: the cheapest fix
+for a conflict is not having one.
+
+### Worktrees and branches
+
+One session per worktree. `main` is the integration target and only the Architect
+commits to it.
+
+| worktree | branch | role |
+|---|---|---|
+| `/Users/suryanshsingh/workspace/lodestone` | `main` | Architect |
+| `../lodestone-frontend` | `agent/frontend` | Frontend |
+| `../lodestone-api` | `agent/api` | API |
+| `../lodestone-agents` | `agent/agents` | Agents |
+| `../lodestone-brain` | `agent/brain` | Brain |
+| `../lodestone-models` | `agent/models` | Models |
+| `../lodestone-connectors` | `agent/connectors` | Connectors |
+| `../lodestone-qa` | `agent/qa` | QA |
+| `../lodestone-<name>` | `agent/custom/<name>` | a custom specialist |
+
+- **Never assume another session's filesystem is yours.** Your paths are your
+  worktree's paths; a path you read in a handoff may not exist in your copy until
+  you rebase on `main`.
+- **Never touch another role's worktree or branch** — no rebase, no force-push, no
+  cherry-pick out of it. Ask the Architect.
+- Worktrees are siblings, deliberately **not** nested inside the repo: a checkout
+  inside the checkout doubles every `grep` and `find` a session runs, and makes
+  "is this my file or the other copy's?" a live question mid-debug.
+
+**One shared venv, no per-worktree install.** The editable install is a plain
+`.pth`, so `PYTHONPATH` wins and imports resolve to *your* worktree (verified —
+`assets.WEB` resolves inside the worktree, and the frontend slice passes there):
+
+```bash
+cd ../lodestone-<role>
+PYTHONPATH="$PWD" /Users/suryanshsingh/workspace/lodestone/.venv/bin/python -m pytest <slice> -q
+```
+
+Do **not** symlink or copy `.venv` into a worktree, and do not `pip install -e .`
+there: both reintroduce the ambiguity that recipe removes.
+
+- Commit style: the existing one — lowercase type, then what a *user* gets
+  (`fix(web): the model picker now changes which model actually answers`).
+- **Never add a `Co-Authored-By: Claude` trailer**, and do not put the role name
+  in a trailer either — that belongs in the branch and the handoff, not history.
+- Commit or push only when the user asks.
+
+### Verification, per role
+
+The default sequence is: **focused test → subsystem tests → `pytest` →
+`ruff check lodestone tests` → `mypy lodestone` → frontend harnesses if the
+frontend changed.** Baseline, measured on `main` at 14f0e6d: **1306 passed, 18 skipped, 42s**, `ruff`
+clean, `mypy` clean over 111 files. (`docs/AUDIT.md` still records 791/1 from its
+own review date — that number is historical, not the gate.)
+
+| role | focused slice |
+|---|---|
+| Frontend | `pytest tests/test_frontend_*.py tests/test_models_drawer_render.py tests/test_connector_catalog_ui.py` + the `tests/js/` harnesses |
+| API | `pytest tests/test_api_surface.py tests/test_local_api_origin_guard.py tests/test_threadpool_isolation.py tests/test_failures_are_recorded.py` |
+| Agents | `pytest tests/test_agent_*.py` + the evaluation scorecard must not regress |
+| Brain | `pytest tests/test_brain_v15_*.py tests/test_canonical_brain.py tests/test_core.py` + `scripts/benchmark_recall.py` when scoring changes |
+| Models | `pytest tests/test_model_*.py tests/test_provider_*.py tests/test_auth_flow_unification.py tests/test_plan_*.py` |
+| Connectors | `pytest tests/connectors` |
+| QA | the repro first, then the full sequence |
+| Desktop | `pytest tests/test_signin_hud*.py tests/test_desktop_port.py` + launch the app |
+| Architect | the full sequence, then `lodestone app` opens and renders |
+
+Never weaken a test to get green, never delete one that exposes an inconvenient
+architecture problem, and never skip the regression test on a bug fix.
+
+### Cross-layer contracts: what must be written down before code
+
+| boundary | the contract names |
+|---|---|
+| Frontend ↔ API | endpoint, request schema, response schema, error states, loading states, streaming behaviour |
+| API ↔ Agents | agent id, turn input, effort, event stream, `TurnResult`, errors |
+| Agents ↔ Brain | recall context, memory writes, canonical learning, enrichment |
+| Agents ↔ Models | model resolution, provider capabilities, streaming format, token accounting, auth state |
+| Models ↔ Auth | `AuthFlow`: `start` / `status` / `code` / `cancel`, and the connection state it implies |
+| Connectors ↔ Brain | source id, memory ingestion, metadata, sync lifecycle |
+
+`tests/api_surface.json` pins the HTTP surface. **A red `test_api_surface.py`
+means a contract moved** — escalate to the Architect; never re-baseline it to get
+green.
+
+### The Architect's decomposition format
+
+Every feature request is answered in this shape *before* any code:
+
+1. **Goal** · 2. **Existing architecture involved** · 3. **Files / subsystems** ·
+4. **Dependency graph** · 5. **Parallel work** · 6. **Sequential work** ·
+7. **Tests required** · 8. **Integration risks**
+
+Then: assign owners, define the contracts at each seam, implement independently,
+focused tests, integration review, broader verification, and report what changed
+· who owned it · tests · risks · remaining work.
+
+The Architect coordinates and reviews rather than writing large amounts of code.
+Doing a role's work "because it would be faster" is how that role's session
+returns to a surprise rebase.
+
+### Creating a custom specialist
+
+When a task needs expertise outside the permanent roles, **do not start writing
+code**. Write the role first, into `.claude/fleet/<name>/CLAUDE.md` from the
+template:
+
+```
+CUSTOM AGENT NAME:
+MISSION:            one paragraph
+RESPONSIBILITIES:
+OWNED PATHS:        moved out of whichever role holds them now
+READ-ONLY PATHS:
+FORBIDDEN PATHS:
+INPUT:              what it receives
+OUTPUT:             what it must return
+SUCCESS CRITERIA:
+TEST REQUIREMENTS:
+DEPENDENCIES:
+EXIT CRITERIA:      when it stops existing
+```
+
+It is scoped to the current task and dissolves after it, unless the user
+explicitly promotes it. **A custom specialist must not become a permanent
+architecture layer.** Standing examples worth reaching for: macOS Desktop
+Engineer (already a dormant role), Security Auditor, Performance Engineer, OAuth
+Specialist, Frontend UX Specialist.
+
+### Adding a permanent role
+
+The Architect's job, four steps, in order:
+
+1. **Claim paths** — add rows to the ownership map, *moving* them out of whoever
+   holds them now. A role whose paths still belong to someone else is theatre.
+2. **Create `.claude/fleet/<role>/CLAUDE.md`** from the template and fill in every
+   section. A file left as the template is worse than none: it reads as law.
+3. **Wire the plumbing** — a worktree and `agent/<role>` branch, a row in the
+   verification table, a row in `.claude/fleet/README.md`, and a pointer
+   `CLAUDE.md` in each code directory it owns.
+4. **Announce it** in `HANDOFF.md`, naming what each existing role loses.
+
+### Escalate to the Architect when…
+
+- two roles need the same file in the same change;
+- a cross-layer contract has to move, or `test_api_surface.py` goes red;
+- the fix is in another subsystem and it is blocking users;
+- the ownership map is silent or wrong about the file in front of you;
+- a role file contradicts this one;
+- the working tree contains changes you did not make.
+
+The answer is a decision, recorded in `HANDOFF.md` or `docs/DECISIONS.md` — not a
+conversation. A question with no written answer is asked again next week by a
+different session.
