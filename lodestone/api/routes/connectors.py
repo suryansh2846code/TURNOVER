@@ -45,7 +45,83 @@ def connectors():
                     "reason": reason, "always_available": False,
                     "secret_field": None, "custom": True, "config": app,
                     "state": state.get(inst.name)})
+    # MCP-backed connectors, one per server the user added. `is_configured()`
+    # starts the server, which is the only honest test of "can this run" — but
+    # it is also why this endpoint is in the probe lane.
+    from ...connectors.mcp_source import MCPConnector, list_servers
+    for spec in list_servers():
+        inst = MCPConnector(spec)
+        ready, reason = inst.is_configured()
+        out.append({"name": inst.name, "label": inst.label, "ready": ready,
+                    "reason": reason, "always_available": False,
+                    "secret_field": None, "custom": False, "mcp": True,
+                    "config": spec.as_dict(), "state": state.get(inst.name)})
     return {"connectors": out}
+
+
+# ── the connector catalog (MCP-backed sources) ────────────────────────────
+
+
+@router.get("/api/connectors/catalog")
+def connector_catalog() -> dict[str, Any]:
+    """What can be added, and what cannot — with the reason either way.
+
+    Blocked sources are returned rather than omitted: a grid that silently
+    lacks LinkedIn teaches the user the app is missing a feature, when the
+    truth is that no app can offer it. "Never show a control that cannot work"
+    means saying so where the control would have been.
+    """
+    from ...connectors.mcp_catalog import BLOCKED, CATALOG
+    from ...connectors.mcp_source import list_servers
+
+    added = {spec.id for spec in list_servers()}
+    return {
+        "available": [{"id": e.id, "name": e.name, "notes": e.notes,
+                       "first_party": e.first_party, "added": e.id in added,
+                       "needs_env": [{"name": n, "help": h} for n, h in e.needs_env]}
+                      for e in CATALOG],
+        "blocked": [{"id": b.id, "name": b.name, "reason": b.reason}
+                    for b in BLOCKED],
+    }
+
+
+class CatalogAddIn(BaseModel):
+    env: dict[str, str] = {}
+
+
+@router.post("/api/connectors/catalog/{entry_id}")
+@probes_a_provider
+def connector_catalog_add(entry_id: str, body: CatalogAddIn) -> dict[str, Any]:
+    """Add a catalog connector, after verifying it actually runs.
+
+    Returns `ok: False` with a reason rather than raising, so the form can say
+    what happened in place instead of showing a failed request.
+    """
+    from ...connectors.mcp_catalog import add_from_catalog
+
+    spec, reason = add_from_catalog(entry_id, body.env)
+    if spec is None:
+        return {"ok": False, "error": reason}
+    return {"ok": True, "name": f"mcp:{spec.id}", "label": spec.name}
+
+
+@router.get("/api/connectors/catalog/{entry_id}/permissions")
+@probes_a_provider
+def connector_permissions(entry_id: str) -> dict[str, Any]:
+    """What this connector would be able to read and change, before enabling.
+
+    Consent to something nobody has been shown is not consent.
+    """
+    from ...connectors.mcp_catalog import describe
+
+    return describe(entry_id)
+
+
+@router.delete("/api/connectors/mcp/{server_id}")
+def connector_mcp_delete(server_id: str) -> dict[str, Any]:
+    from ...connectors.mcp_source import delete_server
+
+    return {"ok": delete_server(server_id)}
 
 
 # ── custom apps (connect any REST app, no code) ───────────────────────────

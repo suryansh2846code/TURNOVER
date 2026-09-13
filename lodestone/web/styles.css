@@ -1552,3 +1552,18 @@ button.tiny.running:hover { background: linear-gradient(to right,
   max-height: 40vh;
   overflow-y: auto;
 }
+
+/* ── connector catalog ─────────────────────────────────────────────────── */
+/* One row per addable source. `.cx-off` is a source nobody can offer — shown
+   rather than hidden, so the reason lands where the control would have been. */
+.cx-head { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+           opacity: .55; margin: 0 0 6px; }
+.cx-row { display: flex; align-items: flex-start; justify-content: space-between;
+          gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.cx-row:last-child { border-bottom: none; }
+.cx-row .conn-name { display: block; }
+.cx-row .conn-sub { display: block; opacity: .7; font-size: 12px;
+                    margin-top: 2px; line-height: 1.45; }
+.cx-row button { flex: 0 0 auto; }
+.cx-off { opacity: .62; }
+.cx-off .conn-name { text-decoration: none; }

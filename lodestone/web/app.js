@@ -2151,7 +2151,9 @@ async function loadBrain() {
     const setup = c.custom
       ? `<button class="tiny ghost" data-editapp="${esc(c.name)}">edit</button>`
       : (c.ready ? "" : `<button class="tiny" data-setup="${esc(c.name)}">setup</button>`);
-    const del = c.custom ? `<button class="tiny ghost" data-delapp="${esc(c.name)}" title="remove">✕</button>` : "";
+    const del = c.custom
+      ? `<button class="tiny ghost" data-delapp="${esc(c.name)}" title="remove">✕</button>`
+      : c.mcp ? `<button class="tiny ghost" data-delmcp="${esc(c.name)}" title="remove">✕</button>` : "";
     return `<div class="conn" data-conn="${esc(c.name)}">
       <span class="conn-meta"><span class="dot ${dot}"></span>
         <span><span class="conn-name">${esc(c.label)}</span><span class="conn-sub">${esc(sub)}</span></span></span>
@@ -2166,6 +2168,14 @@ async function loadBrain() {
     if (!confirm("Remove this custom app? (synced records stay in the brain.)")) return;
     await api(`/api/custom-apps/${id}`, { method: "DELETE" });
     toast("custom app removed"); loadBrain();
+  });
+  document.querySelectorAll("[data-delmcp]").forEach((b) => b.onclick = async () => {
+    const id = b.dataset.delmcp.split(":")[1];
+    // Say what removing does and does not do. Silently keeping the memories
+    // would be a surprise; silently deleting them would be worse.
+    if (!confirm("Remove this connector? (what it already synced stays in your brain.)")) return;
+    await api(`/api/connectors/mcp/${encodeURIComponent(id)}`, { method: "DELETE" });
+    toast("connector removed"); loadBrain();
   });
   loadSyncStatus();
   try { renderGoogleCard(await api("/api/google/status")); } catch (_) {}
@@ -2454,6 +2464,148 @@ function customAppForm(app) {
   };
 }
 $("#addCustomApp").onclick = () => customAppForm();
+
+// ── the connector catalog ────────────────────────────────────────────────
+// Everything here is a "connector" to the user. Several are backed by MCP
+// servers, which is an implementation detail they never need — the same way
+// signing in to Claude never mentions a vendor CLI.
+
+function connectorBrowser() {
+  openBrainModal("Add a connector",
+    `<p class="t">Connectors run on your Mac and talk to the service directly.
+       Nothing is routed through us, and you sign in with the service itself.</p>
+     <div id="cxList" class="t" style="margin-top:12px">Loading…</div>`);
+  loadConnectorCatalog();
+}
+
+async function loadConnectorCatalog() {
+  const box = $("#cxList");
+  if (!box) return;
+  let data;
+  try {
+    data = await api("/api/connectors/catalog");
+  } catch (e) {
+    box.textContent = "Could not load the connector list. " + String(e);
+    return;
+  }
+
+  const card = (c) => `
+    <div class="cx-row" data-cx="${esc(c.id)}">
+      <span>
+        <span class="conn-name">${esc(c.name)}</span>
+        <span class="conn-sub">${c.added ? "already added"
+          : esc(c.notes || (c.first_party ? "Official connector" : "Community connector"))}</span>
+      </span>
+      <button class="tiny${c.added ? " ghost" : ""}" data-cxadd="${esc(c.id)}"
+        ${c.added ? "disabled" : ""}>${c.added ? "added" : "Add"}</button>
+    </div>`;
+
+  // Blocked sources are shown, not hidden. Leaving LinkedIn out of the grid
+  // teaches the user this app is missing a feature; the truth is that no app
+  // can offer it, and saying so is the only honest version of that control.
+  const blocked = (b) => `
+    <div class="cx-row cx-off">
+      <span>
+        <span class="conn-name">${esc(b.name)}</span>
+        <span class="conn-sub">${esc(b.reason)}</span>
+      </span>
+      <span class="tiny ghost" style="opacity:.5;cursor:default">unavailable</span>
+    </div>`;
+
+  box.innerHTML =
+    `<div class="cx-head">Available</div>${data.available.map(card).join("")}` +
+    (data.blocked.length
+      ? `<div class="cx-head" style="margin-top:14px">Not possible</div>
+         ${data.blocked.map(blocked).join("")}` : "");
+
+  box.querySelectorAll("[data-cxadd]").forEach((b) => {
+    if (!b.disabled) b.onclick = () => connectorPermissions(b.dataset.cxadd);
+  });
+}
+
+// Consent to something nobody has been shown is not consent, so the tools a
+// connector exposes are read from the server and displayed before it is added.
+async function connectorPermissions(entryId) {
+  openBrainModal("Add a connector",
+    `<div id="cxPerm" class="t">Checking what this connector can do…</div>`);
+  let info;
+  try {
+    info = await api(`/api/connectors/catalog/${encodeURIComponent(entryId)}/permissions`);
+  } catch (e) {
+    $("#cxPerm").textContent = "Could not check this connector. " + String(e);
+    return;
+  }
+
+  if (!info.available) {
+    $("#cxPerm").innerHTML =
+      `<p class="t">${esc(info.reason || "This connector cannot be added.")}</p>
+       <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+         <button id="cxBack" class="tiny ghost">Back</button></div>`;
+    $("#cxBack").onclick = connectorBrowser;
+    return;
+  }
+
+  const list = (items, empty) => items.length
+    ? `<ul style="margin:4px 0 0 16px;padding:0">${
+        items.map((t) => `<li><code>${esc(t)}</code></li>`).join("")}</ul>`
+    : `<div class="t" style="opacity:.7;margin-top:4px">${empty}</div>`;
+
+  const env = (info.needs_env || []).map((f) => `
+    <label class="t" style="display:block;margin:8px 0 3px">${esc(f.name)}</label>
+    <div class="t" style="opacity:.7;margin-bottom:4px">${esc(f.help)}</div>
+    <input id="cxenv_${esc(f.name)}" spellcheck="false" type="password"
+      style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)" />`
+  ).join("");
+
+  $("#cxPerm").innerHTML =
+    `<p class="t"><b>${esc(info.name)}</b> would be able to:</p>
+     <div style="margin-top:8px"><b class="t">Read</b>${list(info.reads, "nothing")}</div>
+     <div style="margin-top:8px"><b class="t">Change</b>${
+       list(info.writes, "nothing — this connector is read-only")}</div>
+     ${info.writes.length ? `<p class="t" style="margin-top:8px;opacity:.8">
+       Anything that changes something always asks you first.</p>` : ""}
+     ${info.can_sync ? "" : `<p class="t" style="margin-top:8px">
+       This one answers questions but cannot list its records, so it is searched
+       on demand rather than synced.</p>`}
+     ${env ? `<hr style="border:none;border-top:1px solid var(--line);margin:12px 0">${env}` : ""}
+     <div id="cxErr" class="t" style="color:var(--bad);margin-top:8px" hidden></div>
+     <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+       <button id="cxBack" class="tiny ghost">Back</button>
+       <button id="cxGo" class="tiny">Add connector</button></div>`;
+
+  $("#cxBack").onclick = connectorBrowser;
+  $("#cxGo").onclick = async () => {
+    const body = { env: {} };
+    (info.needs_env || []).forEach((f) => {
+      const v = $(`#cxenv_${f.name}`);
+      if (v && v.value.trim()) body.env[f.name] = v.value.trim();
+    });
+    const go = $("#cxGo"), err = $("#cxErr");
+    go.disabled = true; go.textContent = "Checking…"; err.hidden = true;
+    try {
+      const r = await api(`/api/connectors/catalog/${encodeURIComponent(entryId)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body) });
+      if (!r.ok) {
+        // Say why here, where they are looking — a failed add that closes the
+        // dialog and shows nothing is the shape of "the app is broken".
+        err.textContent = r.error; err.hidden = false;
+        go.disabled = false; go.textContent = "Add connector";
+        return;
+      }
+      $("#brainModal").hidden = true;
+      toast(`${r.label} connected — syncing…`);
+      await syncConn(r.name);
+      loadBrain();
+    } catch (e) {
+      err.textContent = String(e); err.hidden = false;
+      go.disabled = false; go.textContent = "Add connector";
+    }
+  };
+}
+
+$("#addConnector").onclick = () => connectorBrowser();
+
 
 // ── tasks ────────────────────────────────────────────────────────────────
 function dueLabel(iso) {
