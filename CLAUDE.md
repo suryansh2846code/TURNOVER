@@ -129,6 +129,57 @@ What that means concretely, and what it has already changed:
   keys, no CLIs, no accounts — the app must still open, explain itself, and
   offer a way forward.
 
+- **Loopback is not a security boundary.** The API lists the user's home
+  directory, stores provider credentials and can erase the brain, and it listens
+  on `127.0.0.1` with no authentication — where every browser the user has open
+  is also "on this machine". `api/security.py` refuses any request whose `Host`
+  is not a loopback name (that is what ends DNS rebinding — the attacker
+  controls the DNS, never the `Host` header), any cross-site `Sec-Fetch-Site`,
+  and any request whose `Origin` does not match the `Host` it arrived on.
+  **That last comparison is the one to get right.** The first version asked
+  "is the `Origin` loopback?", which is a different question: a Vite server on
+  `localhost:5173` or a notebook on `localhost:8888` passes it, and could
+  therefore `POST /api/brain/reset`. Our own page is by definition served from
+  the authority the request arrived on, so comparing the two distinguishes it
+  from every other local origin without hardcoding a port — which matters,
+  because the desktop app binds a different one per install. Deliberately
+  **not** a token: against a local process it would live in a file that process
+  can read, and against a browser it buys only what this comparison already
+  buys.
+  `/api/open-browser` takes `http(s)` only — otherwise it hands the system
+  opener any scheme an installed app has registered.
+- **Slow work gets its own lane, or it takes the window with it.** Every handler
+  is a plain `def`, so they share one worker-thread pool — and the UI is served
+  by the same server. `api/concurrency.py` gives model turns and provider probes
+  bounded `CapacityLimiter`s and makes those endpoints `async`, so a queued
+  probe holds **no** thread. Measured: with the shared pool throttled and 20
+  blocking probes in flight, the UI waited **2.47s** without the lanes and
+  answered immediately with them (`tests/test_threadpool_isolation.py`). This is
+  the root cause behind the `/auth/status` freeze; polling something cheaper
+  treated the symptom.
+- **A failure we survive is still a failure we should be able to see.**
+  `except Exception: pass` is correct at runtime and invisible afterwards, which
+  is how "it just doesn't work" becomes unfalsifiable. Use
+  `with suppressed("what you were attempting"):` from `lodestone/log.py` — same
+  behaviour, keeps the evidence, and writes to a rotating file in the Lodestone
+  home so a bug report has something in it. 57 sites were converted;
+  `tests/test_failures_are_recorded.py` is what stops there being a 58th.
+- **Every identifier we send a vendor is the vendor's or ours — never a third
+  party's.** The ChatGPT sign-in sent `originator=opencode` and the xAI flow used
+  OpenCode's client id: both told the vendor a different product was calling,
+  and both made every user's sign-in breakable by a decision aimed at somebody
+  else. The originator now matches the client it authenticates as, the xAI OAuth
+  flow is gone (it could never yield a usable credential anyway — sign-in goes
+  through the Grok CLI), and `tests/test_vendor_identity.py` scans for
+  recurrences.
+- **`"key" in row` on a `sqlite3.Row` tests the VALUES.** Not the keys. The graph
+  store guarded every optional column that way, so the guards were always false
+  and entity importance and confidence silently stayed at their defaults no
+  matter what was stored — measured: importance stuck at 0.55 where it should
+  have reached 0.7. Use `row.keys()`, or read the column directly when the
+  schema guarantees it. `SIM118` and `SIM401` are disabled in `pyproject.toml`
+  for exactly this reason; re-enabling either reintroduces the bug.
+
 When in doubt: would a non-technical user understand what just happened, and
 what to do next? If not, it is not finished.
 
@@ -141,11 +192,27 @@ what to do next? If not, it is not finished.
   only reloads the FRONTEND (assets are no-cache) — it can NOT reload Python, so
   without `--dev` a new/changed endpoint 404s until you relaunch. Frontend-only
   edits (html/js/css) always show on Cmd+R.
-- Tests: `pytest`. Python venv at `.venv` (use `./.venv/bin/python`).
+- Tests: `pytest`. Lint `ruff check lodestone tests`, types `mypy lodestone`.
+  Python venv at `.venv` (use `./.venv/bin/python`).
+- **Shipping it:** `scripts/build-dmg.sh` bundles, signs, notarises and staples a
+  real `.dmg` (189 MB app → 74 MB image; torch is excluded deliberately).
+  `scripts/build-macos-app.sh` is the *development* shim — its launcher runs this
+  checkout's venv, so it works on this machine and nowhere else. Read
+  [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) before touching either.
 
 ## Layout
-- `lodestone/api/app.py` — all HTTP routes (FastAPI). Serves `/` (workspace) and
+- `lodestone/api/` — the HTTP surface. `app.py` is the composition root
+  (middleware, lifespan, mounts); the routes live in `routes/`, grouped by
+  subject and mounted from `ALL_ROUTERS`. Serves `/` (workspace) and
   `/onboarding`, mounts `/static`, and the `/api/*` JSON API.
+- `lodestone/api/security.py` — the origin guard (Host / Origin /
+  `Sec-Fetch-Site`). `lodestone/api/concurrency.py` — the bounded lanes slow
+  handlers run in. `lodestone/api/schemas.py` — request bodies shared by more
+  than one router.
+- `lodestone/log.py` — `get_logger()` and `suppressed()`, the seam that replaced
+  every silent `except: pass`.
+- `packaging/` — the PyInstaller spec, the Hardened Runtime entitlements and the
+  bundled app's launcher.
 - `lodestone/hud.py` + `lodestone/web/signin_hud.html` — the floating sign-in
   card: one reused, transparent, frameless window that follows the user to the
   browser. Read [`docs/DESKTOP-SIGNIN.md`](docs/DESKTOP-SIGNIN.md) before
