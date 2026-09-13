@@ -3482,19 +3482,6 @@ $("#drawerBg").onclick = (e) => { if (e.target.id === "drawerBg") closeDrawer();
 { const nr = $("#newAgentRow"); if (nr) nr.onclick = () => $("#newAgentBtn").click(); }
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#drawerBg") && !$("#drawerBg").hidden) closeDrawer(); });
 
-// composer slash-style hint chips
-{
-  const hints = [["/catch me up", "Catch me up — what's new since yesterday?"],
-    ["/tasks", "What should I focus on today? Show my open tasks."],
-    ["/find", "Find "], ["/plan", "Help me plan my day and week."]];
-  const box = $("#cmpHints");
-  if (box) box.innerHTML = hints.map((h, i) => `<span data-i="${i}">${esc(h[0])}</span>`).join("");
-  if (box) box.querySelectorAll("span").forEach((s) => s.onclick = () => {
-    const [, q] = hints[+s.dataset.i];
-    if (q.endsWith(" ")) { $("#input").value = q; $("#input").focus(); autoGrow(); } else send(q);
-  });
-}
-
 // Cmd/Ctrl+R → refresh the workspace in place (picks up new code — assets are
 // served no-cache). The desktop app runs in a webview where the browser's reload
 // shortcut isn't wired, so we bind it ourselves. Note: it reloads "/", NOT the
