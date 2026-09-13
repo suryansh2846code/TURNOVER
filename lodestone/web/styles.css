@@ -98,8 +98,20 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .app.collapsed .a-meta, .app.collapsed .agent .dot, .app.collapsed .na-tx,
 .app.collapsed .snav-tx, .app.collapsed .user-nm { display: none; }
 .app.collapsed .collapse-btn { margin-left: 0; }
-.app.collapsed .agent, .app.collapsed .snav, .app.collapsed .new-agent, .app.collapsed .user-chip { justify-content: center; }
-.app.collapsed .agent { padding: 8px; } .app.collapsed .snav { padding: 9px; }
+/* Collapsed, every item is the SAME 40px square centred in the rail, and the
+   orb comes down to 28px. At 34px it was nearly twice the 18px nav icons
+   below it, so the agent list read as a different, heavier thing bolted on
+   top of the navigation rather than the same rail continuing. */
+.app.collapsed .agent, .app.collapsed .snav,
+.app.collapsed .new-agent, .app.collapsed .user-chip {
+  width: 40px; height: 40px; padding: 0; justify-content: center;
+  border-radius: 12px; }
+.app.collapsed .agent, .app.collapsed .snav, .app.collapsed .user-chip { margin: 0 auto; }
+.app.collapsed .new-agent { margin: 6px auto 2px; }
+.app.collapsed .agents, .app.collapsed .side-nav { gap: 4px; }
+.app.collapsed .orb { width: 28px; height: 28px; }
+.app.collapsed .na-plus { width: 24px; height: 24px; }
+.app.collapsed .user-av { width: 26px; height: 26px; }
 .brand { display: flex; align-items: center; gap: 11px; padding: 2px 6px 16px;
   font-family: var(--mono); letter-spacing: .32em; text-transform: uppercase; font-size: 13px; }
 .brand-mark { width: 13px; height: 13px; transform: rotate(45deg);
