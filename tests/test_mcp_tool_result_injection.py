@@ -472,29 +472,22 @@ def test_nested_action_tags_never_execute_a_recipient_the_card_did_not_show():
         f"a nested tag smuggled a hidden recipient through: {actions}")
 
 
-# ── 5 · AUDIT A8: the gate only splits recipients on "," and ";" ─────────────
+# ── 5 · AUDIT A8 (fixed): every recipient reaches the gate ───────────────────
 #
-# `recipients_of` splits on `[,;]` and `normalise` returns the FIRST address it
-# finds in each token, discarding the rest. So a token holding two addresses
-# separated by whitespace is reported to `check()` as one — the permitted one.
-#
-# These two are `xfail(strict=True)` rather than deleted, because the bug is
-# real and belongs to Agents, not QA: see `docs/AUDIT.md` → A8 and the handoff.
-# Strict means they FAIL if they start passing, so whoever fixes the splitter is
-# forced to remove the marker rather than quietly inheriting a dead test.
+# `recipients_of` used to split on `[,;]` and take the FIRST address in each
+# token, so a token holding two addresses separated by whitespace was reported
+# to `check()` as one — the permitted one. These two tests were written as
+# `xfail(strict=True)` against that bug; `_every_address_in` closed it and the
+# markers came off in the same commit, which is what strict was for.
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT A8 — recipients_of splits only on "
-                                       "[,;], so a whitespace-separated second "
-                                       "recipient is invisible to check()")
 @pytest.mark.parametrize("separator", ["\n", " ", "\t", "\r\n"])
 def test_a_whitespace_separated_second_recipient_is_visible_to_the_gate(separator):
     """Every address the action would reach must reach `check()`.
 
-    Repro:
-      python -c "from lodestone.agents.permissions import recipients_of as r; \\
-                 print(r('send_email', {'to': 'a@work.test\\nb@evil.test'}))"
-      -> ['a@work.test']          # b@evil.test silently dropped
+    Was AUDIT A8. Before the fix:
+      r('send_email', {'to': 'a@work.test\\nb@evil.test'}) -> ['a@work.test']
+    with `b@evil.test` silently dropped before `check()` ever ran.
     """
     raw = f"colleague@work.test{separator}{ATTACKER}"
     found = permissions.recipients_of("send_email", {"to": raw})
@@ -503,9 +496,6 @@ def test_a_whitespace_separated_second_recipient_is_visible_to_the_gate(separato
         f"the gate never saw {ATTACKER} in {raw!r}; it judged only {found}")
 
 
-@pytest.mark.xfail(strict=True, reason="AUDIT A8 — create_event validates no "
-                                       "address, so the blind recipient is "
-                                       "actually invited")
 def test_an_injected_calendar_invite_cannot_reach_a_stranger(routine):
     """The impact of A8, end to end and unattended.
 

@@ -96,17 +96,40 @@ def normalise(address: str) -> str:
     return (found.group(0) if found else (address or "")).strip().strip("<>").lower()
 
 
+def _every_address_in(raw: str) -> list[str]:
+    """Every address in one recipient field — not just the first.
+
+    `normalise` answers *what is this address*, and `search` returning the first
+    match is right for a permission the user typed. It is the wrong question for
+    a field an injection wrote: `allowed@work.test attacker@evil.test` read as
+    the allowed address alone, so the gate below judged a list it had only half
+    seen. Splitting on `[,;]` did not save it either — nothing says a recipient
+    list is comma-separated, and the text filling this field was written by
+    whoever wrote the email the agent just read.
+
+    A token that parses as no address at all is still returned, normalised, so
+    an unrecognisable recipient fails closed rather than reading as nobody.
+    """
+    found = [m.strip().strip("<>").lower() for m in _ADDRESS.findall(raw or "")]
+    if not found:
+        leftover = normalise(raw)
+        return [leftover] if leftover else []
+    return list(dict.fromkeys(found))
+
+
 def recipients_of(action_type: str, params: dict) -> list[str]:
     """Everyone this action would reach. Empty means it reaches nobody."""
     params = params or {}
     if action_type == "send_email":
-        raw = str(params.get("to") or "")
-        return [normalise(a) for a in re.split(r"[,;]", raw) if normalise(a)]
+        return _every_address_in(str(params.get("to") or ""))
     if action_type == "create_event":
         attendees = params.get("attendees") or []
         if isinstance(attendees, str):
-            attendees = re.split(r"[,;]", attendees)
-        return [normalise(a) for a in attendees if normalise(a)]
+            attendees = [attendees]
+        out: list[str] = []
+        for one in attendees:
+            out.extend(_every_address_in(str(one)))
+        return list(dict.fromkeys(out))
     return []
 
 
