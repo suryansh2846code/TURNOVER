@@ -9,8 +9,11 @@
  * Reads {chunks, ok} as JSON on stdin; writes {previews, notes, result, error}.
  */
 import fs from "node:fs";
+import path from "node:path";
 
-const APP_JS = process.argv[2];
+import { appSource } from "./_app_source.mjs";
+
+const APP_JS = process.argv[2];   // a path inside lodestone/web/
 const input = JSON.parse(fs.readFileSync(0, "utf8"));
 
 const previews = [];
@@ -69,7 +72,10 @@ globalThis.fetch = async () => {
   };
 };
 
-const src = fs.readFileSync(APP_JS, "utf8");
+// The whole workspace, in the order index.html loads it — one file today,
+// several once app.js is split. `new Function` compiles a script, so every
+// piece has to arrive in one shared scope; see tests/js/_app_source.mjs.
+const src = appSource(path.dirname(APP_JS));
 new Function(
   src +
   "\nglobalThis.__streamTurn = streamTurn;" +

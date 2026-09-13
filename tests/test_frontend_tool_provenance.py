@@ -84,11 +84,20 @@ SCENARIO = {
 # A harness that passes against the bug it exists to catch is worse than none,
 # because it reads as coverage. Both bugs below are the ones this feature is.
 def _mutated(tmp_path: pathlib.Path, old: str, new: str) -> pathlib.Path:
+    """A copy of the web directory with one line of `app.js` broken.
+
+    The whole directory, not just the file: the harness loads the app the way
+    the browser does, reading `index.html` for which scripts to run and in what
+    order (`tests/js/_app_source.mjs`). A lone mutated `app.js` in an empty
+    directory has no page to be loaded by, and would only prove that the loader
+    reports a missing one.
+    """
     src = APP_JS.read_text()
     assert src.count(old) == 1, f"anchor moved, cannot reintroduce the bug: {old!r}"
-    out = tmp_path / "app.js"
-    out.write_text(src.replace(old, new))
-    return out
+    web = tmp_path / "web"
+    shutil.copytree(APP_JS.parent, web)
+    (web / APP_JS.name).write_text(src.replace(old, new))
+    return web / APP_JS.name
 
 
 def test_harness_catches_provenance_being_dropped(tmp_path):
