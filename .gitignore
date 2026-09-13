@@ -18,3 +18,9 @@ google_client_secret.json
 # non-confidential (security is PKCE + the localhost redirect), so shipping it
 # gives testers one-click sign-in. If GitHub secret-scanning ever revokes it,
 # regenerate a Desktop client in Cloud Console and replace this file.
+
+# build artefacts
+dist/
+build/
+*.dmg
+*.spec.bak

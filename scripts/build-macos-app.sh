@@ -1,11 +1,19 @@
 #!/bin/bash
-# Build a double-clickable macOS "Lodestone.app" that launches the native window.
-# It references this project's virtualenv (not a fully self-contained bundle),
-# so it runs on THIS machine. Distribution to other Macs needs PyInstaller +
-# code signing (a further step, heavy because of torch).
+# Build a double-clickable "Lodestone.app" for THIS machine, for development.
+#
+# The launcher it writes runs this checkout's virtualenv, so the bundle contains
+# no Python and works nowhere else. That is the point — it is a fast way to get
+# an icon in ~/Applications while developing.
+#
+# To build something you can give to somebody else, use scripts/build-dmg.sh:
+# it bundles the interpreter with PyInstaller, signs with Developer ID, and
+# notarises. See docs/DISTRIBUTION.md.
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Read the version rather than restating it — this file said 0.2.0 while
+# pyproject.toml said 0.1.0.
+VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' "$PROJECT_DIR/pyproject.toml" | head -1)"
 VENV="$PROJECT_DIR/.venv"
 APP_DIR="${1:-$HOME/Applications}/Lodestone.app"
 CONTENTS="$APP_DIR/Contents"
@@ -36,8 +44,8 @@ cat > "$CONTENTS/Info.plist" <<EOF
   <key>CFBundleName</key><string>Lodestone</string>
   <key>CFBundleDisplayName</key><string>Lodestone</string>
   <key>CFBundleIdentifier</key><string>ai.lodestone.app</string>
-  <key>CFBundleVersion</key><string>0.2.0</string>
-  <key>CFBundleShortVersionString</key><string>0.2.0</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleExecutable</key><string>Lodestone</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>

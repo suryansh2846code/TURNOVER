@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    Hardened Runtime exceptions. Notarisation requires the Hardened Runtime, and
+    the Hardened Runtime breaks CPython unless these three are granted. Each one
+    is here for a reason, and none of them is a sandbox hole we chose for
+    convenience:
+
+    allow-jit / allow-unsigned-executable-memory
+      CPython and several C extensions map writable-executable memory. Without
+      these the interpreter is killed at launch with EXC_BAD_ACCESS, before any
+      Lodestone code runs.
+
+    disable-library-validation
+      The bundle loads .so extension modules that were built by their own
+      projects and are signed (if at all) by someone other than us. Library
+      validation refuses to load any library not signed by the same team ID.
+
+    Deliberately NOT requested:
+      * App Sandbox. Lodestone reads the user's own files, mail and messages by
+        design, and runs vendor CLIs the user installed. A sandbox would have to
+        be punctured everywhere it mattered, which is worse than being honest
+        about being an unsandboxed local tool.
+      * com.apple.security.cs.allow-dyld-environment-variables. Nothing here
+        needs it, and it weakens the runtime.
+  -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>
