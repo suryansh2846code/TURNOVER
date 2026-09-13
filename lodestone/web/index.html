@@ -188,38 +188,6 @@
           <div id="toolList" class="tools"></div>
         </div>
 
-        <!-- Model -->
-        <div class="dpanel" data-d="model" hidden>
-          <div class="ctx-label">Connected Providers &amp; AI Accounts</div>
-          <p class="model-hint" style="margin-top:0">Connect Cursor, Claude, OpenAI, xAI, Google Gemini, or local Ollama. Model choice is selected directly inside the chat composer.</p>
-          <div id="providerCards" class="provider-cards"></div>
-
-          <!-- Hidden fallbacks kept so legacy scripts run without errors -->
-          <div id="agentModelMatrix" hidden></div>
-          <select id="provider" hidden></select>
-          <div id="defaultProviderConnectBox" hidden></div>
-          <input id="modelName" type="hidden" />
-          <div id="modelHint" hidden></div>
-          <div id="privacyBadge" hidden></div>
-
-          <div class="ctx-label" style="margin-top:16px">Enrichment model</div>
-          <select id="enrichProvider"></select>
-          <input id="enrichModelName" class="ctx-input" autocomplete="off" placeholder="same as agent model" style="margin-top:8px" />
-          <p class="model-hint">Used only to build your brain's knowledge graph — separate from your agents. Point it at a cheap or local model (Ollama, a small model) to keep enrichment cost low while agents run a stronger one.</p>
-
-          <div class="ctx-label" style="margin-top:14px">Enrich recent items per bulk source</div>
-          <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
-            <input id="enrichCap" type="number" min="0" class="ctx-input" style="max-width:96px" />
-            <button id="enrichCapSave" class="tiny">Save</button>
-            <span id="enrichCapNote" class="model-hint" style="margin:0"></span>
-          </div>
-          <p class="model-hint">Bulk sources (Gmail, Drive…) enrich only their most-recent N items — recent context matters most and keeps token cost bounded. 0 = all of them. Calendar &amp; notes always enrich in full.</p>
-
-          <div class="ctx-label">Usage this brain <button id="usageReset" class="tiny ghost">reset</button></div>
-          <div id="usageBox" class="usage-box"></div>
-          <p class="model-hint">Counts every model call (enrichment, chat, digests). Cloud models show exact tokens; local ones are free. Account/plan quotas aren't available via the API.</p>
-        </div>
-
       </div>
     </aside>
   </div>
@@ -333,6 +301,57 @@
   </div>
 
   <!-- full-screen brain screen -->
+  <!-- ── Full-screen: AI model ─────────────────────────────────────────
+       Model was a slide-over drawer 380px wide, which is the wrong shape for
+       a screen whose main content is a grid of provider cards, each with an
+       account, a plan, usage limits and a model list. It is now a screen of
+       its own, opened the same way Brain is. -->
+  <div id="modelScreen" class="modelscreen" hidden>
+    <div class="ms-top">
+      <div class="ms-title"><span class="ms-mark"></span>AI model</div>
+      <button id="msClose" class="ghost tiny">Close ✕</button>
+    </div>
+
+    <div class="ms-body">
+      <section class="ms-block">
+        <div class="ctx-label">Connected Providers &amp; AI Accounts</div>
+        <p class="model-hint" style="margin-top:0;max-width:62ch">Connect Cursor, Claude, OpenAI, xAI, Google Gemini, or local Ollama. Model choice is selected directly inside the chat composer.</p>
+        <div id="providerCards" class="provider-cards"></div>
+
+        <!-- Hidden fallbacks kept so legacy scripts run without errors -->
+        <div id="agentModelMatrix" hidden></div>
+        <select id="provider" hidden></select>
+        <div id="defaultProviderConnectBox" hidden></div>
+        <input id="modelName" type="hidden" />
+        <div id="modelHint" hidden></div>
+        <div id="privacyBadge" hidden></div>
+      </section>
+
+      <div class="ms-cols">
+        <section class="ms-block ms-panel">
+          <div class="ctx-label" style="margin-top:0">Enrichment model</div>
+          <select id="enrichProvider"></select>
+          <input id="enrichModelName" class="ctx-input" autocomplete="off" placeholder="same as agent model" style="margin-top:8px" />
+          <p class="model-hint">Used only to build your brain's knowledge graph — separate from your agents. Point it at a cheap or local model (Ollama, a small model) to keep enrichment cost low while agents run a stronger one.</p>
+
+          <div class="ctx-label" style="margin-top:14px">Enrich recent items per bulk source</div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
+            <input id="enrichCap" type="number" min="0" class="ctx-input" style="max-width:96px" />
+            <button id="enrichCapSave" class="tiny">Save</button>
+            <span id="enrichCapNote" class="model-hint" style="margin:0"></span>
+          </div>
+          <p class="model-hint">Bulk sources (Gmail, Drive…) enrich only their most-recent N items — recent context matters most and keeps token cost bounded. 0 = all of them. Calendar &amp; notes always enrich in full.</p>
+        </section>
+
+        <section class="ms-block ms-panel">
+          <div class="ctx-label" style="margin-top:0">Usage this brain <button id="usageReset" class="tiny ghost">reset</button></div>
+          <div id="usageBox" class="usage-box"></div>
+          <p class="model-hint">Counts every model call (enrichment, chat, digests). Cloud models show exact tokens; local ones are free. Account/plan quotas aren't available via the API.</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
   <div id="brainScreen" class="brainscreen" hidden>
     <canvas id="bsCanvas" aria-hidden="true"></canvas>
     <div class="bs-top">

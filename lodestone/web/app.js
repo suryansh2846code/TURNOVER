@@ -1070,7 +1070,7 @@ function isProviderConnected(pid) {
 // Record a model choice everywhere the app reads one.
 //
 // The composer picker used to save only the agent's binding, and the composer
-// then sent `$("#provider").value` — a hidden select in the Models drawer that
+// then sent `$("#provider").value` — a hidden select on the AI model screen that
 // nobody had updated. On the server the request wins over the agent binding, so
 // the stale value overrode the fresh choice: the pill said xAI and the turn ran
 // on whatever the drawer last held. The agent was answering honestly; it really
@@ -1385,7 +1385,7 @@ function refreshPickerStatusRows() {
       e.stopPropagation();
       const pid = el.dataset.provider;
       openDrawer("model");
-      toast(`Viewing ${pid} in Models & Accounts`);
+      toast(`Viewing ${pid} in AI model`);
     };
   });
 }
@@ -1514,7 +1514,7 @@ function initComposerModelPicker() {
       openDrawer("model");
       const p = (MODEL_CATALOG || []).find((x) => x.id === "claude");
       if (!p || !p.ready) {
-        toast("Opening Models drawer to sign in with Claude");
+        toast("Opening AI model to sign in with Claude");
       }
     };
   }
@@ -1527,7 +1527,7 @@ function initComposerModelPicker() {
       openDrawer("model");
       const p = (MODEL_CATALOG || []).find((x) => x.id === "openai");
       if (!p || !p.ready) {
-        toast("Opening Models drawer to sign in with ChatGPT");
+        toast("Opening AI model to sign in with ChatGPT");
       }
     };
   }
@@ -1586,7 +1586,7 @@ async function updateAgentModelChip(agentId) {
     if (chip) {
       chip.classList.toggle("is-override", Boolean(data.is_override));
       chip.title = !isProvConn
-        ? `${provLabel} is not connected. Open Models drawer to connect.`
+        ? `${provLabel} is not connected. Open Model to connect.`
         : (data.is_override
           ? `Dedicated model for this agent: ${provLabel} (${modelName || 'Auto'}). Click to change.`
           : `Using global default model: ${provLabel} (${modelName || 'Auto'}). Click to set custom.`);
@@ -3183,6 +3183,22 @@ function closeBrainScreen() {
   clearInterval(_bsPoll); _bsPoll = null; cancelAnimationFrame(_bsRaf); _bsRaf = null;
 }
 $("#bsClose").onclick = closeBrainScreen;
+
+// ── the AI model screen ────────────────────────────────────────────────────
+// Model used to be a 380px slide-over. Its content is a grid of provider
+// cards — each an account, a plan, usage limits and a model list — so it gets
+// the whole window, opened exactly the way the brain screen is.
+function openModelScreen() {
+  const m = $("#modelScreen"); if (!m) return;
+  m.hidden = false;
+  m.scrollTop = 0;
+  loadProviders();
+  updateUsage();
+}
+function closeModelScreen() {
+  const m = $("#modelScreen"); if (m) m.hidden = true;
+}
+{ const c = $("#msClose"); if (c) c.onclick = closeModelScreen; }
 { const rb = $("#rebuildBtn"); if (rb) rb.onclick = async () => {
   // Prune = remove junk entities, KEEP all the good (LLM/heuristic) graph work.
   // Alt/Option-click = full rebuild from scratch (wipes the graph, re-extracts).
@@ -3332,7 +3348,7 @@ $("#bsSync").onclick = async () => {
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#brainScreen").hidden) closeBrainScreen(); });
 
 // ── slide-over drawers opened from the left nav ─────────────────────────────
-const DRAWER_TITLES = { sources: "Connectors", tasks: "Tasks", model: "AI model", tools: "Tools & skills" };
+const DRAWER_TITLES = { sources: "Connectors", tasks: "Tasks", tools: "Tools & skills" };  // model is a screen now
 
 // ── the tools panel ────────────────────────────────────────────────────────
 // A skill either ships with Lodestone or arrives with something the user
@@ -3461,6 +3477,7 @@ async function loadTools() {
   }
 }
 function openDrawer(name) {
+  if (name === "model") return openModelScreen();   // no longer a drawer
   const bg = $("#drawerBg"); if (!bg) return;
   $("#drawerTitle").textContent = DRAWER_TITLES[name] || name;
   document.querySelectorAll(".dpanel").forEach((p) => p.hidden = p.dataset.d !== name);
@@ -3481,6 +3498,7 @@ $("#drawerBg").onclick = (e) => { if (e.target.id === "drawerBg") closeDrawer();
 { const v = $("#viewBrainBtn"); if (v) v.onclick = () => { closeDrawer(); openBrainScreen(); }; }
 { const nr = $("#newAgentRow"); if (nr) nr.onclick = () => $("#newAgentBtn").click(); }
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#drawerBg") && !$("#drawerBg").hidden) closeDrawer(); });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#modelScreen") && !$("#modelScreen").hidden) closeModelScreen(); });
 
 // Cmd/Ctrl+R → refresh the workspace in place (picks up new code — assets are
 // served no-cache). The desktop app runs in a webview where the browser's reload

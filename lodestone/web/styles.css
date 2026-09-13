@@ -772,6 +772,35 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .w-skip { display: block; margin: 18px auto 0; background: none; color: var(--muted); font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; }
 .w-skip:hover { color: var(--text); }
 
+/* full-screen AI model screen — same shape as the brain screen, so the two
+   full-window views of the app behave identically. The provider cards are a
+   responsive grid here rather than the single 380px column the drawer forced
+   them into; each card carries an account, a plan, usage and a model list,
+   and none of that fitted. */
+.modelscreen { position: fixed; inset: 0; z-index: 70; background: var(--ground);
+  overflow-y: auto; display: flex; flex-direction: column; }
+.modelscreen[hidden] { display: none; }
+.ms-top { position: sticky; top: 0; z-index: 2; flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 22px 30px; background: var(--ground);
+  border-bottom: 1px solid var(--line); }
+.ms-title { display: flex; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .3em;
+  text-transform: uppercase; color: var(--text); }
+.ms-mark { width: 11px; height: 11px; transform: rotate(45deg); flex: none;
+  border: 1.5px solid var(--accent); }
+.ms-body { width: min(1180px, 100%); margin: 0 auto; padding: 26px 30px 60px;
+  display: flex; flex-direction: column; gap: 26px; }
+.ms-block { display: flex; flex-direction: column; }
+.ms-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; }
+.ms-panel { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 16px; padding: 18px 20px; }
+.modelscreen .provider-cards { display: grid; gap: 14px; margin-top: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); align-items: stretch; }
+.modelscreen .provider-card { padding: 14px 16px; border-radius: 14px;
+  border: 1px solid var(--line); }
+@media (max-width: 760px) { .ms-body { padding: 20px 18px 48px; } }
+
 /* full-screen brain screen */
 .brainscreen { position: fixed; inset: 0; z-index: 70; background: #05070d; overflow: hidden; }
 .brainscreen[hidden] { display: none; }
