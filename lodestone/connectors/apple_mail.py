@@ -100,18 +100,24 @@ class AppleMailConnector(Connector):
                     files += [Path(dp) / f for f in fn if f.endswith(".emlx")]
             files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
             for fp in files[:max_messages]:
-                m = parse_emlx(fp)
-                if not m or not (m["body"] or m["subject"]):
-                    result.skipped += 1
-                    continue
-                text = (f"From: {m['sender']}\nSubject: {m['subject']}\n\n"
-                        f"{(m['body'] or '')[:4000]}")
-                mem = self.store.add(
-                    text=text, source=self.name, kind="email",
-                    title=m["subject"], event_date=m["date"],
-                    metadata={"from": m["sender"], "date": m["date"]})
-                result.added += 1 if mem else 0
-                result.skipped += 0 if mem else 1
+                # Guarded per message: a single unreadable .emlx used to abort
+                # the whole scan, so everything after it was lost while the
+                # earlier messages stayed committed (H2).
+                try:
+                    m = parse_emlx(fp)
+                    if not m or not (m["body"] or m["subject"]):
+                        result.skipped += 1
+                        continue
+                    text = (f"From: {m['sender']}\nSubject: {m['subject']}\n\n"
+                            f"{(m['body'] or '')[:4000]}")
+                    mem = self.store.add(
+                        text=text, source=self.name, kind="email",
+                        title=m["subject"], event_date=m["date"],
+                        metadata={"from": m["sender"], "date": m["date"]})
+                    result.added += 1 if mem else 0
+                    result.skipped += 0 if mem else 1
+                except Exception:
+                    result.skipped += 1        # one bad message never aborts the sync
             result.detail = f"scanned {len(files)} local messages"
         except Exception as exc:
             result.errors.append(str(exc))

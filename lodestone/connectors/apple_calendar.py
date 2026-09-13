@@ -72,23 +72,28 @@ class AppleCalendarConnector(Connector):
             brain = get_brain()
             files = list(CAL_ROOT.rglob("*.ics"))
             for fp in files[:max_events]:
+                # The whole per-event body is guarded, not just the parse: an
+                # ingest that throws used to abort the pass, losing every event
+                # after it while the ones before stayed committed — a brain that
+                # looks populated and is silently half a calendar (H2).
                 try:
                     ev = parse_ics(fp.read_text(errors="ignore"))
+                    if not ev:
+                        result.skipped += 1
+                        continue
+                    text = (f"Event: {ev['summary']}\nWhen: {ev['start']}"
+                            + (f" → {ev['end']}" if ev["end"] else "")
+                            + (f"\nWhere: {ev['location']}" if ev["location"] else "")
+                            + (f"\n\n{ev['description']}" if ev["description"] else ""))
+                    out = brain.ingest(
+                        text, source=self.name, kind="event",
+                        title=ev["summary"], fast=True,
+                        event_date=(ev["start"][:10] if ev["start"] else None))
+                    result.added += out["memories"]
+                    if not out["memories"]:
+                        result.skipped += 1
                 except Exception:
-                    continue
-                if not ev:
-                    result.skipped += 1
-                    continue
-                text = (f"Event: {ev['summary']}\nWhen: {ev['start']}"
-                        + (f" → {ev['end']}" if ev["end"] else "")
-                        + (f"\nWhere: {ev['location']}" if ev["location"] else "")
-                        + (f"\n\n{ev['description']}" if ev["description"] else ""))
-                out = brain.ingest(text, source=self.name, kind="event",
-                                   title=ev["summary"], fast=True,
-                                   event_date=(ev["start"][:10] if ev["start"] else None))
-                result.added += out["memories"]
-                if not out["memories"]:
-                    result.skipped += 1
+                    result.skipped += 1        # one bad event never aborts the sync
             result.detail = f"scanned {len(files)} local events"
         except Exception as exc:
             result.errors.append(str(exc))

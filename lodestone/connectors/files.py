@@ -62,6 +62,7 @@ class FilesConnector(Connector):
                 "or raise the limit with LODESTONE_MAX_FILES.")
             result.detail = f"too many files ({len(files)}) under {root}"
             return self._finish(result)
+        from ..brain import get_brain
         for fp in files:
             try:
                 if fp.stat().st_size > MAX_BYTES:
@@ -74,12 +75,20 @@ class FilesConnector(Connector):
             # Route through the brain so the knowledge graph is built too.
             # fast=True → offline heuristic extraction, so bulk imports stay quick.
             # Only prose builds the graph; code is stored + searchable but skipped.
-            from ..brain import get_brain
-            out = get_brain().ingest(
-                text, source=self.name, kind="doc", title=fp.name,
-                uri=str(fp), fast=True,
-                build_graph=fp.suffix.lower() in PROSE_EXT,
-            )
+            #
+            # Guarded: the read was already guarded but the ingest was not, so a
+            # single file that broke extraction propagated straight out of
+            # sync() — past the connector's own error handling, with no detail
+            # for the user and the rest of the folder never scanned (H2).
+            try:
+                out = get_brain().ingest(
+                    text, source=self.name, kind="doc", title=fp.name,
+                    uri=str(fp), fast=True,
+                    build_graph=fp.suffix.lower() in PROSE_EXT,
+                )
+            except Exception:
+                result.skipped += 1        # one bad file never aborts the sync
+                continue
             if out["memories"]:
                 result.added += out["memories"]
             else:

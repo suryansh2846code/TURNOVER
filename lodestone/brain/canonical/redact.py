@@ -22,6 +22,17 @@ _PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\b(?:sk|pk|rk)-[A-Za-z0-9_\-]{16,}\b"), "[REDACTED_KEY]"),
     (re.compile(r"\bgh[posru]_[A-Za-z0-9]{20,}\b"), "[REDACTED_KEY]"),
     (re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"), "[REDACTED_KEY]"),
+    # The key shapes of the providers this app itself connects to. `errors.py`
+    # has always stripped `xai-` and `AIza` from anything user-visible; the
+    # ingest path did not, so a key pasted into an email was redacted in an
+    # error message and stored verbatim in the brain — then written to
+    # `brain-export/` as plaintext and replayed to the model on every turn.
+    (re.compile(r"\bxai-[A-Za-z0-9_\-]{20,}\b"), "[REDACTED_KEY]"),
+    (re.compile(r"\bAIza[A-Za-z0-9_\-]{30,}\b"), "[REDACTED_KEY]"),
+    # Tokens for the connectors Lodestone asks the user to paste, which is
+    # exactly where a user is most likely to have one lying around in text.
+    (re.compile(r"\bntn_[A-Za-z0-9]{20,}\b"), "[REDACTED_KEY]"),
+    (re.compile(r"\blin_api_[A-Za-z0-9]{20,}\b"), "[REDACTED_KEY]"),
     (re.compile(r"\bBearer\s+[A-Za-z0-9._\-]{20,}\b"), "Bearer [REDACTED_TOKEN]"),
     (re.compile(r"\bey[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{6,}\b"),
      "[REDACTED_JWT]"),
