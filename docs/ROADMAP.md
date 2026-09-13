@@ -1,22 +1,48 @@
 # Lodestone — Roadmap / Backlog
 
 > What's left to build, recorded so we can revisit after each item ships.
-> Status as of 30 Aug 2026. See [`JOURNEY.md`](JOURNEY.md) for how we got here,
-> [`DECISIONS.md`](DECISIONS.md) for the "why".
+> Reviewed 13 Sep 2026. See [`JOURNEY.md`](JOURNEY.md) for how we got here,
+> [`DECISIONS.md`](DECISIONS.md) for the "why", [`AUDIT.md`](AUDIT.md) for
+> defects (this file is for work that is wanted; that one is for work that is
+> owed).
 
-## In progress
-- [ ] **Auto-migration versioning** — stamp a version on embeddings / graph /
-      schema; on startup auto re-embed / rebuild-graph when the code version
-      changes, so no user (or dev) ever runs a manual migration. *(building now)*
+## Shipped since this list was written
+- [x] **Action-taking** — propose/confirm via the `<action>` tag, executed in
+      code. Unattended paths are permission-gated; see
+      [`AGENTS.md`](AGENTS.md).
+- [x] **Custom agents** — name, focus, prompt and tool subset, stored as data.
+- [x] **Auto-migration versioning** — `core/db.py::_migrate` plus the startup
+      self-heal in `scheduler.py`.
+- [x] **The agent loop** — depth, parallel tools, conversation compaction,
+      agent-to-agent delegation, planning, streaming on every backend, and a
+      capability scorecard. [`AGENTS.md`](AGENTS.md).
 
 ## Next up (priority order)
-1. [ ] **Action-taking** — the biggest Turnstone gap. Agents currently *draft*
-       but can't *do*: send an email, create a calendar event, reply. Build with
-       an explicit **confirm-before-acting** step. Needs write-scoped connectors.
-2. [ ] **UI-based OAuth** — connect Gmail/Drive/Calendar from the workspace, no
+1. [ ] **MCP client** — consume any remote MCP server, the mirror of the server
+       we already ship. The single biggest multiplier on what agents can do, and
+       the Turnstone advantage recorded as F9 in the teardown. *(in progress,
+       separately)*
+2. [ ] **Full Disk Access handling** — iMessage and Apple Mail need it, no
+       prompt can request it, and without an explanation the app simply looks
+       broken on someone else's Mac. The largest gap between "the `.dmg` builds"
+       and "the `.dmg` works for a stranger". See [`DISTRIBUTION.md`](DISTRIBUTION.md).
+3. [ ] **UI for effort, permissions and approvals** — the APIs exist and are
+       tested; the drawer rows do not. Until then a queued action is reachable
+       only through a desktop notification and the API.
+4. [ ] **UI-based OAuth** — connect Gmail/Drive/Calendar from the workspace, no
        terminal/CLI. Required for non-developer users.
-3. [ ] **Custom agents** — let users create their own agent (name, focus, tools),
-       not just the 4 presets. Turnstone feature.
+
+## Agent gaps worth naming
+Detail in [`AGENTS.md`](AGENTS.md) → *What is still missing*.
+- [ ] **A turn-wide token budget.** Depth and per-agent budgets bound delegation,
+      but three agents at High is still a lot of model calls on the user's own
+      plan.
+- [ ] **Answer-quality evaluation.** The scorecard measures the harness; whether
+      an answer is *good* needs a real model and a person.
+- [ ] **The plan is advisory** — nothing checks at the end whether the steps the
+      agent wrote for itself were actually done.
+- [ ] **`tools.py` at 65% coverage**, the lowest in the agent layer and the part
+      that touches the real world.
 
 ## Deferred — needs a product decision
 

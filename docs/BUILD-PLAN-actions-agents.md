@@ -1,5 +1,16 @@
 # Build Plan — Action-taking + Custom Agents
 
+> **Shipped — kept for the reasoning, not as a to-do.** All three phases exist.
+> How the agents work now is [`AGENTS.md`](AGENTS.md).
+>
+> One rule below needed restating rather than repeating. "No send/create without
+> explicit user Confirm" held for chat and was later broken by routines, which
+> pre-authorise their own actions — including actions proposed from an email a
+> stranger wrote. Unattended actions are now gated by an explicit
+> allowed-recipient list with an approval queue; interactive chat still uses the
+> Confirm card exactly as designed here.
+
+
 ## Goal
 1. **Agents that DO** — send email, create calendar events (the Turnstone "handle
    it for me"), with **confirm-before-execute** (nothing outward without a click).

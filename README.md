@@ -17,6 +17,10 @@ knowledge-graph brain** on your own machine. Then spin up specialized **agents**
 
 > 📖 **The story:** [`docs/JOURNEY.md`](docs/JOURNEY.md) — how it was built, start to now. **Decisions:** [`docs/DECISIONS.md`](docs/DECISIONS.md). **Known gaps:** [`docs/AUDIT.md`](docs/AUDIT.md).
 >
+> 📖 **The agents:** [`docs/AGENTS.md`](docs/AGENTS.md) — how a turn runs,
+> the effort setting, delegation, unattended-action permissions, streaming,
+> and the capability scorecard.
+>
 > 📖 **New here?** Read [`docs/PROJECT.md`](docs/PROJECT.md) — what this is, how
 > every part works, and why each decision was made — and
 > [`docs/CONCEPTS.md`](docs/CONCEPTS.md) — embeddings, vector search, semantic
