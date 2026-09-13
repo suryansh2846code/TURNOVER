@@ -11,6 +11,10 @@ from .google_auth import get_credentials, google_ready
 class GoogleCalendarConnector(Connector):
     name = "gcal"
     label = "Google Calendar"
+    auto_sync = True
+    # The window is already bounded around today, so a watermark would only
+    # hide edits to events that have not moved in time.
+    incremental = False
 
     def is_configured(self) -> tuple[bool, str]:
         return google_ready()
@@ -57,7 +61,10 @@ class GoogleCalendarConnector(Connector):
             return {"ok": False, "error": m[:200]}
 
     def sync(self, *, days_back: int = 180, days_ahead: int = 180,
-             max_results: int = 250, interactive: bool = True, **_: Any) -> SyncResult:
+             max_results: int = 250, since: str | None = None,
+             limit: int | None = None, full_history: bool = False,
+             cancel=None, progress=None,
+             interactive: bool = True, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)
         try:
             from googleapiclient.discovery import build  # lazy
@@ -79,31 +86,31 @@ class GoogleCalendarConnector(Connector):
             ).get("items", [])
             from ..brain import get_brain
             brain = get_brain()
-            for ev in events:
-                try:
-                    summary = ev.get("summary", "(no title)")
-                    start = ev.get("start", {}).get("dateTime") or ev.get("start", {}).get("date", "")
-                    end = ev.get("end", {}).get("dateTime") or ev.get("end", {}).get("date", "")
-                    where = ev.get("location", "")
-                    attendees = ", ".join(
-                        a.get("email", "") for a in ev.get("attendees", []) or [])
-                    desc = (ev.get("description", "") or "")[:1000]
-                    text = (f"Event: {summary}\nWhen: {start} → {end}"
-                            + (f"\nWhere: {where}" if where else "")
-                            + (f"\nWith: {attendees}" if attendees else "")
-                            + (f"\n\n{desc}" if desc else ""))
-                    out = brain.ingest(
-                        text, source=self.name, kind="event", title=summary,
-                        uri=ev.get("htmlLink"), fast=True,
-                        event_date=(start[:10] if start else None),
-                        metadata={"start": start, "event_id": ev.get("id")},
-                    )
-                    result.added += out["memories"]
-                    if not out["memories"]:
-                        result.skipped += 1
-                except Exception:
-                    result.skipped += 1        # one bad event never aborts the sync
-            result.detail = f"{len(events)} events ({days_back}d back, {days_ahead}d ahead)"
+
+            def ingest(ev) -> int:
+                summary = ev.get("summary", "(no title)")
+                start = ev.get("start", {}).get("dateTime") or ev.get("start", {}).get("date", "")
+                end = ev.get("end", {}).get("dateTime") or ev.get("end", {}).get("date", "")
+                where = ev.get("location", "")
+                attendees = ", ".join(
+                    a.get("email", "") for a in ev.get("attendees", []) or [])
+                desc = (ev.get("description", "") or "")[:1000]
+                text = (f"Event: {summary}\nWhen: {start} → {end}"
+                        + (f"\nWhere: {where}" if where else "")
+                        + (f"\nWith: {attendees}" if attendees else "")
+                        + (f"\n\n{desc}" if desc else ""))
+                out = brain.ingest(
+                    text, source=self.name, kind="event", title=summary,
+                    uri=ev.get("htmlLink"), fast=True,
+                    event_date=(start[:10] if start else None),
+                    metadata={"start": start, "event_id": ev.get("id")},
+                )
+                return out["memories"]
+
+            self.each_guarded(events[:limit] if limit else events, result, ingest,
+                              cancel=cancel, progress=progress)
+            result.detail = result.detail or (
+                f"{len(events)} events ({days_back}d back, {days_ahead}d ahead)")
         except Exception as exc:
             result.errors.append(str(exc))
             result.detail = "sync failed"

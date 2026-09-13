@@ -115,6 +115,53 @@ def sync(name: str, body: SyncIn):
 
 
 # ── Google sign-in (bundled client → no per-user Cloud setup) ─────────────
+class MCPActionIn(BaseModel):
+    """A write the user has looked at and approved.
+
+    `confirmed` is carried explicitly rather than implied by the request: a
+    connector action changes something in the user's account, and "they called
+    the endpoint" is not the same as "they were shown what it would do".
+    """
+
+    tool: str
+    arguments: dict[str, Any] = {}
+    confirmed: bool = False
+
+
+def _mcp(server_id: str):
+    """The MCP connector for this id, or a 404.
+
+    Returns the concrete type rather than the `Connector` base: `perform()` is
+    the one path in the whole connector layer that changes something at a
+    vendor, and a route that reached it through a duck-typed base could be
+    pointed at anything that happened to grow the method.
+    """
+    from ...connectors.mcp_source import MCPConnector
+
+    try:
+        conn = get_connector(f"mcp:{server_id}")
+    except KeyError:
+        raise HTTPException(404, "That connector is not set up.") from None
+    if not isinstance(conn, MCPConnector):       # pragma: no cover - unreachable
+        raise HTTPException(404, "That connector is not set up.")
+    return conn
+
+
+@router.get("/api/connectors/mcp/{server_id}/actions")
+@probes_a_provider
+def mcp_actions(server_id: str) -> dict[str, Any]:
+    """What this connector could change, so a card can ask before it does."""
+    return {"actions": _mcp(server_id).available_actions()}
+
+
+@router.post("/api/connectors/mcp/{server_id}/action")
+@probes_a_provider
+def mcp_action(server_id: str, body: MCPActionIn) -> dict[str, Any]:
+    """Run a confirmed action. Refuses, rather than runs, when unconfirmed."""
+    return _mcp(server_id).perform(body.tool, body.arguments,
+                                   confirmed=body.confirmed)
+
+
 @router.get("/api/google/status")
 @probes_a_provider
 def google_status():

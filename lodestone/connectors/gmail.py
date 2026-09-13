@@ -69,18 +69,37 @@ def _walk_body(payload: dict) -> tuple[str, str]:
     return plain, html
 
 
+def _to_epoch(stamp: str) -> int:
+    """An ISO watermark as whole seconds, for Gmail's `after:` operator."""
+    from datetime import datetime
+
+    parsed = datetime.fromisoformat(stamp)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return int(parsed.timestamp())
+
+
 class GmailConnector(Connector):
     name = "gmail"
     label = "Gmail"
+    auto_sync = True
+    incremental = True
 
     def is_configured(self) -> tuple[bool, str]:
         return google_ready()
 
     def sync(self, *, query: str | None = None, max_results: int | None = None,
-             full_history: bool = False, interactive: bool = True,
-             **_: Any) -> SyncResult:
+             since: str | None = None, limit: int | None = None,
+             full_history: bool = False, cancel=None, progress=None,
+             interactive: bool = True, **_: Any) -> SyncResult:
         """Bounded by default: sync recent mail (fast, lean). Pass
-        full_history=True to pull the whole archive (the escape hatch)."""
+        full_history=True to pull the whole archive (the escape hatch).
+
+        On a second pass only mail newer than the last watermark is requested.
+        The background loop runs every 30 minutes and the default window is 90
+        days, so without this it re-downloaded up to 600 messages every half
+        hour to discard nearly all of them on a content-hash collision.
+        """
         result = SyncResult(connector=self.name)
         service = self._service(result, interactive)
         if service is None:
@@ -88,22 +107,36 @@ class GmailConnector(Connector):
 
         from ..config import get_settings
         s = get_settings()
+        # Stamped before any fetch: mail that arrives while this runs must be
+        # caught by the next pass, not fall just behind the new watermark.
+        started = self.now()
+        resume = since if since is not None else self.since(full_history=full_history)
         if query is None:
-            query = ("-in:spam -in:trash" if full_history
-                     else f"newer_than:{s.gmail_recent_days}d -in:spam -in:trash")
-        max_results = max_results or (s.gmail_max if full_history else s.gmail_recent_max)
+            if full_history:
+                query = "-in:spam -in:trash"
+            elif resume:
+                # Gmail's `after:` takes whole seconds and is inclusive-ish, so
+                # the overlap `since()` already applied is what keeps a message
+                # sent in the same second from slipping through.
+                query = f"after:{_to_epoch(resume)} -in:spam -in:trash"
+            else:
+                query = f"newer_than:{s.gmail_recent_days}d -in:spam -in:trash"
+        max_results = (limit or max_results
+                       or (s.gmail_max if full_history else s.gmail_recent_max))
         try:
             messages = self._list(service, query, max_results)
-            for meta in messages:
-                try:
-                    ok = self._ingest_message(service, meta)
-                except Exception:
-                    result.skipped += 1        # one bad message never aborts the sync
-                    continue
-                result.added += 1 if ok else 0
-                result.skipped += 0 if ok else 1
-            scope = "all mail" if full_history else f"last {s.gmail_recent_days}d"
-            result.detail = f"{scope}, {len(messages)} messages"
+            self.each_guarded(
+                messages, result,
+                lambda meta: 1 if self._ingest_message(service, meta) else 0,
+                cancel=cancel, progress=progress)
+            if full_history:
+                scope = "all mail"
+            elif resume:
+                scope = "new mail"
+            else:
+                scope = f"last {s.gmail_recent_days}d"
+            result.detail = result.detail or f"{scope}, {len(messages)} messages"
+            result.cursor = started
         except Exception as exc:
             result.errors.append(str(exc))
             result.detail = "sync failed"

@@ -30,6 +30,15 @@ REGISTRY: dict[str, type[Connector]] = {
 
 
 def get_connector(name: str) -> Connector:
+    # MCP-backed connectors are addressed as "mcp:<id>". They are not in
+    # REGISTRY because there is one per server the user configured, not one per
+    # class — the same reason custom apps are not.
+    if name.startswith("mcp:"):
+        from .mcp_source import MCPConnector, get_server
+        spec = get_server(name.split(":", 1)[1])
+        if not spec:
+            raise KeyError(f"unknown MCP connector '{name}'")
+        return MCPConnector(spec)
     # Custom user-defined API apps are addressed as "custom:<id>".
     if name.startswith("custom:"):
         from .custom_api import CustomAPIConnector, get_app

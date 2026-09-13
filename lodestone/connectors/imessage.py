@@ -20,6 +20,12 @@ APPLE_EPOCH = 978307200
 class IMessageConnector(Connector):
     name = "imessage"
     label = "iMessage"
+    auto_sync = True
+    # Deliberately NOT incremental. A thread is folded into a single memory, so
+    # fetching "only new messages" would store a fragment of a conversation
+    # rather than the conversation — worse than re-reading a bounded window of a
+    # local SQLite file, which is cheap. The 90-day window is the bound.
+    incremental = False
     platforms = ("darwin",)
 
     def is_configured(self) -> tuple[bool, str]:
@@ -35,7 +41,9 @@ class IMessageConnector(Connector):
                            "(System Settings → Privacy & Security → Full Disk Access)")
 
     def sync(self, *, days: int = 90, max_messages: int = 1500,
-             min_thread: int = 3, **_: Any) -> SyncResult:
+             min_thread: int = 3, since: str | None = None,
+             limit: int | None = None, full_history: bool = False,
+             cancel=None, progress=None, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)
         ready, reason = self.is_configured()
         if not ready:
@@ -67,17 +75,22 @@ class IMessageConnector(Connector):
 
             from ..brain import get_brain
             brain = get_brain()
-            for handle, msgs in threads.items():
+            def ingest(entry) -> int:
+                handle, msgs = entry
                 if len(msgs) < min_thread:
-                    continue
+                    return 0
                 text = f"iMessage thread with {handle}:\n" + "\n".join(msgs[-60:])
                 out = brain.ingest(
                     text, source=self.name, kind="message",
                     title=f"Messages with {handle}", fast=True,
                     metadata={"handle": handle, "count": len(msgs)},
                 )
-                result.added += out["memories"]
-            result.detail = f"{len(threads)} conversations, last {days}d"
+                return out["memories"]
+
+            self.each_guarded(list(threads.items()), result, ingest,
+                              cancel=cancel, progress=progress)
+            result.detail = result.detail or (
+                f"{len(threads)} conversations, last {days}d")
         except Exception as exc:
             result.errors.append(str(exc))
             result.detail = "sync failed"

@@ -31,6 +31,10 @@ def _block_text(block: dict) -> str:
 class NotionConnector(Connector):
     name = "notion"
     label = "Notion"
+    auto_sync = True
+    # Notion search has no "changed since" filter we can rely on; paging the
+    # whole result set is the only honest option.
+    incremental = False
     secret_field = {
         "key": "NOTION_TOKEN",
         "label": "Notion integration secret",
@@ -50,7 +54,9 @@ class NotionConnector(Connector):
             return True, ""
         return False, "click setup to paste your Notion integration secret"
 
-    def sync(self, *, page_size: int = 50, **_: Any) -> SyncResult:
+    def sync(self, *, page_size: int = 50, since: str | None = None,
+             limit: int | None = None, full_history: bool = False,
+             cancel=None, progress=None, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)
         token = get_settings().notion_token
         if not token:
@@ -69,29 +75,29 @@ class NotionConnector(Connector):
                 page_size=page_size,
             )
             pages = search.get("results", [])
-            for page in pages:
-                try:
-                    title = self._page_title(page)
-                    text = self._page_text(notion, page["id"])
-                    if not text.strip():
-                        result.skipped += 1
-                        continue
-                    for i, chunk in enumerate(chunk_text(text)):
-                        mem = self.store.add(
-                            text=chunk,
-                            source=self.name,
-                            kind="doc",
-                            title=title if i == 0 else f"{title} (part {i + 1})",
-                            uri=page.get("url"),
-                            metadata={"page_id": page["id"], "chunk": i},
-                        )
-                        if mem:
-                            result.added += 1
-                        else:
-                            result.skipped += 1
-                except Exception:
-                    result.skipped += 1        # one bad page never aborts the sync
-            result.detail = f"{len(pages)} pages"
+
+            def ingest(page) -> int:
+                title = self._page_title(page)
+                text = self._page_text(notion, page["id"])
+                if not text.strip():
+                    return 0
+                stored = 0
+                for i, chunk in enumerate(chunk_text(text)):
+                    mem = self.store.add(
+                        text=chunk,
+                        source=self.name,
+                        kind="doc",
+                        title=title if i == 0 else f"{title} (part {i + 1})",
+                        uri=page.get("url"),
+                        metadata={"page_id": page["id"], "chunk": i},
+                    )
+                    if mem:
+                        stored += 1
+                return stored
+
+            self.each_guarded(pages[:limit] if limit else pages, result, ingest,
+                              cancel=cancel, progress=progress)
+            result.detail = result.detail or f"{len(pages)} pages"
         except Exception as exc:
             result.errors.append(str(exc))
             result.detail = "sync failed"

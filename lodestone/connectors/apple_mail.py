@@ -19,6 +19,21 @@ from .gmail import html_to_text
 MAIL_ROOT = Path.home() / "Library" / "Mail"
 
 
+def _epoch_or_none(stamp: str | None) -> float | None:
+    """An ISO watermark as a POSIX timestamp, for comparing against `st_mtime`."""
+    if not stamp:
+        return None
+    from datetime import UTC, datetime
+
+    try:
+        parsed = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.timestamp()
+
+
 def _mail_dirs() -> list[Path]:
     # Mail versions its store: V2 … V10
     return sorted(MAIL_ROOT.glob("V*"), reverse=True) if MAIL_ROOT.exists() else []
@@ -72,6 +87,8 @@ def parse_emlx(path: Path) -> dict | None:
 class AppleMailConnector(Connector):
     name = "apple_mail"
     label = "Apple Mail"
+    auto_sync = True
+    incremental = True
     platforms = ("darwin",)
 
     def is_configured(self) -> tuple[bool, str]:
@@ -85,12 +102,18 @@ class AppleMailConnector(Connector):
             return False, ("grant Full Disk Access to Lodestone/your terminal "
                            "(System Settings → Privacy & Security → Full Disk Access)")
 
-    def sync(self, *, max_messages: int = 800, **_: Any) -> SyncResult:
+    def sync(self, *, max_messages: int = 800, since: str | None = None,
+             limit: int | None = None, full_history: bool = False,
+             cancel=None, progress=None, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)
         ready, reason = self.is_configured()
         if not ready:
             result.errors.append(reason)
             return self._finish(result)
+        started = self.now()
+        resume = since if since is not None else self.since(full_history=full_history)
+        cutoff = _epoch_or_none(resume)
+        max_messages = limit or max_messages
         try:
             files: list[Path] = []
             for root in _mail_dirs():
@@ -99,20 +122,31 @@ class AppleMailConnector(Connector):
                         continue
                     files += [Path(dp) / f for f in fn if f.endswith(".emlx")]
             files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-            for fp in files[:max_messages]:
+            scanned = len(files)
+            if cutoff is not None:
+                # Filtering on mtime is what makes the repeat pass cheap: the
+                # walk is unavoidable, but parsing and hashing every message in
+                # the mailbox every 30 minutes is not.
+                files = [f for f in files if f.stat().st_mtime >= cutoff]
+
+            def ingest(fp) -> int:
                 m = parse_emlx(fp)
                 if not m or not (m["body"] or m["subject"]):
-                    result.skipped += 1
-                    continue
+                    return 0
                 text = (f"From: {m['sender']}\nSubject: {m['subject']}\n\n"
                         f"{(m['body'] or '')[:4000]}")
                 mem = self.store.add(
                     text=text, source=self.name, kind="email",
                     title=m["subject"], event_date=m["date"],
                     metadata={"from": m["sender"], "date": m["date"]})
-                result.added += 1 if mem else 0
-                result.skipped += 0 if mem else 1
-            result.detail = f"scanned {len(files)} local messages"
+                return 1 if mem else 0
+
+            self.each_guarded(files[:max_messages], result, ingest,
+                              cancel=cancel, progress=progress)
+            result.detail = result.detail or (
+                f"{len(files)} new of {scanned} local messages" if cutoff is not None
+                else f"scanned {scanned} local messages")
+            result.cursor = started
         except Exception as exc:
             result.errors.append(str(exc))
             result.detail = "sync failed"

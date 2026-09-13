@@ -6,10 +6,25 @@ Read them directly (Full Disk Access) — no Google/iCloud auth needed.
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from .base import Connector, SyncResult
+
+
+def _epoch_or_none(stamp: str | None) -> float | None:
+    """An ISO watermark as a POSIX timestamp, for comparing against `st_mtime`."""
+    if not stamp:
+        return None
+    try:
+        parsed = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.timestamp()
+
 
 CAL_ROOT = Path.home() / "Library" / "Calendars"
 
@@ -49,6 +64,8 @@ def parse_ics(text: str) -> dict | None:
 class AppleCalendarConnector(Connector):
     name = "apple_calendar"
     label = "Apple Calendar"
+    auto_sync = True
+    incremental = True
     platforms = ("darwin",)
 
     def is_configured(self) -> tuple[bool, str]:
@@ -61,35 +78,50 @@ class AppleCalendarConnector(Connector):
             return False, ("grant Full Disk Access to Lodestone/your terminal "
                            "(System Settings → Privacy & Security → Full Disk Access)")
 
-    def sync(self, *, max_events: int = 500, **_: Any) -> SyncResult:
+    def sync(self, *, max_events: int = 500, since: str | None = None,
+             limit: int | None = None, full_history: bool = False,
+             cancel=None, progress=None, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)
         ready, reason = self.is_configured()
         if not ready:
             result.errors.append(reason)
             return self._finish(result)
+        started = self.now()
+        resume = since if since is not None else self.since(full_history=full_history)
+        cutoff = _epoch_or_none(resume)
+        max_events = limit or max_events
         try:
             from ..brain import get_brain
             brain = get_brain()
             files = list(CAL_ROOT.rglob("*.ics"))
-            for fp in files[:max_events]:
-                try:
-                    ev = parse_ics(fp.read_text(errors="ignore"))
-                except Exception:
-                    continue
+            scanned = len(files)
+            if cutoff is not None:
+                files = [f for f in files if f.stat().st_mtime >= cutoff]
+
+            # The whole per-event body runs under `each_guarded`, not just the
+            # parse: an ingest that throws used to abort the pass, losing every
+            # event after it while the ones before stayed committed — a brain
+            # that looks populated and is silently half a calendar (H2).
+            def ingest(fp) -> int:
+                ev = parse_ics(fp.read_text(errors="ignore"))
                 if not ev:
-                    result.skipped += 1
-                    continue
+                    return 0
                 text = (f"Event: {ev['summary']}\nWhen: {ev['start']}"
                         + (f" → {ev['end']}" if ev["end"] else "")
                         + (f"\nWhere: {ev['location']}" if ev["location"] else "")
                         + (f"\n\n{ev['description']}" if ev["description"] else ""))
-                out = brain.ingest(text, source=self.name, kind="event",
-                                   title=ev["summary"], fast=True,
-                                   event_date=(ev["start"][:10] if ev["start"] else None))
-                result.added += out["memories"]
-                if not out["memories"]:
-                    result.skipped += 1
-            result.detail = f"scanned {len(files)} local events"
+                out = brain.ingest(
+                    text, source=self.name, kind="event",
+                    title=ev["summary"], fast=True,
+                    event_date=(ev["start"][:10] if ev["start"] else None))
+                return out["memories"]
+
+            self.each_guarded(files[:max_events], result, ingest,
+                              cancel=cancel, progress=progress)
+            result.detail = result.detail or (
+                f"{len(files)} changed of {scanned} local events"
+                if cutoff is not None else f"scanned {scanned} local events")
+            result.cursor = started
         except Exception as exc:
             result.errors.append(str(exc))
             result.detail = "sync failed"
