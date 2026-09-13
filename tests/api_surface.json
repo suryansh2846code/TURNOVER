@@ -10,6 +10,7 @@
  "GET /api/agents",
  "GET /api/agents/approvals",
  "GET /api/agents/effort",
+ "GET /api/agents/evaluate",
  "GET /api/agents/permissions",
  "GET /api/agents/tools",
  "GET /api/agents/{agent_id}/history",

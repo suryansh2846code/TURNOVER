@@ -109,6 +109,19 @@ def reject_action(approval_id: str):
     return approvals.reject(approval_id)
 
 
+@router.get("/api/agents/evaluate")
+def evaluate_agents():
+    """Score what the agents can do, right now, on this machine.
+
+    Runs the real loop against a scripted model — no network, no keys, no
+    spend — so the answer is about this build rather than about whichever model
+    happens to be connected.
+    """
+    from ...agents.evaluation import run
+
+    return run().as_dict()
+
+
 @router.get("/api/agents/{agent_id}/history")
 def history(agent_id: str):
     return {"history": AgentMemory().history(agent_id, limit=100)}
