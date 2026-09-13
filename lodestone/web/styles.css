@@ -9,6 +9,12 @@
      brief exists to avoid, and it was doing 40 different jobs here. */
   --ground: #05070d;                     /* cool near-black — the night sky */
   --ground-2: #0b0f18;                   /* panel */
+  /* The shell is TWO surfaces, not one flat field. The rail is the chrome the
+     workspace floats on; the workspace is a raised card. --surface sits
+     deliberately BETWEEN --rail and --panel so every card already drawn in
+     --panel (composer, hero cards, doc cards) still reads as raised above it. */
+  --rail: #03050a;                       /* sidebar + the gutter around the card */
+  --surface: #080b12;                    /* the chat card itself */
   --star: #dfe7f2;                       /* cool white — particles and text */
   --muted: #7a8397; --faint: #5c6473;
   --line: rgba(223,231,242,.10); --line2: rgba(223,231,242,.18);
@@ -50,7 +56,7 @@ body {
    .messages, which dragged the sidebar up with the chat and pushed the
    composer off the bottom of the window. */
 .app { display: grid; grid-template-columns: 250px 1fr; grid-template-rows: minmax(0, 1fr);
-  height: 100vh; overflow: hidden; }
+  height: 100vh; overflow: hidden; background: var(--rail); }
 .muted { color: var(--muted); }
 .t { color: var(--muted); }
 
@@ -78,8 +84,8 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .orb-xl { width: 80px; height: 80px; }
 
 /* ── sidebar ──────────────────────────────────────────────────────────── */
-.sidebar { display: flex; flex-direction: column; gap: 4px; padding: 18px 14px;
-  border-right: 1px solid rgba(255,255,255,.07); overflow-y: auto; min-height: 0; }
+.sidebar { display: flex; flex-direction: column; gap: 4px; padding: 18px 14px 14px;
+  background: var(--rail); overflow-y: auto; min-height: 0; }
 .collapse-btn { margin-left: auto; width: 22px; height: 22px; border-radius: 6px; background: transparent;
   color: var(--muted); font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .collapse-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
@@ -127,12 +133,12 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .na-plus { width: 26px; height: 26px; border-radius: 50%; border: 1px dashed var(--border2);
   display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
 .side-nav { display: flex; flex-direction: column; gap: 1px; margin-top: 14px;
-  border-top: 1px solid var(--border); padding-top: 12px; }
+  border-top: 1px solid var(--line); padding-top: 12px; }
 .snav { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 10px;
   background: transparent; color: var(--muted); font-size: 13.5px; text-align: left; }
 .snav:hover { background: rgba(255,255,255,.04); color: var(--text); }
 .snav-ic { width: 18px; text-align: center; opacity: .8; }
-.side-foot { margin-top: auto; padding-top: 12px; }
+.side-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
 .user-chip { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
   border-radius: 12px; background: transparent; color: var(--text); font-size: 13.5px; }
 .user-chip:hover { background: rgba(255,255,255,.04); }
@@ -141,9 +147,16 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   background: radial-gradient(circle at 32% 28%, #cfe0ff, #63708c 75%); }
 
 /* ── chat ─────────────────────────────────────────────────────────────── */
-.chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+.chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative;
+  margin: 9px 9px 9px 0; border-radius: 18px;
+  background:
+    radial-gradient(78% 58% at 84% 92%, rgba(40,52,76,.22), transparent 62%),
+    radial-gradient(62% 44% at 10% 6%, rgba(46,50,68,.16), transparent 62%),
+    var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(223,231,242,.05), 0 18px 50px rgba(0,0,0,.45); }
 .chat-head { display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 26px; border-bottom: 1px solid var(--border); }
+  padding: 16px 26px; border-bottom: 1px solid var(--line); }
 .ch-agent { display: flex; align-items: center; gap: 12px; }
 .ch-name { font-weight: 600; font-size: 15px; }
 .ch-role { font-size: 12px; color: var(--muted); }
@@ -221,7 +234,7 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .composer {
   display: flex;
   flex-direction: column;
-  margin: 0 26px 6px;
+  margin: 0 22px 14px;
   padding: 10px 14px 8px 14px;
   background: var(--panel);
   border: 1px solid var(--border2);
