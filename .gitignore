@@ -30,3 +30,13 @@ build/
 .coverage
 .coverage.*
 htmlcov/
+
+# macOS, and tool caches. .DS_Store was tracked until 2026-09-13; Finder writes
+# it into any directory you so much as look at, so it lands in unrelated diffs.
+.DS_Store
+.mypy_cache/
+.ruff_cache/
+# A 7 MB 3D asset that rode in on an unrelated commit and is referenced by no
+# code. Kept on disk, out of the repo.
+*.usdz
+
