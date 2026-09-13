@@ -772,34 +772,78 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .w-skip { display: block; margin: 18px auto 0; background: none; color: var(--muted); font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; }
 .w-skip:hover { color: var(--text); }
 
-/* full-screen AI model screen — same shape as the brain screen, so the two
-   full-window views of the app behave identically. The provider cards are a
-   responsive grid here rather than the single 380px column the drawer forced
-   them into; each card carries an account, a plan, usage and a model list,
-   and none of that fitted. */
+/* full-screen AI model screen ────────────────────────────────────────────
+   A settings page, not a dashboard: one centred column, and each subject is a
+   heading plus ONE card of rows — label and description on the left, the
+   control on the right, hairline between rows. The provider markup already
+   emitted .ts-card / .ts-card-row / .ts-card-left in exactly that shape, so
+   the cards are flattened into the group here rather than re-rendered. */
 .modelscreen { position: fixed; inset: 0; z-index: 70; background: var(--ground);
   overflow-y: auto; display: flex; flex-direction: column; }
 .modelscreen[hidden] { display: none; }
 .ms-top { position: sticky; top: 0; z-index: 2; flex: none;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 22px 30px; background: var(--ground);
+  padding: 18px 30px; background: var(--ground);
   border-bottom: 1px solid var(--line); }
 .ms-title { display: flex; align-items: center; gap: 12px;
-  font-family: var(--mono); font-size: 13px; letter-spacing: .3em;
-  text-transform: uppercase; color: var(--text); }
-.ms-mark { width: 11px; height: 11px; transform: rotate(45deg); flex: none;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .3em;
+  text-transform: uppercase; color: var(--muted); }
+.ms-mark { width: 10px; height: 10px; transform: rotate(45deg); flex: none;
   border: 1.5px solid var(--accent); }
-.ms-body { width: min(1180px, 100%); margin: 0 auto; padding: 26px 30px 60px;
-  display: flex; flex-direction: column; gap: 26px; }
-.ms-block { display: flex; flex-direction: column; }
-.ms-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; }
-.ms-panel { background: var(--panel); border: 1px solid var(--line);
-  border-radius: 16px; padding: 18px 20px; }
-.modelscreen .provider-cards { display: grid; gap: 14px; margin-top: 14px;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); align-items: stretch; }
-.modelscreen .provider-card { padding: 14px 16px; border-radius: 14px;
-  border: 1px solid var(--line); }
-@media (max-width: 760px) { .ms-body { padding: 20px 18px 48px; } }
+.ms-body { width: min(880px, 100%); margin: 0 auto; padding: 40px 28px 80px; }
+.ms-h1 { font-size: 30px; font-weight: 600; letter-spacing: -.02em; margin: 0 0 34px; }
+.ms-sec { margin-bottom: 40px; }
+.ms-h2 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 5px; }
+.ms-sub { font-size: 13.5px; color: var(--muted); line-height: 1.55;
+  margin: 0 0 14px; max-width: 70ch; }
+
+/* ── the settings row ──────────────────────────────────────────────────── */
+.set-group { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; overflow: hidden; }
+.set-row { display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; padding: 15px 18px; }
+.set-row + .set-row { border-top: 1px solid var(--line); }
+.set-row-block { display: block; }
+.set-main { min-width: 0; }
+.set-label { font-size: 14.5px; font-weight: 600; }
+.set-desc { font-size: 13px; color: var(--muted); line-height: 1.5; margin-top: 2px; }
+.set-ctl { flex: none; display: flex; align-items: center; gap: 8px; }
+.set-ctl-stack { flex-direction: column; align-items: stretch; gap: 6px; min-width: 230px; }
+.set-note { font-size: 12px; color: var(--faint); }
+.set-select, .set-input { width: auto; min-width: 150px; background: var(--panel-2);
+  color: var(--text); border: 1px solid var(--line2); border-radius: 9px;
+  padding: 8px 11px; font: inherit; font-size: 13.5px; }
+.set-input-num { min-width: 0; width: 86px; }
+.set-select:focus, .set-input:focus { outline: none; border-color: var(--accent); }
+.set-select:disabled { opacity: .5; }
+
+/* ── providers: one card of rows per group, not a stack of little cards ── */
+.modelscreen .provider-cards { display: flex; flex-direction: column; gap: 34px;
+  margin-top: 0; }
+.modelscreen .ts-provider-head { margin-bottom: 12px; }
+.modelscreen .ts-provider-title { font-size: 17px; font-weight: 600;
+  letter-spacing: -.01em; margin: 0 0 5px; }
+.modelscreen .ts-provider-sub { font-size: 13.5px; color: var(--muted);
+  line-height: 1.55; margin: 0; max-width: 70ch; }
+.modelscreen .ts-group-boxes { background: var(--panel);
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+/* Each provider's boxes are separate elements; flatten every card inside the
+   group so the seams read as one card's rows. */
+.modelscreen .ts-group-boxes .ts-card { background: transparent; border: 0;
+  border-radius: 0; margin: 0; padding: 15px 18px; }
+.modelscreen .ts-group-boxes .ts-card:hover { border: 0; }
+.modelscreen .ts-group-boxes .ts-card.active-account { background: transparent; }
+.modelscreen .ts-group-boxes .ts-card + .ts-card,
+.modelscreen .ts-group-boxes > div + div > .ts-card:first-child,
+.modelscreen .ts-group-boxes .pc-models-list { border-top: 1px solid var(--line); }
+.modelscreen .ts-group-boxes .pc-models-list { margin: 0; padding: 14px 18px; }
+.modelscreen .ts-card-row { align-items: center; }
+.modelscreen .ts-card-left { gap: 2px; }
+@media (max-width: 700px) {
+  .ms-body { padding: 28px 16px 60px; }
+  .set-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .set-ctl { width: 100%; }
+}
 
 /* full-screen brain screen */
 .brainscreen { position: fixed; inset: 0; z-index: 70; background: #05070d; overflow: hidden; }

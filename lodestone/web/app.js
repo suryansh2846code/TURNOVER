@@ -1722,7 +1722,7 @@ function loadProviderCards() {
           <p class="ts-provider-sub">${esc(g.subtitle)}</p>
         </div>
         <div class="ts-group-boxes">
-          ${g.providers.map((pid) => `<div id="pbox_${pid}" style="margin-bottom:8px"></div>`).join("")}
+          ${g.providers.map((pid) => `<div id="pbox_${pid}"></div>`).join("")}
         </div>
       </div>
     `;
@@ -3184,16 +3184,112 @@ function closeBrainScreen() {
 }
 $("#bsClose").onclick = closeBrainScreen;
 
+// ── "Default AI for new agents" ───────────────────────────────────────────
+// All three of these were already being read on every turn and none of them
+// had a control. Provider and model live in localStorage (setActiveModel is
+// the one writer, so the composer and this page cannot disagree); effort is
+// server-side and has had GET/POST /api/agents/effort all along with nothing
+// calling it — so it could not be changed from the app at all.
+function _defProviderList() {
+  return (MODEL_CATALOG || []).map((p) => ({
+    id: p.id, label: p.label || p.id, ready: Boolean(p.ready), models: p.models || [],
+  }));
+}
+// The provider is passed in, never read back off the select. On a first open
+// nothing is saved, so no <option> carries `selected` and the element's value
+// is whatever the browser implicitly picked — which is a different question
+// from "which provider are we showing models for".
+function renderDefaultModelOptions(pid) {
+  const sel = $("#defModel"); if (!sel) return;
+  const prov = _defProviderList().find((p) => p.id === pid);
+  const saved = localStorage.getItem("lodestone_model") || "";
+  const opts = [`<option value="">Auto — best available</option>`];
+  for (const m of (prov ? prov.models : [])) {
+    const id = m.id || m.name;
+    // A locked model is shown and disabled with the reason, never hidden —
+    // hiding it is how "why can't I pick that?" becomes unanswerable.
+    const why = m.locked ? ` — ${m.plan_required || "not on your plan"}` : "";
+    opts.push(`<option value="${esc(id)}"${m.locked ? " disabled" : ""}`
+      + `${id === saved ? " selected" : ""}>${esc(m.name || id)}${esc(why)}</option>`);
+  }
+  sel.innerHTML = opts.join("");
+  if (!saved) sel.value = "";
+}
+async function loadAgentDefaults() {
+  const provSel = $("#defProvider");
+  const list = _defProviderList();
+  let active = localStorage.getItem("lodestone_provider")
+    || ($("#provider") && $("#provider").value) || "";
+  // A saved provider the catalog no longer carries is a stale choice, not a
+  // selection: fall back to the first one rather than showing an empty model
+  // list under a provider name that is not in the list.
+  if (!list.some((p) => p.id === active)) active = list.length ? list[0].id : "";
+  if (provSel) {
+    provSel.innerHTML = list.map((p) =>
+      `<option value="${esc(p.id)}"${p.id === active ? " selected" : ""}>`
+      + `${esc(p.label)}${p.ready ? "" : " — not connected"}</option>`).join("");
+    provSel.value = active;
+    renderDefaultModelOptions(active);
+    provSel.onchange = () => {
+      // Switching provider invalidates the model: keep Auto rather than
+      // carrying an id the new provider has never heard of.
+      active = provSel.value;          // the model handler below reads this
+      setActiveModel(active, null);
+      renderDefaultModelOptions(active);
+      applyModelHint();
+    };
+  }
+  const modelSel = $("#defModel");
+  if (modelSel) modelSel.onchange = () => {
+    setActiveModel(active, modelSel.value || null);
+    applyModelHint();
+  };
+
+  const effSel = $("#defEffort");
+  if (!effSel) return;
+  try {
+    const { current, levels } = await api("/api/agents/effort");
+    effSel.innerHTML = (levels || []).map((l) =>
+      `<option value="${esc(l.name)}"${l.name === current ? " selected" : ""}>${esc(l.label)}</option>`).join("");
+    const describe = () => {
+      const lvl = (levels || []).find((l) => l.name === effSel.value);
+      const d = $("#defEffortDesc");
+      if (d && lvl) d.textContent = lvl.description;
+    };
+    describe();
+    effSel.onchange = async () => {
+      const level = effSel.value;
+      try {
+        await api("/api/agents/effort", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ level }) });
+        describe();
+        toast(`Effort set to ${level}`);
+      } catch (_) { toast("Could not change effort"); }
+    };
+  } catch (_) {
+    // No effort endpoint to talk to — say so rather than leaving a dead select.
+    effSel.innerHTML = `<option>Unavailable</option>`;
+    effSel.disabled = true;
+  }
+}
+
 // ── the AI model screen ────────────────────────────────────────────────────
 // Model used to be a 380px slide-over. Its content is a grid of provider
 // cards — each an account, a plan, usage limits and a model list — so it gets
 // the whole window, opened exactly the way the brain screen is.
-function openModelScreen() {
+async function openModelScreen() {
   const m = $("#modelScreen"); if (!m) return;
   m.hidden = false;
   m.scrollTop = 0;
-  loadProviders();
   updateUsage();
+  // The defaults are built FROM the catalog, so they wait for it. Without the
+  // await the provider list is whatever was cached from the last open, and on
+  // a first open that is nothing at all.
+  // Nothing here may reject: openDrawer() calls this without awaiting, so an
+  // unhandled rejection is all the user would get.
+  try { await loadProviders(); } catch (_) {}
+  try { await loadAgentDefaults(); } catch (_) {}
 }
 function closeModelScreen() {
   const m = $("#modelScreen"); if (m) m.hidden = true;

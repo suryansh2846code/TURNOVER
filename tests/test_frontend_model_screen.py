@@ -88,11 +88,38 @@ def test_ids_are_not_duplicated_across_the_page():
     assert not dupes, f"duplicate element ids: {sorted(dupes)}"
 
 
-def test_the_cards_are_a_grid_on_the_screen():
-    """The whole point of the move: cards stop being a single narrow column."""
-    assert ".modelscreen .provider-cards" in CSS
-    block = CSS.split(".modelscreen .provider-cards", 1)[1].split("}", 1)[0]
-    assert "grid" in block and "minmax" in block, block
+def _rule(selector: str) -> str:
+    assert selector in CSS, f"{selector} is gone from styles.css"
+    return CSS.split(selector, 1)[1].split("}", 1)[0]
+
+
+def test_providers_are_a_single_settings_column():
+    """Deliberate change from the first version of this screen.
+
+    It shipped as a responsive grid of cards, which read as a dashboard. The
+    page is a settings page, so providers are now one centred column of
+    sections — the grid assertion this replaces was testing the old intent.
+    """
+    assert "column" in _rule(".modelscreen .provider-cards")
+
+
+def test_each_provider_group_is_one_card_of_rows():
+    """The look the screen exists for: one card per provider, hairline rows.
+
+    The provider markup emits a separate .ts-card per credential. If those keep
+    their own borders the group renders as a stack of little boxes again, which
+    is exactly what it looked like before.
+    """
+    group = _rule(".modelscreen .ts-group-boxes")
+    assert "border" in group and "radius" in group, group
+    flattened = _rule(".modelscreen .ts-group-boxes .ts-card")
+    assert "border: 0" in flattened, flattened
+
+
+def test_the_provider_boxes_are_not_spaced_apart():
+    """An inline margin between boxes would put gaps inside the single card."""
+    app_js = (WEB / "app.js").read_text()
+    assert 'id="pbox_${pid}" style="margin-bottom' not in app_js
 
 
 def test_nothing_calls_it_a_drawer_any_more():

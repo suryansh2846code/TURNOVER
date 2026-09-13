@@ -313,9 +313,45 @@
     </div>
 
     <div class="ms-body">
-      <section class="ms-block">
-        <div class="ctx-label">Connected Providers &amp; AI Accounts</div>
-        <p class="model-hint" style="margin-top:0;max-width:62ch">Connect Cursor, Claude, OpenAI, xAI, Google Gemini, or local Ollama. Model choice is selected directly inside the chat composer.</p>
+      <h1 class="ms-h1">Models</h1>
+
+      <!-- What a new agent opens on. Provider and model already persist in
+           localStorage and effort already persists server-side via
+           /api/agents/effort — every turn reads all three. Until now none of
+           them had a control, so effort in particular could never be changed
+           from the app at all. -->
+      <section class="ms-sec">
+        <h2 class="ms-h2">Default AI for new agents</h2>
+        <p class="ms-sub">What every new agent opens on. You can still switch any time from the composer.</p>
+        <div class="set-group">
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Provider</div>
+              <div class="set-desc">The AI powering new agents.</div>
+            </div>
+            <div class="set-ctl"><select id="defProvider" class="set-select"></select></div>
+          </div>
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Model</div>
+              <div class="set-desc">The exact model new agents use.</div>
+            </div>
+            <div class="set-ctl"><select id="defModel" class="set-select"></select></div>
+          </div>
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Effort</div>
+              <div class="set-desc" id="defEffortDesc">How hard the model works before answering.</div>
+            </div>
+            <div class="set-ctl"><select id="defEffort" class="set-select"></select></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- No wrapper heading: each provider group renders its own h3, and a
+           heading above them put "OpenAI" and "Providers & accounts" at the
+           same apparent level. -->
+      <section class="ms-sec">
         <div id="providerCards" class="provider-cards"></div>
 
         <!-- Hidden fallbacks kept so legacy scripts run without errors -->
@@ -327,28 +363,47 @@
         <div id="privacyBadge" hidden></div>
       </section>
 
-      <div class="ms-cols">
-        <section class="ms-block ms-panel">
-          <div class="ctx-label" style="margin-top:0">Enrichment model</div>
-          <select id="enrichProvider"></select>
-          <input id="enrichModelName" class="ctx-input" autocomplete="off" placeholder="same as agent model" style="margin-top:8px" />
-          <p class="model-hint">Used only to build your brain's knowledge graph — separate from your agents. Point it at a cheap or local model (Ollama, a small model) to keep enrichment cost low while agents run a stronger one.</p>
-
-          <div class="ctx-label" style="margin-top:14px">Enrich recent items per bulk source</div>
-          <div style="display:flex;gap:6px;align-items:center;margin-top:2px">
-            <input id="enrichCap" type="number" min="0" class="ctx-input" style="max-width:96px" />
-            <button id="enrichCapSave" class="tiny">Save</button>
-            <span id="enrichCapNote" class="model-hint" style="margin:0"></span>
+      <section class="ms-sec">
+        <h2 class="ms-h2">Brain enrichment</h2>
+        <p class="ms-sub">Building your brain's knowledge graph is separate from your agents, and can run on a cheaper model.</p>
+        <div class="set-group">
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Enrichment model</div>
+              <div class="set-desc">Point it at a cheap or local model to keep enrichment cost low while agents run a stronger one.</div>
+            </div>
+            <div class="set-ctl set-ctl-stack">
+              <select id="enrichProvider" class="set-select"></select>
+              <input id="enrichModelName" class="set-input" autocomplete="off" placeholder="same as agent model" />
+            </div>
           </div>
-          <p class="model-hint">Bulk sources (Gmail, Drive…) enrich only their most-recent N items — recent context matters most and keeps token cost bounded. 0 = all of them. Calendar &amp; notes always enrich in full.</p>
-        </section>
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Recent items per bulk source</div>
+              <div class="set-desc">Bulk sources (Gmail, Drive…) enrich only their most-recent N items. 0 = all of them. Calendar &amp; notes always enrich in full.</div>
+            </div>
+            <div class="set-ctl">
+              <input id="enrichCap" type="number" min="0" class="set-input set-input-num" />
+              <button id="enrichCapSave" class="tiny">Save</button>
+              <span id="enrichCapNote" class="set-note"></span>
+            </div>
+          </div>
+        </div>
+      </section>
 
-        <section class="ms-block ms-panel">
-          <div class="ctx-label" style="margin-top:0">Usage this brain <button id="usageReset" class="tiny ghost">reset</button></div>
-          <div id="usageBox" class="usage-box"></div>
-          <p class="model-hint">Counts every model call (enrichment, chat, digests). Cloud models show exact tokens; local ones are free. Account/plan quotas aren't available via the API.</p>
-        </section>
-      </div>
+      <section class="ms-sec">
+        <h2 class="ms-h2">Usage this brain</h2>
+        <p class="ms-sub">Every model call — enrichment, chat and digests. Cloud models show exact tokens; local ones are free. Account and plan quotas aren't available via the API.</p>
+        <div class="set-group">
+          <div class="set-row">
+            <div class="set-main"><div class="set-label">Tokens used</div></div>
+            <div class="set-ctl"><button id="usageReset" class="tiny ghost">Reset</button></div>
+          </div>
+          <div class="set-row set-row-block">
+            <div id="usageBox" class="usage-box"></div>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
