@@ -65,6 +65,10 @@ class MCPServerSpec:
     sync_tool: str = ""
     #: Field in each record to use as a title, if the server returns objects.
     title_field: str = ""
+    #: Tools this connector may use at all. Empty means "every readable tool".
+    #: Least privilege is only real if the user can narrow it, and they can only
+    #: narrow what they were shown — `mcp_catalog.describe()` is that list.
+    allowed_tools: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, raw: dict) -> MCPServerSpec:
@@ -74,12 +78,18 @@ class MCPServerSpec:
             env=dict(raw.get("env") or {}),
             sync_tool=raw.get("sync_tool") or "",
             title_field=raw.get("title_field") or "",
+            allowed_tools=list(raw.get("allowed_tools") or []),
         )
 
     def as_dict(self) -> dict[str, Any]:
         return {"id": self.id, "name": self.name, "command": self.command,
                 "args": self.args, "env": self.env, "sync_tool": self.sync_tool,
-                "title_field": self.title_field}
+                "title_field": self.title_field,
+                "allowed_tools": self.allowed_tools}
+
+    def permits(self, tool: str) -> bool:
+        """May this connector use that tool? Empty allow-list means anything."""
+        return not self.allowed_tools or tool in self.allowed_tools
 
 
 # ── the spec store ──────────────────────────────────────────────────────────
@@ -394,7 +404,14 @@ class MCPConnector(Connector):
                 result.detail = "could not start"
                 return self._finish(result)
 
-            tool = self.spec.sync_tool or (kinds.bulk[0] if kinds.bulk else "")
+            permitted = [t for t in kinds.bulk if self.spec.permits(t)]
+            tool = self.spec.sync_tool or (permitted[0] if permitted else "")
+            if tool and not self.spec.permits(tool):
+                result.errors.append(
+                    f"{self.label} is not allowed to use its `{tool}` tool. "
+                    "Change what it may read in Connectors.")
+                result.detail = "not permitted"
+                return self._finish(result)
             if not tool:
                 # Not an error — a real and permanent property of this server,
                 # and saying so is the difference between "search-only" and

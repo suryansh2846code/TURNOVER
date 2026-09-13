@@ -132,18 +132,18 @@ The whole point: **write this once, and every new source after it is config.**
 
 ## Phase 3 — Breadth, safely
 
-- [ ] **3.1 — A vetted catalog, not a free-for-all.** ~20,000 MCP servers exist;
+- [x] **3.1 — A vetted catalog, not a free-for-all.** ~20,000 MCP servers exist;
       only a few dozen are first-party (Google/Gmail, Slack, Notion, Linear,
       GitHub, Stripe, Sentry, Cloudflare). Ship a curated list with the tier
       marked, and let advanced users add their own.
-- [ ] **3.2 — Install the way we install vendor CLIs.** `models/cli_manager.py`
+- [x] **3.2 — Install the way we install vendor CLIs.** `models/cli_manager.py`
       already solves this: fetch the artifact **directly** (never pipe an
       install script into a shell), pin the version, verify before linking,
       background job with progress, never link a failed download. Same rules,
       same machinery — an MCP server is third-party code running as the user.
-- [ ] **3.3 — Least privilege at connect time.** Show which tools a server
+- [x] **3.3 — Least privilege at connect time.** Show which tools a server
       exposes before it is enabled, and let the user disable the write ones.
-- [ ] **3.4 — Honest platform limits in the UI.** LinkedIn cannot be read by
+- [x] **3.4 — Honest platform limits in the UI.** LinkedIn cannot be read by
       anyone — LinkedIn's User Agreement §8.2 bans automated access, feed and
       member data sit behind partner approval, and every community server is a
       scraper (post-crackdown, on a Playwright fork built to evade detection).
