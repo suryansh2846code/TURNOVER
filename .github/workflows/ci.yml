@@ -33,9 +33,16 @@ jobs:
         # NOT `.[all]`: it drags in sentence-transformers, and torch is 505 MB
         # for a job that already forces LODESTONE_EMBEDDING_PROVIDER=hash. It is
         # also not "all" — it omits python-docx and python-pptx.
+        #
+        # `desktop` is here for the tests, not the app. Without pywebview there
+        # is no AppKit, and `tests/test_signin_hud_window.py` opens with a
+        # module-level `importorskip` — so its 20 tests collapsed into a single
+        # skip line and the macOS window behaviour they pin (float level, Spaces
+        # collection, not stealing focus) went unchecked on the one runner that
+        # can actually check it.
         run: |
           uv venv
-          uv pip install -e ".[gdrive]"
+          uv pip install -e ".[gdrive,desktop]"
           uv pip install pytest ruff mypy
 
       - name: Lint
