@@ -8,9 +8,15 @@ import dataclasses
 
 from .agent import Agent
 from .agent_models import get_agent_model
+from .mcp_tools import SENTINEL as MCP_TOOLS
 
+#: `MCP_TOOLS` is a category, not a tool: whatever the user's own connectors can
+#: *read*, resolved when the turn starts. A preset shipped today cannot name a
+#: server the user adds tomorrow, and an install with no connectors gains
+#: nothing from it. Connector writes are never included — they go through
+#: propose → confirm (`permissions.NEVER_UNATTENDED`).
 _BASE_TOOLS = ["search_brain", "remember", "list_entities", "web_search",
-               "ask_agent", "update_plan"]
+               "ask_agent", "update_plan", MCP_TOOLS]
 
 PRESETS: dict[str, Agent] = {
     "inbox": Agent(

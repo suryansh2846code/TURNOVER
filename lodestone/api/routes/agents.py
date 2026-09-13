@@ -241,9 +241,12 @@ class NewAgent(BaseModel):
 
 @router.get("/api/agents/tools")
 def available_tools():
-    from ...agents.tools import TOOL_DEFS
-    return {"tools": [{"name": n, "description": t.description}
-                      for n, t in TOOL_DEFS.items()]}
+    from ...agents.tools import describe_tools
+    # Each row keeps `name` and `description` exactly as before and adds
+    # `source` ("builtin" | "mcp") and `connector`, so the agent builder can
+    # group the user's own connectors instead of listing their tools as if they
+    # shipped with the app.
+    return {"tools": describe_tools()}
 
 
 @router.post("/api/agents/custom")
