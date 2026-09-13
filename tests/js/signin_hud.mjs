@@ -18,13 +18,34 @@ const makeEl = (id) => {
   els.set(id, e);
   return e;
 };
+// The card measures itself and asks the window to match, so the stub has to
+// provide a layout to measure and the observer that watches it.
+let cardHeight = 219;
+const cardEl = makeEl("card");
+cardEl.getBoundingClientRect = () => ({ height: cardHeight, width: 348 });
+
 globalThis.document = {
   getElementById: (id) => els.get(id) || makeEl(id),
+  querySelector: (sel) => (sel === ".card" ? cardEl : makeEl(sel)),
   addEventListener() {},
+  fonts: { ready: Promise.resolve() },
+};
+const observed = [];
+globalThis.ResizeObserver = class {
+  constructor(cb) { this.cb = cb; }
+  observe(el) { observed.push(el); this.cb(); }
+  disconnect() {}
 };
 globalThis.location = { search: "?provider=xai&brand=Grok&auth_url=https%3A%2F%2Fx&limit=180" };
 globalThis.URLSearchParams = URLSearchParams;
-globalThis.window = { pywebview: { api: { close_hud() {}, focus_main() {} } } };
+const fitCalls = [];
+globalThis.window = {
+  addEventListener() {},
+  pywebview: { api: {
+    close_hud() {}, focus_main() {},
+    fit(h) { fitCalls.push(h); return true; },
+  } },
+};
 
 let statusCalls = 0;
 globalThis.fetch = async (path) => {
@@ -60,5 +81,7 @@ process.stdout.write(JSON.stringify({
   action: read("action"),
   cardClass: els.get("card")?.className || "",
   polled: statusCalls,
+  fitCalls,
+  observedCard: observed.length,
 }));
 process.exit(0);

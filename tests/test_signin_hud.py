@@ -219,3 +219,16 @@ def test_the_in_app_hud_is_skipped_when_the_native_card_is_up():
 def test_loader_animation_is_present():
     css = HUD_HTML.read_text()
     assert "@keyframes orbit" in css and ".loader i" in css
+
+
+def test_the_card_asks_the_window_to_match_its_height():
+    """The window is fixed; the copy is not. If the card never asks to be
+    resized, either the button is shoved to the bottom by the leftover space or
+    the card is clipped by a window too short for it."""
+    proc = subprocess.run(["node", str(HARNESS), str(HUD_HTML), "waiting"],
+                          capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stderr[:400]
+    out = json.loads(proc.stdout)
+    assert out["observedCard"] >= 1, "nothing watches the card for size changes"
+    assert out["fitCalls"], "the card never asked the window to match it"
+    assert all(h > 0 for h in out["fitCalls"]), out["fitCalls"]
