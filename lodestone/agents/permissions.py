@@ -53,7 +53,25 @@ OUTBOUND_ACTIONS = {"send_email", "create_event"}
 #: Actions an unattended agent may never take, permitted recipient or not.
 #: `create_routine` is privilege escalation: a routine that creates routines can
 #: widen its own authority without the user ever seeing it.
-NEVER_UNATTENDED = {"create_routine"}
+#:
+#: `mcp_action` is here for a different reason, and a permanent one: the tool
+#: belongs to somebody else's server, so we cannot read a recipient out of its
+#: arguments the way `recipients_of` reads one out of an email. An allow-list
+#: needs something to compare against, and there is nothing — a Slack tool's
+#: `channel` and a Jira tool's `assignee` are not the same field and never will
+#: be. So the honest answer is that every connector write waits for one tap,
+#: rather than an allow-list that quietly checks nothing.
+#:
+#: It matters most for exactly the case that motivated this file: the text these
+#: connectors read — a Slack message, a GitHub issue body — is written by
+#: strangers, and it reaches an agent that can now act on their service.
+NEVER_UNATTENDED = {"create_routine", "mcp_action"}
+
+#: Why each of them waits, in the user's terms.
+_ALWAYS_ASK = {
+    "create_routine": "Creating automations always needs your approval.",
+    "mcp_action": "Anything a connector changes needs your approval.",
+}
 
 _ADDRESS = re.compile(r"[^\s<>,;]+@[^\s<>,;]+")
 
@@ -145,7 +163,11 @@ def check(action_type: str, params: dict) -> Verdict:
     button, which is a stronger signal than any list.
     """
     if action_type in NEVER_UNATTENDED:
-        return Verdict(False, "Creating automations always needs your approval.")
+        # One reason per action, not one reason for the set. Both members are
+        # here for different causes, and a user told "creating automations
+        # always needs your approval" about a Slack message learns nothing
+        # except that the app is confused.
+        return Verdict(False, _ALWAYS_ASK[action_type])
 
     if action_type not in OUTBOUND_ACTIONS:
         return Verdict(True)

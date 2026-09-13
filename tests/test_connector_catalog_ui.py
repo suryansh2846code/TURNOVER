@@ -190,3 +190,73 @@ def test_a_reason_is_escaped_before_it_reaches_the_page():
 
     assert "<img" not in out["permHtml"]
     assert "&lt;img" in out["permHtml"]
+
+
+# ── the approvals list ─────────────────────────────────────────────────────
+# The queue, the notification and the endpoints existed before this; nowhere to
+# look did not. A queue nobody can see is not an approval system — it is a
+# desktop notification and then silence.
+
+WAITING = {"approvals": [
+    {"id": "a1", "summary": "Run “send_message” on Slack",
+     "reason": "Anything a connector changes needs your approval.",
+     "routine_name": "Morning inbox", "status": "pending"},
+    {"id": "a2", "summary": "Email “Re: launch” to sam@example.com",
+     "reason": "sam@example.com is not on your allowed list.",
+     "routine_name": "", "status": "pending"},
+]}
+
+
+def test_waiting_actions_are_listed_with_their_reason():
+    out = run({"mode": "approvals", "api": {"/api/agents/approvals": WAITING}})
+
+    assert out["ok"], out["error"]
+    assert "send_message" in out["approvalsHtml"]
+    assert "needs your approval" in out["approvalsHtml"]
+    assert "not on your allowed list" in out["approvalsHtml"]
+
+
+def test_each_waiting_action_can_be_approved_or_dismissed():
+    out = run({"mode": "approvals", "api": {"/api/agents/approvals": WAITING}})
+
+    assert out["approveButtons"] == ["a1", "a2"]
+    assert "Approve" in out["approvalsHtml"]
+    assert "Dismiss" in out["approvalsHtml"]
+
+
+def test_where_a_request_came_from_is_shown():
+    """A routine acting on its own is the case this list exists for, so the
+    user needs to know which one asked."""
+    out = run({"mode": "approvals", "api": {"/api/agents/approvals": WAITING}})
+
+    assert "Morning inbox" in out["approvalsHtml"]
+
+
+def test_an_empty_queue_shows_nothing_at_all():
+    """Not "0 waiting" — an empty state that takes up room trains people to
+    stop reading the area it sits in."""
+    out = run({"mode": "approvals", "api": {"/api/agents/approvals": {"approvals": []}}})
+
+    assert out["approvalsHidden"] is True
+    assert out["approvalsHtml"] == ""
+
+
+def test_a_failed_poll_does_not_blank_a_live_list():
+    """The list is refreshed on a timer. One failed request must not erase
+    requests the user can still act on."""
+    out = run({"mode": "approvals",
+               "api": {"/api/agents/approvals": {"__throw": "offline"}}})
+
+    assert out["ok"], out["error"]
+    assert out["approvalsHtml"] == ""
+
+
+def test_a_summary_is_escaped():
+    """Summaries carry a tool name and a connector label, both of which come
+    from somebody else's server."""
+    out = run({"mode": "approvals", "api": {"/api/agents/approvals": {"approvals": [
+        {"id": "x", "summary": "<img src=x onerror=alert(1)>", "reason": "",
+         "routine_name": "", "status": "pending"}]}}})
+
+    assert "<img" not in out["approvalsHtml"]
+    assert "&lt;img" in out["approvalsHtml"]

@@ -2178,6 +2178,7 @@ async function loadBrain() {
     toast("connector removed"); loadBrain();
   });
   loadSyncStatus();
+  loadApprovals();
   try { renderGoogleCard(await api("/api/google/status")); } catch (_) {}
 }
 
@@ -2605,6 +2606,60 @@ async function connectorPermissions(entryId) {
 }
 
 $("#addConnector").onclick = () => connectorBrowser();
+
+// ── waiting for approval ─────────────────────────────────────────────────
+// An action an unattended agent wanted to take, held until the user decides.
+// The queue, the notification and the endpoints existed before this; what did
+// not was anywhere to look, which made a desktop notification the only trace a
+// request ever happened. A queue nobody can see is not an approval system.
+
+async function loadApprovals() {
+  const box = $("#approvals");
+  if (!box) return;
+  let rows;
+  try {
+    rows = (await api("/api/agents/approvals")).approvals || [];
+  } catch {
+    return;                       // a failed poll must not blank a live list
+  }
+  if (!rows.length) { box.hidden = true; box.innerHTML = ""; return; }
+
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="ctx-label">Waiting for you (${rows.length})</div>` +
+    rows.map((a) => `
+      <div class="apr" data-apr="${esc(a.id)}">
+        <div class="apr-sum">${esc(a.summary)}</div>
+        <div class="apr-why">${esc(a.reason || "")}${
+          a.routine_name ? ` · from “${esc(a.routine_name)}”` : ""}</div>
+        <div class="apr-btns">
+          <button class="tiny" data-aprok="${esc(a.id)}">Approve</button>
+          <button class="tiny ghost" data-aprno="${esc(a.id)}">Dismiss</button>
+        </div>
+      </div>`).join("");
+
+  const decide = async (id, verb, path) => {
+    const card = box.querySelector(`[data-apr="${id}"]`);
+    if (card) card.classList.add("apr-busy");
+    try {
+      const r = await api(`/api/agents/approvals/${encodeURIComponent(id)}/${path}`,
+                          { method: "POST" });
+      // Say what happened, including when the action itself failed — an
+      // approval that silently does nothing is the same bug as a dead spinner.
+      toast(r.ok === false ? (r.error || `couldn't ${verb} that`)
+                           : (r.detail || `${verb}d`));
+    } catch (e) {
+      toast(String(e));
+    }
+    loadApprovals();
+  };
+
+  box.querySelectorAll("[data-aprok]").forEach((b) =>
+    b.onclick = () => decide(b.dataset.aprok, "approve", "approve"));
+  box.querySelectorAll("[data-aprno]").forEach((b) =>
+    b.onclick = () => decide(b.dataset.aprno, "dismiss", "reject"));
+}
+
 
 
 // ── tasks ────────────────────────────────────────────────────────────────

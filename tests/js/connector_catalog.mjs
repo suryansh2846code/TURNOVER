@@ -121,7 +121,8 @@ new Function(
   src +
   "\nglobalThis.__browser = connectorBrowser;" +
   "\nglobalThis.__loadCatalog = loadConnectorCatalog;" +
-  "\nglobalThis.__permissions = connectorPermissions;"
+  "\nglobalThis.__permissions = connectorPermissions;" +
+  "\nglobalThis.__approvals = loadApprovals;"
 )();
 
 const result = { ok: true, calls, modals: [], textWrites, error: null };
@@ -137,6 +138,13 @@ try {
   } else if (scenario.mode === "permissions") {
     await globalThis.__permissions(scenario.entry);
     result.permHtml = elFor("cxPerm").innerHTML;
+  } else if (scenario.mode === "approvals") {
+    await globalThis.__approvals();
+    const box = elFor("approvals");
+    result.approvalsHtml = box.innerHTML;
+    result.approvalsHidden = box.hidden;
+    result.approveButtons = box.querySelectorAll("[data-aprok]").map(
+      (b) => b.dataset.aprok);
   }
 } catch (e) {
   result.ok = false;

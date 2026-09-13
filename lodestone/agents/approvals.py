@@ -62,6 +62,12 @@ def describe(action_type: str, params: dict) -> str:
         return f"New automation “{params.get('name') or 'untitled'}”"
     if action_type == "set_reminder":
         return f"Reminder: {params.get('message') or ''}"
+    if action_type == "mcp_action":
+        # The tool name is the vendor's, so it is shown as a name rather than
+        # explained — inventing a description of somebody else's verb would be
+        # guessing at what the user is about to approve.
+        where = params.get("connector") or params.get("server_id") or "a connector"
+        return f"Run “{params.get('tool') or 'an action'}” on {where}"
     return action_type.replace("_", " ")
 
 

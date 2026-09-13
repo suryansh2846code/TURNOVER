@@ -192,16 +192,23 @@ def sync(name: str, body: SyncIn):
 
 # ── Google sign-in (bundled client → no per-user Cloud setup) ─────────────
 class MCPActionIn(BaseModel):
-    """A write the user has looked at and approved.
+    """A connector write, either confirmed on screen or waiting for approval.
 
     `confirmed` is carried explicitly rather than implied by the request: a
     connector action changes something in the user's account, and "they called
     the endpoint" is not the same as "they were shown what it would do".
+
+    Unconfirmed no longer means *refused*. It means **queued** — held in the
+    same list as every other action waiting on the user, with the same
+    notification. Refusing was the weaker half of two approval systems: it had
+    nowhere to put a request made while nobody was watching, so a routine that
+    wanted to act simply failed and forgot.
     """
 
     tool: str
     arguments: dict[str, Any] = {}
     confirmed: bool = False
+    agent_id: str = ""
 
 
 def _mcp(server_id: str):
@@ -233,9 +240,22 @@ def mcp_actions(server_id: str) -> dict[str, Any]:
 @router.post("/api/connectors/mcp/{server_id}/action")
 @probes_a_provider
 def mcp_action(server_id: str, body: MCPActionIn) -> dict[str, Any]:
-    """Run a confirmed action. Refuses, rather than runs, when unconfirmed."""
-    return _mcp(server_id).perform(body.tool, body.arguments,
-                                   confirmed=body.confirmed)
+    """Run a confirmed action, or queue it for approval.
+
+    Both paths go through `actions.REGISTRY["mcp_action"]`, so an approval
+    granted later runs exactly what a confirmation now would.
+    """
+    from ...actions import run_now
+    from ...agents.approvals import run_or_queue
+
+    conn = _mcp(server_id)
+    params = {"server_id": server_id, "connector": conn.label,
+              "tool": body.tool, "arguments": body.arguments}
+    if body.confirmed:
+        # The user is looking at it and clicked. That is a stronger signal than
+        # any stored list, and is why interactive chat does not queue either.
+        return run_now("mcp_action", params)
+    return run_or_queue("mcp_action", params, agent_id=body.agent_id)
 
 
 @router.get("/api/google/status")

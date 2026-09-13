@@ -1567,3 +1567,14 @@ button.tiny.running:hover { background: linear-gradient(to right,
 .cx-row button { flex: 0 0 auto; }
 .cx-off { opacity: .62; }
 .cx-off .conn-name { text-decoration: none; }
+
+/* ── actions waiting for approval ──────────────────────────────────────── */
+/* Sits above the connector list because it is the only thing in this drawer
+   that is waiting on the user rather than reporting to them. */
+.approvals { margin-bottom: 12px; }
+.apr { border: 1px solid var(--line); border-radius: 10px;
+       padding: 10px 11px; margin-bottom: 8px; background: var(--bg); }
+.apr-sum { font-size: 13px; line-height: 1.45; }
+.apr-why { font-size: 12px; opacity: .68; margin-top: 3px; line-height: 1.45; }
+.apr-btns { display: flex; gap: 6px; margin-top: 9px; }
+.apr-busy { opacity: .5; pointer-events: none; }

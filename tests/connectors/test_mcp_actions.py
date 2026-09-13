@@ -132,15 +132,83 @@ def test_a_sync_never_calls_a_write(poison):
 # ── the HTTP surface ───────────────────────────────────────────────────────
 
 
-def test_the_endpoint_refuses_an_unconfirmed_action():
+def test_the_endpoint_queues_an_unconfirmed_action():
+    """Unconfirmed means *waiting*, not *refused*.
+
+    Refusing was the weaker half of two approval systems: a routine that wanted
+    to act while nobody was watching simply failed and forgot. Queuing puts it
+    in the same list, with the same notification, as every other pending action.
+    """
+    from lodestone.agents import approvals
+
     upsert_server(spec_for("writes", id="http"))
 
     resp = client.post("/api/connectors/mcp/http/action",
                        json={"tool": "delete_record", "arguments": {"record_id": "1"}})
 
+    body = resp.json()
     assert resp.status_code == 200
-    assert resp.json()["ok"] is False
-    assert "confirm" in resp.json()["error"].lower()
+    assert body["queued"] is True
+    waiting = approvals.pending()
+    assert any(a["id"] == body["approval_id"] for a in waiting)
+
+
+def test_a_queued_connector_action_is_described_in_the_users_terms():
+    """The summary is what the approval list shows, so it must not be an
+    internal — and it must not borrow another action's explanation."""
+    from lodestone.agents import approvals
+
+    upsert_server(spec_for("writes", id="http"))
+    client.post("/api/connectors/mcp/http/action",
+                json={"tool": "send_message", "arguments": {"to": "dev"}})
+
+    row = approvals.pending()[0]
+    assert "send_message" in row["summary"]
+    assert "Writes Source" in row["summary"]
+    assert "automation" not in row["reason"], (
+        "a connector action borrowed create_routine's reason")
+    assert "connector" in row["reason"].lower()
+
+
+def test_approving_later_runs_what_was_proposed():
+    """The whole reason to queue rather than refuse: the action survives until
+    the user gets back, and runs with the parameters it was proposed with."""
+    from lodestone.agents import approvals
+
+    upsert_server(spec_for("writes", id="http"))
+    queued = client.post("/api/connectors/mcp/http/action",
+                         json={"tool": "send_message",
+                               "arguments": {"to": "dev", "body": "ship it"}}).json()
+
+    out = approvals.approve(queued["approval_id"])
+
+    assert out["ok"] is True
+    assert not approvals.pending(), "the approved action is still waiting"
+
+
+def test_rejecting_never_runs_it():
+    from lodestone.agents import approvals
+
+    upsert_server(spec_for("writes", id="http"))
+    queued = client.post("/api/connectors/mcp/http/action",
+                         json={"tool": "delete_record",
+                               "arguments": {"record_id": "9"}}).json()
+
+    out = approvals.reject(queued["approval_id"])
+
+    assert out["ok"] is True
+    assert not approvals.pending()
+
+
+def test_there_is_one_approval_system_not_two():
+    """`mcp_action` is a registered action like any other, so it inherits the
+    queue, the notification, the history and the approval list rather than
+    carrying a private confirmation flag of its own."""
+    from lodestone.actions import REGISTRY
+    from lodestone.agents.permissions import NEVER_UNATTENDED
+
+    assert "mcp_action" in REGISTRY
+    assert "mcp_action" in NEVER_UNATTENDED
 
 
 def test_the_endpoint_runs_a_confirmed_action():

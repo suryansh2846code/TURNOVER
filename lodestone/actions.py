@@ -116,6 +116,36 @@ def _create_event(params: dict) -> dict:
         title, start, params.get("end"), params.get("description", ""), attendees)
 
 
+def _mcp_action(params: dict) -> dict:
+    """Run one tool on a connector the user added.
+
+    Registered here rather than executed inside the connector so it travels the
+    same road as sending an email: proposed, queued if nobody is watching,
+    approved from the same list, recorded with the same history. The connector
+    had its own private confirmation flag, which was a second answer to a
+    question this file already answers.
+    """
+    from .connectors import get_connector
+    from .connectors.mcp_source import MCPConnector
+
+    server_id = (params.get("server_id") or "").strip()
+    tool = (params.get("tool") or "").strip()
+    if not server_id or not tool:
+        return {"ok": False, "error": "That action is missing its connector."}
+    try:
+        conn = get_connector(f"mcp:{server_id}")
+    except KeyError:
+        return {"ok": False, "error": "That connector is no longer set up."}
+    if not isinstance(conn, MCPConnector):       # pragma: no cover - unreachable
+        # The concrete type, not the base: this is the one handler that mutates
+        # somebody else's account, and a duck-typed lookup would happily call
+        # `perform` on anything that later grew the name.
+        return {"ok": False, "error": "That connector cannot run actions."}
+    # `confirmed=True` because reaching this handler *is* the confirmation:
+    # nothing calls it except an approval the user granted or a live click.
+    return conn.perform(tool, params.get("arguments") or {}, confirmed=True)
+
+
 # action name → (handler, human label, required params)
 REGISTRY: dict[str, dict[str, Any]] = {
     "send_email": {
@@ -133,6 +163,10 @@ REGISTRY: dict[str, dict[str, Any]] = {
     "create_routine": {
         "handler": _create_routine, "label": "Create automation",
         "fields": ["name", "trigger", "agent", "interval_min", "instruction"],
+    },
+    "mcp_action": {
+        "handler": _mcp_action, "label": "Connector action",
+        "fields": ["server_id", "tool", "arguments"],
     },
 }
 
