@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # the app being broken.
 SIGNIN_TIMEOUT_SECONDS = 180
 
-_WINDOW_SIZE = (420, 290)
+_WINDOW_SIZE = (348, 250)
 _SCREEN_MARGIN = 18          # gap from the screen edge, like a system notification
 
 # Set by desktop.run_app; absent when running as a plain server.
@@ -122,6 +122,14 @@ def _apply_float_behaviour(nswin) -> None:
 
     # A sign-in card exists precisely for the moments this app is NOT active.
     nswin.setHidesOnDeactivate_(False)
+
+    # `transparent=True` turns the native shadow off. Turn it back on: with a
+    # transparent window macOS derives the shadow from the opaque content, so it
+    # hugs the card's rounded corners — a real window shadow rather than a CSS
+    # one squeezed into a gutter. It is cached, so it has to be invalidated
+    # whenever the card's shape could have changed.
+    nswin.setHasShadow_(True)
+    nswin.invalidateShadow()
 
 
 def _visible_corner(width: int, height: int):
@@ -217,6 +225,11 @@ def prepare(create_window) -> None:
             "Connect", "about:blank",
             width=width, height=height, x=x, y=y,
             hidden=True, frameless=True, easy_drag=True, on_top=True,
+            # Without this the window is an opaque white rectangle behind the
+            # rounded card, which reads as a pale border around it. Transparent
+            # also turns off the native shadow, so the card's own box-shadow is
+            # what the body padding leaves room for.
+            transparent=True,
             resizable=False, shadow=True, focus=True, js_api=_Bridge(),
         )
     except Exception:

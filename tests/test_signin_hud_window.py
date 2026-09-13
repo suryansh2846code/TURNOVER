@@ -101,3 +101,77 @@ def test_there_is_never_a_second_card():
 
     source = inspect.getsource(hud)
     assert source.count("create_window(") == 1, "more than one window is created"
+
+
+# ── the card's appearance ────────────────────────────────────────────────
+import pathlib
+from html.parser import HTMLParser
+
+CARD_HTML = pathlib.Path(__file__).resolve().parents[1] / "lodestone/web/signin_hud.html"
+
+
+def test_the_window_has_no_opaque_backing():
+    """An opaque window behind a rounded card reads as a pale border around it,
+    which is exactly how it shipped."""
+    captured = {}
+
+    def fake_create_window(*args, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    previous = hud._hud_window
+    try:
+        hud.prepare(fake_create_window)
+    finally:
+        hud._hud_window = previous
+    assert captured.get("transparent") is True, "window would paint an opaque rectangle"
+    assert captured.get("frameless") is True
+
+
+def test_the_native_shadow_is_restored(raised):
+    """pywebview switches the shadow off for transparent windows; with the card
+    supplying the opaque shape, macOS can draw a real one around it."""
+    shadow = raised.named("setHasShadow_")
+    assert shadow and shadow[0][1][0] is True
+    assert raised.named("invalidateShadow"), "a cached shadow keeps the old shape"
+
+
+class _Children(HTMLParser):
+    """Immediate children of the element carrying class `card`."""
+
+    def __init__(self):
+        super().__init__()
+        self.depth = None
+        self.level = 0
+        self.children = []
+
+    def handle_starttag(self, tag, attrs):
+        classes = dict(attrs).get("class", "")
+        self.level += 1
+        if self.depth is None and "card" in classes.split():
+            self.depth = self.level
+        elif self.depth is not None and self.level == self.depth + 1:
+            self.children.append((tag, classes, dict(attrs).get("id", "")))
+
+    def handle_endtag(self, tag):
+        self.level -= 1
+
+
+def test_every_block_shares_the_cards_padding():
+    """The title used to sit in a column beside the icon, so it started further
+    in than the body text under it. Being siblings inside the card is what makes
+    them line up — one padding value, one left edge, one right edge."""
+    parser = _Children()
+    parser.feed(CARD_HTML.read_text())
+    tags = [t for t, _, _ in parser.children]
+    assert "h1" in tags, "the title is not a direct child of the card"
+    ids = [i for _, _, i in parser.children]
+    for expected in ("title", "body", "action", "cancel"):
+        assert expected in ids, f"#{expected} is nested instead of sharing the padding"
+
+
+def test_one_padding_value_governs_every_edge():
+    css = CARD_HTML.read_text()
+    assert "padding: var(--pad)" in css, "the card does not use the shared padding"
+    assert "top: var(--pad); right: var(--pad)" in css, (
+        "the close button is inset by hand and will drift from the card padding")
