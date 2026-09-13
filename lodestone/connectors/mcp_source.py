@@ -389,6 +389,64 @@ class MCPConnector(Connector):
             return False, kinds.why_not(self.label)
         return True, ""
 
+    # ── actions (writes) ────────────────────────────────────────────────
+
+    def available_actions(self) -> list[dict[str, str]]:
+        """Write tools this connector is permitted to offer, for confirmation.
+
+        Returned rather than executed: nothing here changes anything at the
+        vendor. The list is what a confirmation card is built from, which is the
+        only way a user can be shown what they are agreeing to.
+        """
+        kinds, _ = probe(self.spec)
+        if kinds is None:
+            return []
+        return [{"tool": name, "connector": self.name, "label": self.label}
+                for name in kinds.write if self.spec.permits(name)]
+
+    def perform(self, tool: str, arguments: dict[str, Any] | None = None, *,
+                confirmed: bool = False) -> dict[str, Any]:
+        """Run a write tool — only after the user has confirmed *this* action.
+
+        `confirmed` is a required, explicit gate rather than a default, so a
+        caller that forgets it fails closed. Connectors have been read-only by
+        design (decision C1) and this is the first path that changes something
+        at the vendor; the agent reaches it the same way it reaches sending an
+        email — by proposing an action the user clicks to approve, never by
+        calling it mid-turn.
+        """
+        from .mcp_errors import explain
+
+        if not confirmed:
+            return {"ok": False,
+                    "error": "This action needs your confirmation first."}
+        if not self.spec.permits(tool):
+            return {"ok": False,
+                    "error": f"{self.label} is not allowed to use `{tool}`."}
+
+        kinds, reason = probe(self.spec)
+        if kinds is None:
+            return {"ok": False, "error": reason}
+        if tool not in kinds.write and tool not in kinds.bulk and tool not in kinds.query:
+            return {"ok": False,
+                    "error": f"{self.label} has no `{tool}` to run."}
+
+        async def _call(session):
+            return await session.call_tool(
+                tool, dict(arguments or {}),
+                read_timeout_seconds=CALL_TIMEOUT_SECONDS)
+
+        try:
+            answer = converse(self.spec, _call)
+        except Exception as exc:
+            return {"ok": False, "error": explain(exc, self.label)}
+        if getattr(answer, "is_error", False):
+            return {"ok": False,
+                    "error": f"{self.label} could not complete that action."}
+        records = _records(answer)
+        detail = records[0] if len(records) == 1 else records
+        return {"ok": True, "detail": detail}
+
     def sync(self, *, since: str | None = None, limit: int | None = None,
              full_history: bool = False, cancel=None, progress=None,
              interactive: bool = True, **_: Any) -> SyncResult:

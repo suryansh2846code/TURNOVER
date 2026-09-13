@@ -157,12 +157,17 @@ The whole point: **write this once, and every new source after it is config.**
 
 ## Phase 4 — Actions (only after 0–3)
 
+*Built on the confirmation path that already existed for `send_email` rather
+than a parallel one: `available_actions()` is what a card is built from,
+`perform(..., confirmed=True)` is the only way anything runs, and `confirmed`
+defaults to False so a caller that forgets it fails closed.*
+
 Connectors are read-only today by design (decision C1). MCP tools write.
 
-- [ ] **4.1 — Write tools behind explicit confirmation.** "Agents that act with
+- [x] **4.1 — Write tools behind explicit confirmation.** "Agents that act with
       confirmation" is already the deferred item in `DECISIONS.md`; this is the
       mechanism arriving, not a new idea.
-- [ ] **4.2 — Nothing writes without the user seeing what and where.**
+- [x] **4.2 — Nothing writes without the user seeing what and where.**
 
 ---
 
