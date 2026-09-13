@@ -314,6 +314,7 @@ def context_window(model: str | None) -> int | None:
     return None
 
 
+from ..log import suppressed
 from .capabilities import get_capabilities
 from .connections import ConnectionStatus, get_connection, save_connection
 from .discovery import get_discovered_models
@@ -352,7 +353,7 @@ def get_model_catalog(force_refresh: bool = False) -> list[dict]:
         caps = get_capabilities(pid)
 
         from .entitlements import is_provider_connected, provider_credentials
-        is_conn, user_plan, _ = is_provider_connected(pid)
+        is_conn, _user_plan, _ = is_provider_connected(pid)
         creds = provider_credentials(pid)
 
         acct = all_accts.get(pid)
@@ -428,7 +429,7 @@ def list_providers() -> list[dict]:
         conn = get_connection(name)
 
         from .entitlements import is_provider_connected, provider_credentials
-        is_conn, user_plan, _ = is_provider_connected(name)
+        is_conn, _user_plan, _ = is_provider_connected(name)
         creds = provider_credentials(name)
         acct = local_accounts.get(name)
         if not is_conn:
@@ -534,15 +535,13 @@ def _wrap_usage(p: LLMProvider) -> None:
 
     def chat(messages, **kw):
         r = orig(messages, **kw)
-        try:
+        with suppressed("from ..usage import record …"):
             from ..usage import record
             tin, tout = getattr(r, "input_tokens", 0), getattr(r, "output_tokens", 0)
             if tin == 0 and tout == 0:
                 tin = sum(len(getattr(m, "content", "") or "") for m in messages) // 4
                 tout = len(getattr(r, "text", "") or "") // 4
             record(p.name, getattr(p, "model", None), tin, tout)
-        except Exception:
-            pass
         return r
 
     p.chat = chat

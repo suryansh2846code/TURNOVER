@@ -13,23 +13,23 @@ import os
 import re
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 import httpx
 
+from ..log import suppressed
 from .base import ChatResult, ToolCall, _saved_key
-from .errors import (ErrorKind, ProviderError, classify_exception,
-                     classify_http)
 from .connections import ConnectionStatus, get_connection
+from .errors import ErrorKind, ProviderError, classify_exception, classify_http
 from .openai_compat import OpenAICompatProvider
 
 
-class GeminiCredentialSource(str, Enum):
+class GeminiCredentialSource(StrEnum):
     API_KEY = "api_key"
     NONE = "none"
 
 
-class GeminiErrorCode(str, Enum):
+class GeminiErrorCode(StrEnum):
     AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED"
     PERMISSION_DENIED = "PERMISSION_DENIED"
     MODEL_NOT_FOUND = "MODEL_NOT_FOUND"
@@ -140,7 +140,7 @@ def classify_gemini_error(status_code: int, response_text: str | None = None, mo
     # Attempt to extract safe error message from Google's structured response
     clean_detail = ""
     if response_text:
-        try:
+        with suppressed("err_json = json.loads(response_text) …"):
             err_json = json.loads(response_text)
             err_obj = {}
             if isinstance(err_json, dict):
@@ -152,8 +152,6 @@ def classify_gemini_error(status_code: int, response_text: str | None = None, mo
                 # Strip out sensitive query params or keys if reflected
                 clean_detail = re.sub(r'key=[A-Za-z0-9_\-]+', 'key=REDACTED', raw_msg)
                 clean_detail = re.sub(r'Bearer\s+[A-Za-z0-9_\-\.]+', 'Bearer REDACTED', clean_detail)
-        except Exception:
-            pass
 
     if response_text and not clean_detail:
         clean_detail = re.sub(r'key=[A-Za-z0-9_\-]+', 'key=REDACTED', response_text)

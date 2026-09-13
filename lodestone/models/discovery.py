@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from ..log import suppressed
 from .base import _saved_key
 
 _CACHE_TTL = 3600  # 1 hour cache unless refreshed
@@ -144,10 +145,7 @@ def _chatgpt_subscription_models() -> list[DiscoveredModel]:
             d_desc = c_desc or d_desc
             ctx = c_ctx or ctx
 
-        if supported_slugs:
-            is_supported = slug in supported_slugs
-        else:
-            is_supported = (default_req is None)
+        is_supported = slug in supported_slugs if supported_slugs else default_req is None
 
         locked = not is_supported
         plan_req = None if is_supported else (default_req or "Pro")
@@ -187,8 +185,8 @@ def discover_openai_models(api_key: str | None = None) -> tuple[list[DiscoveredM
     account_info: dict[str, Any] = {}
 
     # Check if ChatGPT Subscription is active
-    try:
-        from .chatgpt_auth import get_chatgpt_access_token, detect_chatgpt_local_session
+    with suppressed("from .chatgpt_auth import get_chatgpt_access_token, detect_chatg …"):
+        from .chatgpt_auth import detect_chatgpt_local_session, get_chatgpt_access_token
         sess = detect_chatgpt_local_session(fetch_usage=False)
         has_sub = bool(get_chatgpt_access_token() or (sess and sess.get("has_token")))
         if sess and sess.get("email"):
@@ -197,8 +195,6 @@ def discover_openai_models(api_key: str | None = None) -> tuple[list[DiscoveredM
             account_info["plan"] = sess.get("plan")
         if not key and has_sub:
             return _chatgpt_subscription_models(), account_info
-    except Exception:
-        pass
 
     if not key:
         return _fallback_openai(), account_info
@@ -206,7 +202,7 @@ def discover_openai_models(api_key: str | None = None) -> tuple[list[DiscoveredM
     headers = {"Authorization": f"Bearer {key}"}
 
     # 1. Fetch account identity from /v1/me if permitted
-    try:
+    with suppressed("me_resp = httpx.get('https://api.openai.com/v1/me', headers=head …"):
         me_resp = httpx.get("https://api.openai.com/v1/me", headers=headers, timeout=4.0)
         if me_resp.status_code == 200:
             me_data = me_resp.json()
@@ -216,8 +212,6 @@ def discover_openai_models(api_key: str | None = None) -> tuple[list[DiscoveredM
             orgs = me_data.get("orgs", {}).get("data", [])
             if orgs:
                 account_info["organization"] = orgs[0].get("name") or orgs[0].get("id")
-    except Exception:
-        pass
 
     # 2. Discover models from OpenAI API
     try:
@@ -446,7 +440,7 @@ def discover_ollama_models(host: str | None = None) -> list[DiscoveredModel]:
     url = (host or os.environ.get("OLLAMA_HOST") or "http://localhost:11434").rstrip("/")
     installed_names: set[str] = set()
     installed_models: list[DiscoveredModel] = []
-    try:
+    with suppressed("resp = httpx.get(f'{url}/api/tags', timeout=3.0) …"):
         resp = httpx.get(f"{url}/api/tags", timeout=3.0)
         if resp.status_code == 200:
             items = resp.json().get("models", [])
@@ -466,8 +460,6 @@ def discover_ollama_models(host: str | None = None) -> list[DiscoveredModel]:
                         status="available",
                         **caps,
                     ))
-    except Exception:
-        pass
 
     catalog_ollama = [
         ("llama3.2", "Llama 3.2", "Compact offline local model", 128_000),
@@ -511,14 +503,12 @@ def _mark_fallback(models: list[DiscoveredModel]) -> list[DiscoveredModel]:
 
 def _fallback_openai() -> list[DiscoveredModel]:
     is_free = True
-    try:
+    with suppressed("from .chatgpt_auth import detect_chatgpt_local_session …"):
         from .chatgpt_auth import detect_chatgpt_local_session
         sess = detect_chatgpt_local_session(fetch_usage=False)
         plan = (sess and sess.get("plan", "")) or ""
         if any(k in plan.lower() for k in ("pro", "team", "business", "enterprise")):
             is_free = False
-    except Exception:
-        pass
 
     return _mark_fallback([
         DiscoveredModel("gpt-5.6-terra", "GPT-5.6-Terra", "Balanced agentic coding model for everyday work", 272_000, vision=True, reasoning=True),
@@ -535,14 +525,12 @@ def _fallback_openai() -> list[DiscoveredModel]:
 
 def _fallback_anthropic() -> list[DiscoveredModel]:
     is_free = True
-    try:
+    with suppressed("from .accounts import detect_claude_account …"):
         from .accounts import detect_claude_account
         acct = detect_claude_account()
         plan = acct.get("plan", "").lower()
         if "pro" in plan or "subscription" in plan or "team" in plan:
             is_free = False
-    except Exception:
-        pass
 
     return _mark_fallback([
         DiscoveredModel("claude-opus-5", "Claude Opus 5", "Frontier intelligence, deep synthesis & complex architecture", 200_000, vision=True, reasoning=True, locked=is_free, plan_required="Pro" if is_free else None),
@@ -604,14 +592,12 @@ def _fallback_ollama() -> list[DiscoveredModel]:
 
 def _fallback_cursor() -> list[DiscoveredModel]:
     is_free = True
-    try:
+    with suppressed("from .accounts import detect_cursor_account …"):
         from .accounts import detect_cursor_account
         acct = detect_cursor_account()
         plan = acct.get("plan", "").lower()
         if "pro" in plan or "business" in plan or "enterprise" in plan:
             is_free = False
-    except Exception:
-        pass
 
     # Ids verified against `agent --list-models` on 2026-09-12. Shown only
     # before the CLI exists; its own list replaces these once installed.

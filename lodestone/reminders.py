@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from .config import get_settings
+from .log import suppressed
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS reminders (
@@ -38,10 +39,8 @@ def parse_when(text: str, now: datetime | None = None) -> str | None:
 
     # full ISO
     if m := re.search(r"\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}", t):
-        try:
+        with suppressed("return datetime.fromisoformat(m.group(0).replace(' ', 'T')).asti …"):
             return datetime.fromisoformat(m.group(0).replace(" ", "T")).astimezone().isoformat()
-        except Exception:
-            pass
     # relative offsets
     if m := re.search(r"\bin\s+(\d+)\s*(min|minute|minutes|hour|hours|hr|hrs|day|days)\b", t):
         n = int(m.group(1)); unit = m.group(2)

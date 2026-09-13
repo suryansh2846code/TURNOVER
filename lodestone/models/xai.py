@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 
+from ..log import suppressed
 from .base import ChatResult, _saved_key
 from .openai_compat import OpenAICompatProvider
 
@@ -40,14 +41,12 @@ class XAIProvider(OpenAICompatProvider):
                 or ""
             )
             if not resolved_key:
-                try:
+                with suppressed("from .xai_auth import get_xai_access_token …"):
                     from .xai_auth import get_xai_access_token
                     tok = get_xai_access_token()
                     if tok:
                         # Authenticates, but has no developer-API credits.
                         self._oauth_only = True
-                except Exception:
-                    pass
         super().__init__(model=model, api_key=resolved_key, base_url=base_url)
 
     # An OAuth token authenticates but carries no developer-API credits.

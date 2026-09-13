@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .log import suppressed
+
 load_dotenv()
 
 
@@ -127,11 +129,9 @@ class Settings(BaseSettings):
 
     def _kc_delete(self, key: str) -> None:
         import subprocess
-        try:
+        with suppressed("subprocess.run(['security', 'delete-generic-password',"):
             subprocess.run(["security", "delete-generic-password",
                             "-s", self._KC_SERVICE, "-a", key], capture_output=True)
-        except Exception:
-            pass
 
     def get_secret(self, key: str) -> str | None:
         """Resolve a secret: env var → macOS Keychain (encrypted) → legacy file."""
@@ -178,10 +178,8 @@ class Settings(BaseSettings):
         self.ensure_home()
         path = self._secrets_path()
         path.write_text(json.dumps(data, indent=2))
-        try:
+        with suppressed("path.chmod(0o600)"):
             path.chmod(0o600)
-        except Exception:
-            pass
 
     def _file_del_secret(self, key: str) -> None:
         import json

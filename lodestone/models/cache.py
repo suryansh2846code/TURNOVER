@@ -14,7 +14,10 @@ from __future__ import annotations
 import functools
 import threading
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
+
+from ..log import suppressed
 
 _registry: list[Callable[[], None]] = []
 
@@ -54,9 +57,7 @@ def clear_all() -> None:
     """Flush every probe cache — called when a credential changes."""
     for clear in _registry:
         clear()
-    try:
+    with suppressed("from ..config import forget_cached_secrets …"):
         from ..config import forget_cached_secrets
 
         forget_cached_secrets()
-    except Exception:
-        pass

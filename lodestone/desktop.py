@@ -10,6 +10,8 @@ import socket
 import threading
 import time
 
+from .log import suppressed
+
 
 def _wait_for_port(host: str, port: int, timeout: float = 15.0) -> bool:
     end = time.time() + timeout
@@ -53,11 +55,9 @@ def _reserve_port(host: str) -> tuple[int, socket.socket]:
     except Exception:
         sock = _bind(host, 0)        # genuinely taken (or never saved) → fresh one
     port = sock.getsockname()[1]
-    try:
+    with suppressed("pf.parent.mkdir(parents=True, exist_ok=True) …"):
         pf.parent.mkdir(parents=True, exist_ok=True)
         pf.write_text(str(port))
-    except Exception:
-        pass
     return port, sock
 
 
@@ -68,7 +68,7 @@ def run_app(dev: bool = False) -> None:
         raise SystemExit(
             "The desktop window needs pywebview. Install it with:\n"
             "    uv pip install -e '.[desktop]'   (or: pip install pywebview)\n"
-            "Or run the browser version instead:  lodestone serve")
+            "Or run the browser version instead:  lodestone serve") from None
 
     from .config import get_settings
 
@@ -102,6 +102,7 @@ def run_app(dev: bool = False) -> None:
              "--reload", "--reload-dir", pkg, "--log-level", "warning"])
     else:
         import uvicorn
+
         from .api.app import app as fastapi_app
         config = uvicorn.Config(fastapi_app, host=host, port=port, log_level="warning")
         server = uvicorn.Server(config)

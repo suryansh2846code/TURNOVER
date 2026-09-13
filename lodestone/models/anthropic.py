@@ -18,9 +18,9 @@ import uuid
 
 import httpx
 
+from ..log import suppressed
 from .base import ChatResult, LLMProvider, Message, ToolCall, _saved_key
-from .errors import (ErrorKind, ProviderError, classify_exception,
-                     classify_http)
+from .errors import ErrorKind, ProviderError, classify_exception, classify_http
 
 
 class AnthropicProvider(LLMProvider):
@@ -38,7 +38,7 @@ class AnthropicProvider(LLMProvider):
     def is_ready(self) -> tuple[bool, str]:
         if self.api_key:
             return True, ""
-        try:
+        with suppressed("from .connections import ConnectionStatus, get_connection …"):
             from .connections import ConnectionStatus, get_connection
             conn = get_connection("claude")
             if conn.account_status == ConnectionStatus.DISCONNECTED:
@@ -57,8 +57,6 @@ class AnthropicProvider(LLMProvider):
                     "needs the Claude CLI. Install it (npm i -g "
                     "@anthropic-ai/claude-code) or add an ANTHROPIC_API_KEY."
                 )
-        except Exception:
-            pass
         return False, "set ANTHROPIC_API_KEY or connect Claude account"
 
     def _subscription_backend(self) -> LLMProvider | None:

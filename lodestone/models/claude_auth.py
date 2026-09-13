@@ -14,13 +14,13 @@ import shutil
 import subprocess
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .connections import ConnectionStatus, get_connection, save_connection
-
+from ..log import suppressed
 from . import login_processes
+from .connections import ConnectionStatus, get_connection, save_connection
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def _watch_claude_json_async(initial_mtime: float):
                     email = oa.get("emailAddress")
                     name = oa.get("displayName") or oa.get("fullName") or "Claude User"
                     if email:
-                        now = datetime.now(timezone.utc).isoformat()
+                        now = datetime.now(UTC).isoformat()
                         conn = get_connection("claude")
                         conn.auth_method = "account"
                         conn.email = email
@@ -87,10 +87,10 @@ def _watch_claude_json_async(initial_mtime: float):
                         with _GLOBAL_CLAUDE_AUTH_STATE.lock:
                             _GLOBAL_CLAUDE_AUTH_STATE.status = "success"
                             _GLOBAL_CLAUDE_AUTH_STATE.connected_email = email
-                        logger.info(f"Claude authenticated successfully as {email}")
+                        logger.info("Claude authenticated successfully as %s", email)
                         break
             except Exception as exc:
-                logger.debug(f"Watching claude.json: {exc}")
+                logger.debug("Watching claude.json: %s", exc)
 
     t = threading.Thread(target=_watcher, daemon=True)
     t.start()
@@ -110,10 +110,8 @@ def start_claude_login_flow() -> tuple[bool, str, str]:
     with _GLOBAL_CLAUDE_AUTH_STATE.lock:
         # Kill previous process if still active
         if _GLOBAL_CLAUDE_AUTH_STATE.proc:
-            try:
+            with suppressed("_GLOBAL_CLAUDE_AUTH_STATE.proc.terminate()"):
                 _GLOBAL_CLAUDE_AUTH_STATE.proc.terminate()
-            except Exception:
-                pass
             login_processes.release(getattr(_GLOBAL_CLAUDE_AUTH_STATE.proc, "pid", None))
             _GLOBAL_CLAUDE_AUTH_STATE.proc = None
 
@@ -132,14 +130,14 @@ def start_claude_login_flow() -> tuple[bool, str, str]:
             _GLOBAL_CLAUDE_AUTH_STATE.error_message = ""
             _GLOBAL_CLAUDE_AUTH_STATE.connected_email = ""
         except Exception as exc:
-            logger.warning(f"Could not start claude CLI: {exc}")
+            logger.warning("Could not start claude CLI: %s", exc)
             return True, fallback_url, "Opened Claude in browser"
 
     # Extract auth URL from stdout in a reader thread
     found_url = [None]
 
     def _read_output():
-        try:
+        with suppressed("for line in proc.stdout"):
             for line in proc.stdout:
                 m = re.search(r"(https://claude\.com/cai/oauth/authorize\S+)", line)
                 if m:
@@ -147,8 +145,6 @@ def start_claude_login_flow() -> tuple[bool, str, str]:
                     with _GLOBAL_CLAUDE_AUTH_STATE.lock:
                         _GLOBAL_CLAUDE_AUTH_STATE.auth_url = found_url[0]
                     break
-        except Exception:
-            pass
 
     reader_thread = threading.Thread(target=_read_output, daemon=True)
     reader_thread.start()
@@ -167,6 +163,10 @@ def submit_claude_auth_code(code: str) -> tuple[bool, str]:
 
     if not proc or proc.poll() is not None:
         return False, "No active Claude login process waiting for code"
+    if proc.stdin is None:
+        # Spawned without a pipe — there is nothing to hand the code to, and
+        # writing would raise rather than say so.
+        return False, "That sign-in is not waiting for a code"
 
     try:
         proc.stdin.write(code.strip() + "\n")

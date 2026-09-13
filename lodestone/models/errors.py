@@ -15,12 +15,14 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
+
+from ..log import suppressed
 
 MAX_DETAIL = 160
 
 
-class ErrorKind(str, Enum):
+class ErrorKind(StrEnum):
     AUTH = "auth"                       # missing / invalid / expired credential
     BILLING = "billing"                 # out of credits, spending limit, quota
     RATE_LIMIT = "rate_limit"
@@ -49,14 +51,12 @@ def redact(text: str) -> str:
 
 def display_name(provider: str) -> str:
     """The provider's own name, so messages never show a raw internal id."""
-    try:
+    with suppressed("from .capabilities import get_capabilities …"):
         from .capabilities import get_capabilities
 
         caps = get_capabilities(provider)
         if caps:
             return caps.display_name
-    except Exception:
-        pass
     return provider.replace("-", " ").title() if provider.islower() else provider
 
 

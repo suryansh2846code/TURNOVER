@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..log import suppressed
+
 
 @dataclass(frozen=True)
 class PlanTier:
@@ -56,47 +58,47 @@ def normalize_plan_tier(provider: str, plan_str: str | None) -> PlanTier:
     if pid in ("openai", "chatgpt"):
         if any(k in p for k in ("pro", "team", "business", "enterprise", "edu", "self_serve")):
             return OPENAI_TIER_PRO
-        elif "plus" in p or "go" in p:
+        if "plus" in p or "go" in p:
             return OPENAI_TIER_PLUS
-        elif "api" in p or "developer" in p:
+        if "api" in p or "developer" in p:
             return OPENAI_TIER_API
-        elif "free" in p:
+        if "free" in p:
             return OPENAI_TIER_FREE
         return OPENAI_TIER_FREE if plan_str else TIER_ANONYMOUS
 
-    elif pid in ("claude", "anthropic", "claude-code"):
+    if pid in ("claude", "anthropic", "claude-code"):
         if any(k in p for k in ("enterprise", "api")):
             return CLAUDE_TIER_ENTERPRISE
-        elif "team" in p:
+        if "team" in p:
             return CLAUDE_TIER_TEAM
-        elif "max" in p:
+        if "max" in p:
             return CLAUDE_TIER_MAX
-        elif any(k in p for k in ("pro", "subscription")):
+        if any(k in p for k in ("pro", "subscription")):
             return CLAUDE_TIER_PRO
-        elif "free" in p:
+        if "free" in p:
             return CLAUDE_TIER_FREE
         return CLAUDE_TIER_FREE if plan_str else TIER_ANONYMOUS
 
-    elif pid == "cursor":
+    if pid == "cursor":
         if any(k in p for k in ("business", "enterprise")):
             return CURSOR_TIER_BUSINESS
-        elif "pro" in p:
+        if "pro" in p:
             return CURSOR_TIER_PRO
-        elif "free" in p:
+        if "free" in p:
             return CURSOR_TIER_FREE
         return CURSOR_TIER_FREE if plan_str else TIER_ANONYMOUS
 
-    elif pid in ("gemini", "google"):
+    if pid in ("gemini", "google"):
         if any(k in p for k in ("api", "ai studio", "developer", "vertex")):
             return GEMINI_TIER_API
-        elif p:
+        if p:
             return GEMINI_TIER_FREE
         return TIER_ANONYMOUS
 
-    elif pid in ("xai", "grok"):
+    if pid in ("xai", "grok"):
         if any(k in p for k in ("tier 2", "supergrok", "tier2", "pro")):
             return XAI_TIER_2
-        elif p:
+        if p:
             return XAI_TIER_1
         return TIER_ANONYMOUS
 
@@ -444,11 +446,9 @@ def is_provider_connected(provider_id: str, api_key: str | None = None) -> tuple
     if pid == "ollama":
         import httpx
         url = os.environ.get("OLLAMA_HOST") or "http://localhost:11434"
-        try:
+        with suppressed("if httpx.get(f'{url.rstrip('/')}/api/tags', timeout=1.5).status_ …"):
             if httpx.get(f"{url.rstrip('/')}/api/tags", timeout=1.5).status_code == 200:
                 return True, "Ollama Local", {"host": url}
-        except Exception:
-            pass
         return False, None, {}
 
     if pid == "subscription":

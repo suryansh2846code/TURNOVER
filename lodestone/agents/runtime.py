@@ -8,6 +8,7 @@ from typing import Any
 
 from ..brain import get_brain
 from ..config import get_settings
+from ..log import suppressed
 from ..models import Message, get_provider
 from ..models.entitlements import resolve_usable_model
 from .agent import Agent, AgentMemory
@@ -137,12 +138,10 @@ def build_runtime_identity(agent: Agent, provider: Any) -> dict[str, Any]:
 
     harness = None
     if provider_name == "openai":
-        try:
+        with suppressed("from ..models.chatgpt_auth import get_chatgpt_access_token …"):
             from ..models.chatgpt_auth import get_chatgpt_access_token
             if not getattr(provider, "api_key", None) and get_chatgpt_access_token():
                 harness = "Codex harness"
-        except Exception:
-            pass
     elif provider_name == "claude-code":
         harness = "Claude Code harness"
     elif provider_name == "cursor":
@@ -217,11 +216,9 @@ def run_turn(agent_id: str, user_text: str, *,
         # The agent's own saved binding pointed at a model that no longer works.
         # Repair it so the picker stops showing a dead id, instead of silently
         # substituting on every future turn.
-        try:
+        with suppressed("from .agent_models import set_agent_model …"):
             from .agent_models import set_agent_model
             set_agent_model(agent_id, p_name, m_name)
-        except Exception:
-            pass
     provider = get_provider(p_name, m_name)
     identity = build_runtime_identity(agent, provider)
     # Fail fast with a helpful message if the chosen backend isn't usable.
@@ -350,7 +347,7 @@ def run_turn(agent_id: str, user_text: str, *,
     if learned:
         trace.append(TraceStep(kind="tool_result", name="auto_learn",
                                result=f"learned {learned} new fact(s)"))
-    try:
+    with suppressed("from ..brain.canonical import get_canonical …"):
         from ..brain.canonical import get_canonical
         cres = get_canonical().learn_from_conversation(user_text, reply,
                                                         provider=provider)
@@ -359,8 +356,6 @@ def run_turn(agent_id: str, user_text: str, *,
                 kind="tool_result", name="brain_curate",
                 result=f"{cres.get('added',0)} canonical, "
                        f"{cres.get('queued',0)} queued for review"))
-    except Exception:
-        pass  # curation must never break a chat turn
     return TurnResult(
         agent_id=agent.id, reply=reply, trace=trace,
         provider=provider.name, model=provider.model,

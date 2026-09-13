@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from ..config import get_settings
+from ..log import suppressed
 
 # Read scopes + narrow WRITE scopes for confirmed actions (send email, create
 # event). Reading never modifies data; writes only run after explicit user
@@ -100,10 +101,8 @@ def connected_email(fetch: bool = True) -> str | None:
     getProfile when connected (no extra scope needed)."""
     ap = _account_path()
     if ap.exists():
-        try:
+        with suppressed("return json.loads(ap.read_text()).get('email')"):
             return json.loads(ap.read_text()).get("email")
-        except Exception:
-            pass
     if not fetch or not _token_path().exists():
         return None
     try:
@@ -121,10 +120,8 @@ def connected_email(fetch: bool = True) -> str | None:
 def disconnect() -> None:
     """Sign out of Google: remove the local token + cached account."""
     for p in (_token_path(), _account_path()):
-        try:
+        with suppressed("p.unlink(missing_ok=True)"):
             p.unlink(missing_ok=True)
-        except Exception:
-            pass
 
 
 def google_ready() -> tuple[bool, str]:

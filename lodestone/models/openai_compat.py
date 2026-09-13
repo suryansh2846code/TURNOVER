@@ -12,9 +12,9 @@ import uuid
 
 import httpx
 
+from ..log import suppressed
 from .base import ChatResult, LLMProvider, Message, ToolCall, _saved_key
-from .errors import (ErrorKind, ProviderError, classify_exception,
-                     classify_http)
+from .errors import ErrorKind, ProviderError, classify_exception, classify_http
 
 
 class OpenAICompatProvider(LLMProvider):
@@ -37,9 +37,9 @@ class OpenAICompatProvider(LLMProvider):
     def is_ready(self) -> tuple[bool, str]:
         if self.key_required and not self.api_key:
             if self.name == "openai":
-                try:
-                    from .connections import ConnectionStatus, get_connection
+                with suppressed("from .connections import ConnectionStatus, get_connection …"):
                     from .chatgpt_auth import get_chatgpt_access_token
+                    from .connections import ConnectionStatus, get_connection
                     conn = get_connection("openai")
                     if conn.connection_status == ConnectionStatus.DISCONNECTED:
                         return False, f"Disconnected. Set {self.key_env} or Sign in with ChatGPT"
@@ -49,8 +49,6 @@ class OpenAICompatProvider(LLMProvider):
                         return False, "ChatGPT session expired or missing token. Please reconnect in Models & Accounts."
                     if get_chatgpt_access_token():
                         return True, ""
-                except Exception:
-                    pass
                 return False, f"set {self.key_env} or Sign in with ChatGPT"
             return False, f"set {self.key_env}"
         return True, ""

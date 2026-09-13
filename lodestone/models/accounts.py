@@ -14,10 +14,11 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..log import suppressed
 from .cache import ttl_cached
 from .connections import ACCOUNT, API_KEY, ConnectionStatus, get_connection, save_connection
 
@@ -28,8 +29,8 @@ def detect_google_account() -> dict[str, Any]:
     """Detect Gemini API key configuration."""
     conn = get_connection("gemini")
     is_disconnected = (conn.account_status == ConnectionStatus.DISCONNECTED)
-    try:
-        from .gemini import resolve_gemini_credentials, GeminiCredentialSource
+    with suppressed("from .gemini import resolve_gemini_credentials, GeminiCredential …"):
+        from .gemini import GeminiCredentialSource, resolve_gemini_credentials
         cred = resolve_gemini_credentials()
         if cred.valid and cred.source == GeminiCredentialSource.API_KEY:
             return {
@@ -44,8 +45,6 @@ def detect_google_account() -> dict[str, Any]:
                 "credential_source": "api_key",
                 "credential_valid": True,
             }
-    except Exception:
-        pass
     return {"provider": "gemini", "connected": False, "found_on_computer": False}
 
 
@@ -84,7 +83,7 @@ def detect_claude_account() -> dict[str, Any]:
     cli_plan = None
 
     # 1. Prefer official Claude CLI status
-    try:
+    with suppressed("from .claude_code import find_claude …"):
         from .claude_code import find_claude
         claude_bin = find_claude()
         if claude_bin:
@@ -97,17 +96,13 @@ def detect_claude_account() -> dict[str, Any]:
                 timeout=3.0,
             )
             if res.returncode == 0 and res.stdout.strip():
-                try:
+                with suppressed("cstatus = json.loads(res.stdout) …"):
                     cstatus = json.loads(res.stdout)
                     if cstatus.get("loggedIn"):
                         cli_authenticated = True
                         cli_email = cstatus.get("email")
                         raw_sub = (cstatus.get("subscriptionType") or "").lower()
                         cli_plan = _claude_plan_label(raw_sub)
-                except Exception:
-                    pass
-    except Exception:
-        pass
 
     # 2. Check non-secret metadata from config file if CLI status was not available
     email = cli_email
@@ -125,7 +120,7 @@ def detect_claude_account() -> dict[str, Any]:
     for p in candidates:
         if not p or not p.exists():
             continue
-        try:
+        with suppressed("data = json.loads(p.read_text()) …"):
             data = json.loads(p.read_text())
             oa = data.get("oauthAccount") or {}
             f_email = oa.get("emailAddress")
@@ -143,8 +138,6 @@ def detect_claude_account() -> dict[str, Any]:
                     disabled_models[val] = opt.get("description") or "Update Required"
             if found_file:
                 break
-        except Exception:
-            pass
 
     found = bool(cli_installed or found_file or email)
     if found:
@@ -181,7 +174,7 @@ def _cursor_plan_from_storage() -> str | None:
     for db_path in candidates:
         if not db_path.exists():
             continue
-        try:
+        with suppressed("db = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) …"):
             db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
             row = db.execute(
                 "SELECT value FROM ItemTable WHERE key = 'cursorAuth/stripeMembershipType'"
@@ -193,8 +186,6 @@ def _cursor_plan_from_storage() -> str | None:
                 if any(k in tier for k in ("business", "enterprise", "team")):
                     return "Cursor Business"
                 return "Cursor Free"
-        except Exception:
-            pass
     return None
 
 
@@ -213,15 +204,13 @@ def detect_cursor_account() -> dict[str, Any]:
     cli_signed_in = False
     cli_email = None
     cli_name = None
-    try:
+    with suppressed("from .cursor import cursor_cli_auth_status …"):
         from .cursor import cursor_cli_auth_status
         st = cursor_cli_auth_status()
         cli_signed_in = bool(st.get("authenticated"))
         if cli_signed_in:
             cli_email = st.get("email")
             cli_name = st.get("name")
-    except Exception:
-        pass
 
     if cli_signed_in and cli_email:
         # Identity from the CLI (it is what we run); plan from the Cursor app's
@@ -254,7 +243,7 @@ def detect_cursor_account() -> dict[str, Any]:
     for db_path in candidates:
         if not db_path.exists():
             continue
-        try:
+        with suppressed("conn_sql = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) …"):
             conn_sql = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
             # Query ONLY non-secret metadata keys. NEVER query cursorAuth/accessToken!
             cursor_rows = dict(conn_sql.execute(
@@ -273,8 +262,6 @@ def detect_cursor_account() -> dict[str, Any]:
                 else:
                     plan = "Cursor Free"
                 break
-        except Exception:
-            pass
 
     found = bool(cli_signed_in or found_storage or email)
     if found:
@@ -300,11 +287,9 @@ def detect_openai_account() -> dict[str, Any]:
     is_disconnected = (conn.account_status == ConnectionStatus.DISCONNECTED)
 
     local = None
-    try:
+    with suppressed("from .chatgpt_auth import detect_chatgpt_local_session …"):
         from .chatgpt_auth import detect_chatgpt_local_session
         local = detect_chatgpt_local_session(fetch_usage=True)
-    except Exception:
-        pass
 
     if not is_disconnected and conn.email and (conn.account_connected or conn.api_key_connected):
         plan = (local.get("plan") if local else None) or ("ChatGPT Free" if conn.auth_method == "account" else "OpenAI Developer")
@@ -376,7 +361,7 @@ def connect_local_account(provider: str) -> tuple[bool, str, dict[str, Any]]:
             return False, "Claude CLI not found on this computer", {}
         info = detect_claude_account()
         conn = get_connection("claude-code")
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         conn.auth_method = "cli"
         conn.email = info.get("email") or "Claude CLI"
         conn.account_display_name = info.get("name") or "Claude Code CLI"
@@ -392,7 +377,7 @@ def connect_local_account(provider: str) -> tuple[bool, str, dict[str, Any]]:
         if not info.get("found_on_computer") or not info.get("email"):
             return False, "No Claude account found on this computer (~/.claude.json)", {}
         conn = get_connection("claude")
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         conn.auth_method = "account"
         conn.email = info["email"]
         conn.account_display_name = info.get("name") or "Claude User"
@@ -403,12 +388,12 @@ def connect_local_account(provider: str) -> tuple[bool, str, dict[str, Any]]:
         save_connection(conn)
         return True, f"Connected {info['email']}", conn.to_dict()
 
-    elif pid == "cursor":
+    if pid == "cursor":
         info = detect_cursor_account()
         if not info.get("found_on_computer") or not info.get("email"):
             return False, "No Cursor account found in Cursor application storage", {}
         conn = get_connection("cursor")
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         conn.auth_method = "account"
         conn.email = info["email"]
         conn.account_display_name = info.get("name") or "Cursor User"
@@ -419,12 +404,12 @@ def connect_local_account(provider: str) -> tuple[bool, str, dict[str, Any]]:
         save_connection(conn)
         return True, f"Connected {info['email']}", conn.to_dict()
 
-    elif pid in ("gemini", "google"):
+    if pid in ("gemini", "google"):
         info = detect_google_account()
         if not info.get("has_api_key"):
             return False, "Google Gemini uses API key authentication. Please enter GEMINI_API_KEY in Models & Accounts.", {}
         conn = get_connection("gemini")
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         conn.auth_method = "api_key"
         conn.email = info.get("email") or "Google AI Studio Developer"
         conn.account_display_name = "Google AI Studio"
@@ -435,7 +420,7 @@ def connect_local_account(provider: str) -> tuple[bool, str, dict[str, Any]]:
         save_connection(conn)
         return True, "Connected Google Gemini (API Key)", conn.to_dict()
 
-    elif pid == "openai":
+    if pid == "openai":
         from .chatgpt_auth import adopt_local_chatgpt_session, detect_chatgpt_local_session
         info = detect_chatgpt_local_session(fetch_usage=False)
         if info and info.get("email"):
@@ -447,7 +432,7 @@ def connect_local_account(provider: str) -> tuple[bool, str, dict[str, Any]]:
             return True, f"OpenAI already connected ({conn.email})", conn.to_dict()
         return False, "No ChatGPT / Codex session found on this computer. Use OAuth sign-in or set OPENAI_API_KEY.", {}
 
-    elif pid in ("xai", "grok"):
+    if pid in ("xai", "grok"):
         from ..config import get_settings
         key = get_settings().get_secret("XAI_API_KEY")
         from .xai_auth import detect_xai_local_session
@@ -456,7 +441,7 @@ def connect_local_account(provider: str) -> tuple[bool, str, dict[str, Any]]:
             return False, "No xAI session or XAI_API_KEY found. Sign in or enter an API key.", {}
         email = (info.get("email") if info else None) or (conn.email if conn.email else "xAI Account")
         conn = get_connection("xai")
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         conn.auth_method = "account" if info else "api_key"
         conn.email = email
         conn.account_display_name = (info.get("name") if info else None) or "xAI Grok"

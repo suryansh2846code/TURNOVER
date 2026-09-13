@@ -1,13 +1,15 @@
 """User-defined custom agents, persisted alongside the built-in presets."""
 from __future__ import annotations
 
+import builtins
 import json
 import re
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ..config import get_settings
+from ..log import suppressed
 from .agent import Agent
 
 _SCHEMA = """
@@ -44,7 +46,7 @@ class CustomAgentStore:
             recall_sources=json.loads(r["recall_sources"]),
         )
 
-    def list(self) -> list[Agent]:
+    def list(self) -> builtins.list[Agent]:
         rows = self._c.execute(
             "SELECT * FROM custom_agents ORDER BY created_at").fetchall()
         return [self._row_to_agent(r) for r in rows]
@@ -55,8 +57,8 @@ class CustomAgentStore:
         return self._row_to_agent(r) if r else None
 
     def create(self, name: str, role: str = "", system_prompt: str = "",
-               tools: list[str] | None = None,
-               recall_sources: list[str] | None = None) -> Agent:
+               tools: builtins.list[str] | None = None,
+               recall_sources: builtins.list[str] | None = None) -> Agent:
         name = (name or "").strip() or "New Agent"
         base = _slug(name)
         aid, n = base, 2
@@ -70,16 +72,14 @@ class CustomAgentStore:
             "recall_sources,created_at) VALUES (?,?,?,?,?,?,?)",
             (aid, name, role, system_prompt, json.dumps(tools),
              json.dumps(recall_sources or []),
-             datetime.now(timezone.utc).isoformat()))
+             datetime.now(UTC).isoformat()))
         self._c.commit()
         return self.get(aid)
 
     def delete(self, agent_id: str) -> bool:
-        try:
+        with suppressed("from .agent_models import clear_agent_model …"):
             from .agent_models import clear_agent_model
             clear_agent_model(agent_id)
-        except Exception:
-            pass
         cur = self._c.execute("DELETE FROM custom_agents WHERE id=?", (agent_id,))
         self._c.commit()
         return cur.rowcount > 0

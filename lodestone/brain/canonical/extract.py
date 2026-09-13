@@ -14,6 +14,8 @@ import json
 import re
 from typing import Any
 
+from ...log import suppressed
+
 # Tentative language → an `open` claim/event, never a current fact.
 TENTATIVE = re.compile(
     r"\b(maybe|might|may|could|considering|thinking about|thinking of|possibly|"
@@ -125,12 +127,10 @@ def extract_candidates(text: str, provider=None, *, actor: str = "user",
                        event_date: str | None = None) -> list[dict[str, Any]]:
     """Best-available extraction. Uses the LLM when ready, else heuristics."""
     if provider is not None:
-        try:
+        with suppressed("ready, _ = provider.is_ready() …"):
             ready, _ = provider.is_ready()
             if provider.name != "mock" and ready:
                 cands = llm_candidates(text, provider, event_date=event_date)
                 if cands:
                     return cands
-        except Exception:
-            pass
     return heuristic_candidates(text, actor=actor)
