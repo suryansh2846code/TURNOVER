@@ -24,3 +24,9 @@ dist/
 build/
 *.dmg
 *.spec.bak
+
+# another session's git worktree, and coverage output
+.claude/
+.coverage
+.coverage.*
+htmlcov/

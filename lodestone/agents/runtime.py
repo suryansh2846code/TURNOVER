@@ -8,14 +8,21 @@ from typing import Any
 
 from ..brain import get_brain
 from ..config import get_settings
-from ..log import suppressed
+from ..log import get_logger, suppressed
 from ..models import Message, get_provider
 from ..models.entitlements import resolve_usable_model
 from .agent import Agent, AgentMemory
+from .effort import Effort, get_effort
+from .loop import BUDGET_PROMPT, STALL_LIMIT, ToolRunner
 from .presets import get_agent
-from .tools import build_tools, run_tool
+from .tools import build_tools
 
-MAX_STEPS = 5
+#: Replaced by the per-turn budget in `effort.py`. Kept as the floor a turn
+#: can never drop below, so a misconfigured profile cannot produce a loop that
+#: never calls a tool at all.
+MIN_STEPS = 3
+
+log = get_logger(__name__)
 
 
 @dataclass
@@ -24,6 +31,7 @@ class TraceStep:
     name: str = ""
     arguments: dict = field(default_factory=dict)
     result: str = ""
+    repeated: bool = False          # the model asked for something it already had
 
 
 @dataclass
@@ -34,6 +42,8 @@ class TurnResult:
     provider: str = ""
     model: str = ""
     runtime_identity: dict[str, Any] = field(default_factory=dict)
+    effort: str = ""
+    steps_used: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -42,9 +52,11 @@ class TurnResult:
             "provider": self.provider,
             "model": self.model,
             "runtime_identity": self.runtime_identity,
+            "effort": self.effort,
+            "steps_used": self.steps_used,
             "trace": [
-                {"kind": s.kind, "name": s.name,
-                 "arguments": s.arguments, "result": s.result}
+                {"kind": s.kind, "name": s.name, "arguments": s.arguments,
+                 "result": s.result, "repeated": s.repeated}
                 for s in self.trace
             ],
         }
@@ -198,10 +210,25 @@ def format_runtime_context_prompt(identity: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _answer_without_tools(provider, messages, on_failure):
+    """One last call with tools withheld, to turn research into an answer.
+
+    Returning the failure `TurnResult` rather than raising keeps the contract
+    that a turn never raises — an uncaught error here is what turned a provider
+    401 into a 500 the last time.
+    """
+    try:
+        return provider.chat(messages, tools=None, temperature=0.15).text
+    except Exception as exc:
+        return on_failure(exc)
+
+
 def run_turn(agent_id: str, user_text: str, *,
              provider_name: str | None = None,
-             model_name: str | None = None) -> TurnResult:
+             model_name: str | None = None,
+             effort: str | Effort | None = None) -> TurnResult:
     agent = get_agent(agent_id)
+    profile = effort if isinstance(effort, Effort) else get_effort(effort)
     settings = get_settings()
     p_name = (provider_name.strip() if provider_name else None) or agent.model_provider or settings.model_provider
     m_name = (model_name.strip() if model_name else None) or agent.model_name
@@ -264,7 +291,7 @@ def run_turn(agent_id: str, user_text: str, *,
     # decides to call search_brain. Tools remain for going deeper / live data.
     trace: list[TraceStep] = []
     recalled = get_brain().recall(
-        user_text, limit=10, prefer=agent.recall_sources or None)
+        user_text, limit=profile.recall_limit, prefer=agent.recall_sources or None)
     if recalled["context"]:
         messages.append(Message(role="system", content=recalled["context"]))
         trace.append(TraceStep(
@@ -298,43 +325,75 @@ def run_turn(agent_id: str, user_text: str, *,
     messages.append(Message(
         role="user", content=f"[Today is {date_line}.]\n{user_text}"))
     mem.append(agent.id, "user", user_text)
+    runner = ToolRunner(effort=profile)
+    budget = max(MIN_STEPS, profile.max_steps)
+    stalls = 0
     reply = ""
-    for _ in range(MAX_STEPS):
+
+    def _failed(exc: Exception) -> TurnResult:
+        hint = ""
+        if provider.name == "ollama":
+            hint = " Is Ollama running? Start it with `ollama serve`."
+        elif provider.name in ("anthropic", "openai", "openrouter"):
+            hint = " Check the API key and your connection."
+        return TurnResult(
+            agent_id=agent_id,
+            reply=f"⚠️ The **{provider.name}** model failed: {str(exc)[:200]}.{hint}",
+            trace=trace, provider=provider.name, model=provider.model,
+            runtime_identity=identity, effort=profile.name,
+        )
+
+    for _step in range(budget):
         # low temperature → more reliable instruction-following & tool use
         try:
             result = provider.chat(messages, tools=tools, temperature=0.15)
         except Exception as exc:
-            hint = ""
-            if provider.name == "ollama":
-                hint = " Is Ollama running? Start it with `ollama serve`."
-            elif provider.name in ("anthropic", "openai", "openrouter"):
-                hint = " Check the API key and your connection."
-            return TurnResult(
-                agent_id=agent_id,
-                reply=f"⚠️ The **{provider.name}** model failed: "
-                      f"{str(exc)[:200]}.{hint}",
-                trace=trace, provider=provider.name, model=provider.model,
-                runtime_identity=identity,
-            )
-        if result.wants_tools:
+            return _failed(exc)
+        if not result.wants_tools:
+            reply = result.text
+            break
+
+        messages.append(Message(
+            role="assistant", content=result.text, tool_calls=result.tool_calls,
+        ))
+        outcomes = runner.run(result.tool_calls)
+        for outcome in outcomes:
+            call = outcome.call
+            trace.append(TraceStep(
+                kind="tool_call", name=call.name, arguments=call.arguments))
+            trace.append(TraceStep(kind="tool_result", name=call.name,
+                                   result=outcome.output, repeated=outcome.repeated))
             messages.append(Message(
-                role="assistant", content=result.text, tool_calls=result.tool_calls,
+                role="tool", content=outcome.output, tool_call_id=call.id,
+                name=call.name,
             ))
-            for call in result.tool_calls:
-                trace.append(TraceStep(
-                    kind="tool_call", name=call.name, arguments=call.arguments))
-                output = run_tool(call.name, call.arguments)
-                trace.append(TraceStep(kind="tool_result", name=call.name,
-                                       result=output))
-                messages.append(Message(
-                    role="tool", content=output, tool_call_id=call.id,
-                    name=call.name,
-                ))
-            continue
-        reply = result.text
-        break
+
+        # A round that learned nothing is the failure mode a deeper loop
+        # introduces: with budget left and no new information, a model will
+        # re-issue the same calls indefinitely.
+        if runner.round_was_all_repeats(outcomes):
+            stalls += 1
+            if stalls >= STALL_LIMIT:
+                log.debug("agent %s stalled after %d rounds; asking it to answer",
+                          agent_id, _step + 1)
+                messages.append(Message(role="system", content=BUDGET_PROMPT))
+                reply = _answer_without_tools(provider, messages, _failed)
+                if isinstance(reply, TurnResult):
+                    return reply
+                break
+        else:
+            stalls = 0
     else:
-        reply = reply or "(stopped after max tool steps)"
+        # Budget spent while still calling tools. An agent that has looked
+        # things up for twenty rounds can usually answer — it has just never
+        # been told to stop.
+        messages.append(Message(role="system", content=BUDGET_PROMPT))
+        reply = _answer_without_tools(provider, messages, _failed)
+        if isinstance(reply, TurnResult):
+            return reply
+
+    reply = reply or "(the model returned nothing)"
+    steps_used = len([s for s in trace if s.kind == "tool_call"])
 
     mem.append(agent.id, "assistant", reply,
                tool_json=json.dumps([s.name for s in trace if s.kind == "tool_call"]))
@@ -359,5 +418,5 @@ def run_turn(agent_id: str, user_text: str, *,
     return TurnResult(
         agent_id=agent.id, reply=reply, trace=trace,
         provider=provider.name, model=provider.model,
-        runtime_identity=identity,
+        runtime_identity=identity, effort=profile.name, steps_used=steps_used,
     )
