@@ -20,7 +20,9 @@ copy is a fix, and to one of two copies is a bug with a second home.
 
 What genuinely differs per vendor stays with the vendor: how its binary is
 found and verified, what its status command prints and how that is parsed, and
-the TTL cache over it. Only the state machine lives here.
+the TTL cache over it. What lives here is the state machine, and `augmented_path`
+— the same six lines that were written a third time in `claude_code.py`, because
+every one of these CLIs has to be found on a PATH that Finder stripped.
 """
 from __future__ import annotations
 
@@ -29,6 +31,25 @@ import subprocess
 from collections.abc import Callable
 
 from . import login_processes
+
+
+def augmented_path(extra_dirs: list[str]) -> str:
+    """PATH extended with the bin directories a GUI-launched app cannot see.
+
+    A process started from Finder inherits a stripped PATH — no Homebrew, no
+    `~/.local/bin` — so a vendor CLI the user definitely installed is simply not
+    found. Existing entries are never reordered and a directory that is not
+    there is not added, so this can only widen the search.
+
+    `extra_dirs` stays with the caller rather than being unified here: each
+    module's list also drives the fallback scan in its `find_*` function, so a
+    shared list would have Cursor's finder looking through `~/.grok/bin`.
+    """
+    parts = os.environ.get("PATH", "").split(os.pathsep)
+    for d in extra_dirs:
+        if d and d not in parts and os.path.isdir(d):
+            parts.append(d)
+    return os.pathsep.join(parts)
 
 
 def _still_running(proc: object) -> bool:

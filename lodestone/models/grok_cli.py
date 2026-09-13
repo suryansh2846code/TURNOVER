@@ -29,7 +29,7 @@ from pathlib import Path
 from ..log import get_logger
 from .base import ChatResult, LLMProvider, Message, parse_cli_json
 from .cache import ttl_cached
-from .cli_login import CliLoginSession
+from .cli_login import CliLoginSession, augmented_path
 from .errors import ErrorKind, ProviderError, classify_cli
 
 log = get_logger(__name__)
@@ -57,11 +57,7 @@ SIGNIN_HINT = (
 
 
 def _augmented_path() -> str:
-    parts = os.environ.get("PATH", "").split(os.pathsep)
-    for d in _EXTRA_BIN_DIRS:
-        if d and d not in parts and os.path.isdir(d):
-            parts.append(d)
-    return os.pathsep.join(parts)
+    return augmented_path(_EXTRA_BIN_DIRS)
 
 
 def find_grok_cli() -> str | None:
