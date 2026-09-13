@@ -686,8 +686,10 @@ The sequence, in order: **the focused test → the subsystem's suite → `pytest
 `ruff check lodestone tests` → `mypy lodestone` → the `tests/js/` harnesses if
 the frontend changed → `lodestone app` opens and renders.**
 
-Baseline on `main`: **1425 passed, 18 skipped in ~62s**, `ruff` clean, `mypy`
-clean over 113 files. Python venv at `.venv` — use `./.venv/bin/python`.
+Baseline in CI: **1434 passed, 20 skipped in ~2min**, `ruff` clean, `mypy`
+clean over 114 files, coverage **76%**. Locally the split differs slightly —
+some tests skip when a provider is genuinely connected on the machine. Python
+venv at `.venv` — use `./.venv/bin/python`.
 
 Run tests when stuck or finishing, not after every edit.
 

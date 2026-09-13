@@ -1,7 +1,16 @@
 # `tests/`
 
-`pytest` from the repo root. Baseline on `main`: **1425 passed, 18 skipped in
-~62s**. Python venv at `.venv` — use `./.venv/bin/python`.
+`pytest` from the repo root. Baseline in CI: **1434 passed, 20 skipped in
+~2min**. Locally you will see a slightly different split — a handful of tests
+skip when a provider is genuinely connected on the machine — so compare against
+your own last run, not this number. Python venv at `.venv`; use
+`./.venv/bin/python`.
+
+`pytest --cov --cov-report=term-missing` prints which code the tests reach; CI
+runs it on every push. **76%** at the time of writing. There is no threshold and
+should not be one — the per-module table is the point, not the percentage. It
+has already earned itself: it is how `grok_cli.cancel_cli_login` was found to
+have no test while its byte-identical twin in `cursor.py` did.
 
 Four standing rules, each bought the hard way:
 
