@@ -1,13 +1,19 @@
-"""Routines — automations that run an agent on a trigger, and auto-execute the
-actions it proposes (the routine itself is the user's authorization).
+"""Routines — automations that run an agent on a trigger.
+
+Creating a routine pre-authorizes the *routine*. It does not pre-authorize
+whoever wrote the text the routine happens to read: a `new_email` trigger hands
+the agent content from a stranger, and an instruction hidden in that content
+reaches an agent that can propose sending mail. So actions are filtered through
+`agents/approvals.py::run_or_queue` — reading and note-taking run freely,
+anything that leaves the machine needs a recipient the user has permitted, and
+everything else waits for one tap.
 
 Triggers:
   • schedule   — every N minutes.
   • new_email  — when new email(s) arrive during a sync.
 
-Creating a routine = pre-authorizing it, so its actions run without a per-run
-Confirm (unlike interactive chat). Guardrails: routines are user-created,
-disable-able, and their runs are logged + notified.
+Guardrails: routines are user-created, disable-able, permission-gated for
+outbound actions, and their runs are logged + notified.
 """
 from __future__ import annotations
 
@@ -111,8 +117,9 @@ def _new_emails_since(iso: str | None) -> list:
 def run_routine(r: dict, trigger_context: str = "") -> dict:
     """Run one routine: the agent acts on the instruction (+ any trigger
     context); actions it proposes are auto-executed."""
-    from .actions import parse_actions, run_now
+    from .actions import parse_actions
     from .agents import run_turn
+    from .agents.approvals import run_or_queue
     from .notify import desktop_notify
 
     prompt = r["instruction"]
@@ -126,7 +133,12 @@ def run_routine(r: dict, trigger_context: str = "") -> dict:
     outcomes = []
     for a in parse_actions(res.reply):
         a["params"]["agent_id"] = r["agent_id"]
-        out = run_now(a["type"], a["params"])
+        # Not `run_now`. A routine is pre-authorisation for the *routine*, and
+        # that reasoning holds right up until the trigger is `new_email` — at
+        # which point the text driving the agent was written by a stranger, and
+        # an action that leaves the machine needs a recipient the user named.
+        out = run_or_queue(a["type"], a["params"], routine_id=r["id"],
+                           routine_name=r["name"], agent_id=r["agent_id"])
         outcomes.append(out.get("detail") or out.get("error") or "")
     summary = "; ".join(o for o in outcomes if o) or "ran (no action)"
     desktop_notify(f"◆ Lodestone · {r['name']}", summary)

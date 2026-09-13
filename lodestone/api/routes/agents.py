@@ -32,6 +32,82 @@ def agents():
     ]}
 
 
+# ── how hard the agents try ──────────────────────────────────────────────────
+class EffortIn(BaseModel):
+    level: str
+
+
+@router.get("/api/agents/effort")
+def get_agent_effort():
+    """The available levels and which one is in force."""
+    from ...agents.effort import describe_levels, saved_effort
+
+    return {"current": saved_effort(), "levels": describe_levels()}
+
+
+@router.post("/api/agents/effort")
+def set_agent_effort(body: EffortIn):
+    from ...agents.effort import set_saved_effort
+
+    try:
+        return {"current": set_saved_effort(body.level)}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+
+# ── who an unattended agent may act on ───────────────────────────────────────
+class PermissionIn(BaseModel):
+    value: str
+    note: str = ""
+
+
+@router.get("/api/agents/permissions")
+def list_action_permissions():
+    """Recipients the user has allowed unattended agents to reach."""
+    from ...agents.permissions import list_permissions
+
+    return {"permissions": list_permissions()}
+
+
+@router.post("/api/agents/permissions")
+def grant_action_permission(body: PermissionIn):
+    from ...agents.permissions import grant
+
+    try:
+        return grant(body.value, note=body.note)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+
+@router.delete("/api/agents/permissions/{value}")
+def revoke_action_permission(value: str):
+    from ...agents.permissions import revoke
+
+    return {"revoked": revoke(value)}
+
+
+# ── actions an unattended agent wanted to take ───────────────────────────────
+@router.get("/api/agents/approvals")
+def list_approvals(include_decided: bool = False):
+    from ...agents import approvals
+
+    return {"approvals": approvals.history() if include_decided else approvals.pending()}
+
+
+@router.post("/api/agents/approvals/{approval_id}/approve")
+def approve_action(approval_id: str):
+    from ...agents import approvals
+
+    return approvals.approve(approval_id)
+
+
+@router.post("/api/agents/approvals/{approval_id}/reject")
+def reject_action(approval_id: str):
+    from ...agents import approvals
+
+    return approvals.reject(approval_id)
+
+
 @router.get("/api/agents/{agent_id}/history")
 def history(agent_id: str):
     return {"history": AgentMemory().history(agent_id, limit=100)}
@@ -180,8 +256,8 @@ def chat(agent_id: str, body: ChatIn):
     if not message:
         raise HTTPException(422, "message is empty")
     try:
-        result = run_turn(agent_id, message,
-                          provider_name=body.provider, model_name=body.model)
+        result = run_turn(agent_id, message, provider_name=body.provider,
+                          model_name=body.model, effort=body.effort)
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'") from None
     except Exception as exc:  # never 500 the chat — return a readable message

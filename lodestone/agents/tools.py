@@ -127,6 +127,16 @@ def _complete_open_loop(loop: str) -> str:
     return f"Completed open loop: {done.get('description')}" if done else f"Could not complete '{loop}'."
 
 
+def _update_plan(steps: list, done_through: int = 0) -> str:
+    """Write down the plan for this turn, or revise it as work proceeds."""
+    from .planning import update
+
+    if isinstance(steps, str):
+        # Small models sometimes send a newline- or comma-separated string.
+        steps = steps.replace("\n", ",").split(",")
+    return update(list(steps or []), done_through=int(done_through or 0))
+
+
 def _ask_agent(agent_id: str, question: str) -> str:
     """Put a question to another agent and return its answer.
 
@@ -152,6 +162,7 @@ def _ask_agent(agent_id: str, question: str) -> str:
 
 
 TOOL_IMPLS = {
+    "update_plan": _update_plan,
     "ask_agent": _ask_agent,
     "search_brain": _search_brain,
     "remember": _remember,
@@ -167,6 +178,26 @@ TOOL_IMPLS = {
 }
 
 TOOL_DEFS: dict[str, Tool] = {
+    "update_plan": Tool(
+        name="update_plan",
+        description=(
+            "Write down the steps you intend to take for this request, and "
+            "revise them as you go. Use it when the request has more than one "
+            "part, so you do not finish the first part and forget the rest. "
+            "Send the full list each time, with done_through set to how many "
+            "are already finished."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "steps": {"type": "array", "items": {"type": "string"},
+                          "description": "The full plan, in order."},
+                "done_through": {"type": "integer",
+                                 "description": "How many leading steps are done."},
+            },
+            "required": ["steps"],
+        },
+    ),
     "ask_agent": Tool(
         name="ask_agent",
         description=(
@@ -301,7 +332,8 @@ TOOL_DEFS: dict[str, Tool] = {
 }
 
 
-def build_tools(names: list[str], *, self_id: str | None = None) -> list[Tool]:
+def build_tools(names: list[str], *, self_id: str | None = None,
+                effort=None) -> list[Tool]:
     """The tools this agent may use.
 
     `self_id` is only needed so `ask_agent` can name the other agents in its own
@@ -318,6 +350,8 @@ def build_tools(names: list[str], *, self_id: str | None = None) -> list[Tool]:
         seen.add(n)
         t = TOOL_DEFS[n]
         description = t.description
+        if n == "update_plan" and effort is not None and not effort.allow_planning:
+            continue                     # planning costs a round; Low skips it
         if n == "ask_agent":
             others = roster(exclude=self_id)
             if not others:

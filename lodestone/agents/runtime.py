@@ -11,7 +11,7 @@ from ..config import get_settings
 from ..log import get_logger, suppressed
 from ..models import Message, get_provider
 from ..models.entitlements import resolve_usable_model
-from . import delegation
+from . import delegation, planning
 from .agent import Agent, AgentMemory
 from .context import build_history
 from .effort import Effort, get_effort
@@ -46,6 +46,7 @@ class TurnResult:
     runtime_identity: dict[str, Any] = field(default_factory=dict)
     effort: str = ""
     steps_used: int = 0
+    plan: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -56,6 +57,7 @@ class TurnResult:
             "runtime_identity": self.runtime_identity,
             "effort": self.effort,
             "steps_used": self.steps_used,
+            "plan": self.plan,
             "trace": [
                 {"kind": s.kind, "name": s.name, "arguments": s.arguments,
                  "result": s.result, "repeated": s.repeated}
@@ -253,7 +255,7 @@ def run_turn(agent_id: str, user_text: str, *,
             runtime_identity=identity,
         )
     mem = AgentMemory()
-    tools = build_tools(agent.tools, self_id=agent.id)
+    tools = build_tools(agent.tools, self_id=agent.id, effort=profile)
 
     # Ground the agent in the present. LLMs have no clock, so without this they
     # hallucinate the date. Small models ignore mid-context system notes, so we
@@ -321,6 +323,7 @@ def run_turn(agent_id: str, user_text: str, *,
     runner = ToolRunner(effort=profile)
     budget = max(MIN_STEPS, profile.max_steps)
     chain_token = delegation.enter(agent.id, profile)
+    plan_token = planning.start()
     stalls = 0
     reply = ""
 
@@ -366,6 +369,19 @@ def run_turn(agent_id: str, user_text: str, *,
                     name=call.name,
                 ))
 
+            # Put the plan back in front of the model. Without re-stating it,
+            # a long turn drifts: the plan scrolls out of attention and the
+            # agent finishes part one thoroughly and forgets the rest.
+            plan = planning.current()
+            if plan is not None and plan.steps:
+                messages.append(Message(role="system", content=plan.render()))
+
+            # "That did not work" is worth saying once, explicitly. Left to
+            # itself a model often re-issues the same broken call, and the
+            # repeat memo then answers it from cache — so it never learns.
+            if any(planning.looks_like_failure(o.output) for o in outcomes):
+                messages.append(Message(role="system", content=planning.RETRY_NUDGE))
+
             # A round that learned nothing is the failure mode a deeper loop
             # introduces: with budget left and no new information, a model will
             # re-issue the same calls indefinitely.
@@ -392,6 +408,10 @@ def run_turn(agent_id: str, user_text: str, *,
 
     finally:
         delegation.leave(chain_token)
+        # Read the plan before releasing it — it is what the UI shows to explain
+        # what the agent thought it was doing.
+        plan_snapshot = (planning.current() or planning.Plan()).as_list()
+        planning.finish(plan_token)
 
     reply = reply or "(the model returned nothing)"
     steps_used = len([s for s in trace if s.kind == "tool_call"])
@@ -420,4 +440,5 @@ def run_turn(agent_id: str, user_text: str, *,
         agent_id=agent.id, reply=reply, trace=trace,
         provider=provider.name, model=provider.model,
         runtime_identity=identity, effort=profile.name, steps_used=steps_used,
+        plan=plan_snapshot,
     )

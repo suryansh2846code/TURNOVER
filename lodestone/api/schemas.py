@@ -26,6 +26,10 @@ class ChatIn(BaseModel):
     message: str = Field(max_length=24000)   # guardrail against runaway input
     provider: str | None = None
     model: str | None = None
+    #: "low" | "medium" | "high". Absent means the level saved on this machine.
+    #: An unknown value falls back rather than failing — it arrives from a
+    #: client's localStorage, which can outlive a rename.
+    effort: str | None = None
 
 
 class SecretIn(BaseModel):
