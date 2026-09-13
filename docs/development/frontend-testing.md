@@ -175,12 +175,19 @@ protocol, the pytest drivers, the no-dependency property.
 
 Each step ends green. The split does not begin until step 3 is proven.
 
-| step | change | files | verification |
-|---|---|---|---|
-| **1** | Add `tests/js/_app_source.mjs`. Nothing uses it yet. | 1 new | `node -e` round-trip: its output for today's single-script `index.html` is byte-identical to `readFileSync(app.js)` |
-| **2** | Point all nine harnesses at it. **`app.js` is still one file**, so this is a pure no-op refactor of the loader. | 9 | full suite green, unchanged. Any failure here is the loader's fault and nothing else's — that is the reason this step is alone. |
-| **3** | Prove the mechanism: move **one** small, self-contained cluster out — `core.js` (`$`, `api`, `esc`, `md`, `toast`, orbs, icons ≈ 115 lines) — and add its `<script>` tag **first** in `index.html`. | 3 | full suite green **without touching a harness**. `lodestone app` opens and renders. |
-| **4+** | One cluster per commit, largest value first: `providers.js` (863), `models.js` (792), `chat.js` (393)… | 3 each | suite green between each |
+| step | change | files | verification | status |
+|---|---|---|---|---|
+| **1** | Add `tests/js/_app_source.mjs`. Nothing uses it yet. | 1 new | its output for a single-script `index.html` is byte-identical to `readFileSync(app.js)`, pinned by `tests/test_frontend_source_loader.py` | **done** |
+| **2** | Point all nine harnesses at it. **`app.js` is still one file**, so a pure no-op refactor of the loader. | 10 | suite unchanged — 1440 passed, 1458 collected, before and after. Proven real by deleting app.js's `<script>` tag: 26 passing harness tests become 18 failures and 7 errors. | **done** |
+| **3** | Prove the mechanism: move **one** small, self-contained cluster out — `core.js` (`$`, `api`, `esc`, `md`, `toast`, orbs, icons ≈ 115 lines) — and add its `<script>` tag **first** in `index.html`. | 3 | full suite green **without touching a harness**. `lodestone app` opens and renders. | next |
+| **4+** | One cluster per commit, largest value first: `providers.js` (863), `models.js` (792), `chat.js` (393)… | 3 each | suite green between each | |
+
+Step 2 needed one unplanned fix, worth knowing about before writing another
+harness driver: `test_frontend_tool_provenance.py` mutates `app.js` into a temp
+directory to prove its harness is not blind. A lone file there has no page to be
+loaded by, so it now copies the whole web directory and mutates the copy. Any
+future driver that fabricates a source tree has to fabricate an `index.html`
+with it.
 
 ### The rules that govern steps 3+
 
