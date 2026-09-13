@@ -52,6 +52,10 @@ function applyIcons() {
     const key = b.id === "helpBtn" ? "help" : (b.dataset.nav === "sources" ? "connectors" : b.dataset.nav);
     el.innerHTML = IC[key] || "";
   });
+  document.querySelectorAll(".ms-nav-item").forEach((b) => {
+    const el = b.querySelector(".ms-nav-ic"); if (!el) return;
+    el.innerHTML = IC[b.dataset.msnav] || "";
+  });
   const set = (id, name) => { const e = $(id); if (e) e.innerHTML = IC[name]; };
   set("#attachBtn", "attach"); set("#micBtn", "mic"); set("#send", "arrowUp");
 }
@@ -3281,7 +3285,7 @@ async function loadAgentDefaults() {
 async function openModelScreen() {
   const m = $("#modelScreen"); if (!m) return;
   m.hidden = false;
-  m.scrollTop = 0;
+  const main = $(".ms-main"); if (main) main.scrollTop = 0;
   updateUsage();
   // The defaults are built FROM the catalog, so they wait for it. Without the
   // await the provider list is whatever was cached from the last open, and on
@@ -3295,6 +3299,16 @@ function closeModelScreen() {
   const m = $("#modelScreen"); if (m) m.hidden = true;
 }
 { const c = $("#msClose"); if (c) c.onclick = closeModelScreen; }
+// Only the screens that actually exist are listed: Brain and Model are the two
+// full-window views, and the rest of the workspace nav is still drawers.
+document.querySelectorAll(".ms-nav-item").forEach((b) => {
+  b.onclick = () => {
+    const to = b.dataset.msnav;
+    if (to === "model") { const m = $(".ms-main"); if (m) m.scrollTop = 0; return; }
+    closeModelScreen();
+    if (to === "brain") openBrainScreen();
+  };
+});
 { const rb = $("#rebuildBtn"); if (rb) rb.onclick = async () => {
   // Prune = remove junk entities, KEEP all the good (LLM/heuristic) graph work.
   // Alt/Option-click = full rebuild from scratch (wipes the graph, re-extracts).

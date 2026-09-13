@@ -307,11 +307,19 @@
        account, a plan, usage limits and a model list. It is now a screen of
        its own, opened the same way Brain is. -->
   <div id="modelScreen" class="modelscreen" hidden>
-    <div class="ms-top">
-      <div class="ms-title"><span class="ms-mark"></span>AI model</div>
-      <button id="msClose" class="ghost tiny">Close ✕</button>
-    </div>
+    <!-- Settings rail. Brain and Model are the two full-window screens that
+         exist today; the rest of the workspace nav is still drawers, so
+         listing them here would be a control that does not work. -->
+    <aside class="ms-nav">
+      <button id="msClose" class="ms-back"><span class="ms-back-ic" aria-hidden="true">←</span>Back</button>
+      <div class="ms-nav-label">Settings</div>
+      <nav class="ms-nav-list">
+        <button class="ms-nav-item" data-msnav="brain"><span class="ms-nav-ic" aria-hidden="true"></span><span>Brain</span></button>
+        <button class="ms-nav-item is-active" data-msnav="model" aria-current="page"><span class="ms-nav-ic" aria-hidden="true"></span><span>Model</span></button>
+      </nav>
+    </aside>
 
+    <div class="ms-main">
     <div class="ms-body">
       <h1 class="ms-h1">Models</h1>
 
@@ -404,6 +412,7 @@
           </div>
         </div>
       </section>
+    </div>
     </div>
   </div>
 
