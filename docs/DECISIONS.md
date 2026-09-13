@@ -350,6 +350,87 @@ incident here, after tests writing to the real Keychain and binding port 1455.
 
 ---
 
+## The engineering fleet, and why it was retired (F-series)
+
+### F1 — One session builds this repo, not eight
+
+**Retired 2026-09-13.** For one day this repo was built by eight specialised
+Claude sessions in parallel — an Architect on `main` plus Frontend, API, Agents,
+Brain, Models, Connectors and QA, each in its own git worktree on its own
+`agent/*` branch, each with a rules file under `.claude/fleet/<role>/`, governed
+by an ownership map, six named seams, ten rules of parallel work, an append-only
+handoff log and a courtesy lock protocol.
+
+It shipped one real feature that way: connector tools inside the agent loop,
+built by four sessions at once (`docs/ROADMAP.md` → shipped). That feature is
+kept. The machinery that produced it is not.
+
+**What it cost, measured on its only run.** The parallelism was real — four
+subsystems moved at once and each arrived with its own tests, and QA found a
+live vulnerability (A8) precisely because it had nothing to do but look. But
+integration surfaced three defects that existed *only because* the work was
+split, and none of which any single session could see:
+
+- Each side tested against its own idea of the other, so the row shape at the
+  Agents↔Frontend seam was wrong in both directions at once and both suites were
+  green. It put a skill named after the protocol on screen inside an invented
+  group, beside skills named `mcp__github__list_issues`.
+- Two layers independently bounded the same result, and the outer cap sat below
+  the inner one, silently deleting the message the inner one existed to write.
+- Four sessions appended to one append-only log, which conflicted on every
+  merge.
+
+The contract was written down in advance, as the process required, and was still
+underspecified — it named `{name, description, source, connector}` and neither a
+display name nor what a category row is. **A contract is only as good as the
+test that fails when one side ships without the other**, and writing that test
+is exactly the work that has no owner when ownership is the organising idea.
+
+**Why retire it rather than fix it.** The failures above are fixable — a
+contract test at each seam, a per-session handoff file instead of one shared
+log. But they are the *visible* tax, and the invisible one is larger: eight role
+files (1,423 lines) and a third of `/CLAUDE.md` described how the sessions
+relate to each other rather than how the product works, and every one of those
+lines is read by every session on every task, forever. A codebase this size does
+not need a parliament. The rules that made the code good — the product doctrine,
+the model-availability rules, the agent-loop invariants, the test hygiene — were
+never about parallelism, and they are what is kept.
+
+**What was removed:**
+
+| | |
+|---|---|
+| worktrees | `../lodestone-{agents,api,brain,connectors,frontend,models,qa}` |
+| branches | `agent/*` (all seven, all fully merged into `main` first) |
+| rules | `.claude/fleet/**` — 10 role files, the README, the template, `locks/` |
+| log | `.claude/fleet/HANDOFF.md` (558 lines; its load-bearing content is here) |
+| doctrine | `/CLAUDE.md`'s role table, ownership map, six seams, ten rules of parallel work, and the whole "Fleet operations" section |
+| pointers | the role-pointer framing in each directory's `CLAUDE.md` |
+
+**What was kept, and where it lives now:**
+
+- Every product rule, the model-availability doctrine, the agent-loop
+  invariants, the layout and the conventions — unchanged, in `/CLAUDE.md`.
+- The per-directory `CLAUDE.md` files survive as genuine notes about that
+  directory, with the role and handoff framing stripped. They are still worth
+  having: they load automatically when you open a file there.
+- `tests/CLAUDE.md`'s four standing rules, which were the fleet's best
+  contribution and have nothing to do with it: no test may start a real sign-in,
+  never weaken a test to get green, a bug fix ships with a regression test, and
+  frontend render paths must be executed rather than parsed.
+- The verification sequence — focused tests → `pytest` → `ruff` → `mypy` — which
+  was the per-role table collapsed to the one column that always applied.
+
+**Before deleting, every worktree was verified to have no uncommitted changes,
+no untracked files, no stashes, and zero commits unreachable from `main`.**
+Nothing was lost. The eight-session history stays in the log: `git log` still
+shows the four feature branches and their merges.
+
+**Reopen if** the repo grows subsystems that genuinely cannot be held in one
+context at once. If it does, the thing to bring back first is not the ownership
+map — it is a contract test per seam, which is the part that actually caught
+something.
+
 ## Deferred (tracked, do later)
 
 - **Tier 2 scaling**: sqlite-vec (ANN) + FTS5 + incremental indexing, for when the
