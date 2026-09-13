@@ -8,7 +8,18 @@ from ..core.chunk import chunk_text
 from .base import Connector, SyncResult
 from .google_auth import get_credentials, google_ready
 
+
 # Which Drive mime types we know how to read, and how.
+def _rfc3339(stamp: str) -> str:
+    """An ISO watermark in the exact shape Drive's query language wants."""
+    from datetime import UTC, datetime
+
+    parsed = datetime.fromisoformat(stamp)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 EXPORT_AS_TEXT = "application/vnd.google-apps.document"
 PLAIN_TYPES = {"text/plain", "text/markdown", "text/csv"}
 PDF_TYPE = "application/pdf"
@@ -21,13 +32,19 @@ GSLIDES = "application/vnd.google-apps.presentation"
 class GoogleDriveConnector(Connector):
     name = "gdrive"
     label = "Google Drive"
+    auto_sync = True
+    incremental = True
 
     def is_configured(self) -> tuple[bool, str]:
         return google_ready()
 
     def sync(self, *, query: str | None = None, max_results: int | None = None,
+             since: str | None = None, limit: int | None = None,
+             full_history: bool = False, cancel=None, progress=None,
              interactive: bool = True, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)
+        started = self.now()
+        resume = since if since is not None else self.since(full_history=full_history)
         try:
             from googleapiclient.discovery import build  # lazy
             from googleapiclient.http import MediaIoBaseDownload
@@ -48,6 +65,12 @@ class GoogleDriveConnector(Connector):
                 + ")"
             )
             q = query or f"{mime_filter} and trashed=false"
+            if not query and resume:
+                # Drive can filter server-side, which is strictly better than
+                # listing every file and discarding it locally: the existing
+                # modified-date check below still runs, it just has far less to
+                # do. RFC-3339 with a 'Z', which is what the API expects.
+                q += f" and modifiedTime > '{_rfc3339(resume)}'"
             # paginate + include Shared-with-me and Shared Drives
             files: list[dict] = []
             page_token = None
@@ -113,6 +136,7 @@ class GoogleDriveConnector(Connector):
         except Exception as exc:
             result.errors.append(str(exc))
             result.detail = "sync failed"
+        result.cursor = started
         return self._finish(result)
 
     def search_and_ingest(self, terms: str, max_files: int = 5,

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,19 +34,42 @@ def _is_junk_file(name: str) -> bool:
         return True
     return n.endswith((".min.js", ".min.css", ".map", ".bundle.js", ".lock"))
 
+def _mtime(path: Path) -> float:
+    """A file that vanished mid-scan sorts as brand new, so the walk does not
+    crash on it and the next pass simply does not see it."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return float("inf")
+
+
 MAX_BYTES = 2_000_000
 # guardrail default; overridable via LODESTONE_MAX_FILES for large corpora
 
 
 class FilesConnector(Connector):
+    #: The folder this run is indexing, so the watermark helpers can key on it.
+    _current_root: str | None = None
+
     name = "files"
     label = "Local Files"
+    # Driven by remembered folders rather than the class, because a folder
+    # the user has never pointed at is not a source. The scheduler re-indexes
+    # `synced_paths()` directly.
+    auto_sync = False
+    incremental = True
     always_available = True
 
     def sync(self, *, path: str = "", recursive: bool = True,
-             exts: list[str] | None = None, **_: Any) -> SyncResult:
+             exts: list[str] | None = None, since: str | None = None,
+             limit: int | None = None, full_history: bool = False,
+             cancel=None, progress=None, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)
         root = Path(path).expanduser()
+        # Stamped before the walk, so a file written while this runs is picked
+        # up next time rather than landing just behind the new watermark.
+        started = self.now()
+        self._current_root = str(root)
         if not root.exists():
             result.errors.append(f"path not found: {root}")
             result.detail = "path not found"
@@ -63,39 +87,77 @@ class FilesConnector(Connector):
             result.detail = f"too many files ({len(files)}) under {root}"
             return self._finish(result)
         from ..brain import get_brain
-        for fp in files:
-            try:
-                if fp.stat().st_size > MAX_BYTES:
-                    result.skipped += 1
-                    continue
-                text = fp.read_text(encoding="utf-8", errors="ignore")
-            except Exception as exc:  # unreadable file
-                result.errors.append(f"{fp.name}: {exc}")
-                continue
-            # Route through the brain so the knowledge graph is built too.
-            # fast=True → offline heuristic extraction, so bulk imports stay quick.
-            # Only prose builds the graph; code is stored + searchable but skipped.
-            #
-            # Guarded: the read was already guarded but the ingest was not, so a
-            # single file that broke extraction propagated straight out of
-            # sync() — past the connector's own error handling, with no detail
-            # for the user and the rest of the folder never scanned (H2).
-            try:
-                out = get_brain().ingest(
-                    text, source=self.name, kind="doc", title=fp.name,
-                    uri=str(fp), fast=True,
-                    build_graph=fp.suffix.lower() in PROSE_EXT,
-                )
-            except Exception:
-                result.skipped += 1        # one bad file never aborts the sync
-                continue
-            if out["memories"]:
-                result.added += out["memories"]
-            else:
-                result.skipped += 1
-        result.detail = f"scanned {len(files)} files under {root}"
+        scanned = len(files)
+        # Re-indexing a folder every 30 minutes re-reads and re-hashes every
+        # file in it. `st_mtime` is the cheap answer, and dedup still catches
+        # anything the overlap re-offers.
+        cutoff = self._cutoff(since, full_history=full_history)
+        if cutoff is not None:
+            files = [f for f in files if _mtime(f) >= cutoff]
+
+        # Route through the brain so the knowledge graph is built too.
+        # fast=True → offline heuristic extraction, so bulk imports stay quick.
+        # Only prose builds the graph; code is stored + searchable but skipped.
+        #
+        # The ingest runs inside `each_guarded`: the read was already guarded
+        # but the ingest was not, so a single file that broke extraction
+        # propagated straight out of sync() — past the connector's own error
+        # handling, with no detail for the user and the rest of the folder
+        # never scanned (H2).
+        def ingest(fp) -> int:
+            if fp.stat().st_size > MAX_BYTES:
+                return 0
+            text = fp.read_text(encoding="utf-8", errors="ignore")
+            out = get_brain().ingest(
+                text, source=self.name, kind="doc", title=fp.name,
+                uri=str(fp), fast=True,
+                build_graph=fp.suffix.lower() in PROSE_EXT,
+            )
+            return out["memories"]
+
+        self.each_guarded(files[:limit] if limit else files, result, ingest,
+                          cancel=cancel, progress=progress)
+        result.detail = result.detail or (
+            f"{len(files)} changed of {scanned} files under {root}"
+            if cutoff is not None else f"scanned {scanned} files under {root}")
         self._remember_path(str(root))
+        # Per folder, and only when the pass actually finished — a watermark
+        # saved from a cancelled walk would skip everything it never reached.
+        if not result.cancelled and not result.errors:
+            self._set_folder_watermark(str(root), started)
         return self._finish(result)
+
+    def _cutoff(self, since: str | None, *, full_history: bool) -> float | None:
+        """When this folder was last indexed, as a POSIX timestamp.
+
+        `connector_state.cursor` already holds the list of folders the user
+        pointed at, so the watermark lives in the meta table keyed per folder —
+        two folders are re-indexed on their own schedules, and one added today
+        does not inherit the other's watermark and skip its own contents.
+        """
+        if full_history:
+            return None
+        stamp = since or self._folder_watermark(self._current_root)
+        if not stamp:
+            return None
+        try:
+            parsed = datetime.fromisoformat(stamp)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.timestamp()
+
+    def _watermark_key(self, root: str) -> str:
+        return f"files_watermark:{root}"
+
+    def _folder_watermark(self, root: str | None) -> str | None:
+        if not root:
+            return None
+        return self.store.get_meta(self._watermark_key(root))
+
+    def _set_folder_watermark(self, root: str, stamp: str) -> None:
+        self.store.set_meta(self._watermark_key(root), stamp)
 
     def _remember_path(self, path: str) -> None:
         """Record synced folders so background sync can re-index them."""

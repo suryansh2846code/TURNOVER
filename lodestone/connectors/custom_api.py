@@ -103,6 +103,11 @@ def _dig(obj: Any, path: str) -> Any:
 class CustomAPIConnector(Connector):
     """Instantiated per custom-app definition (name = 'custom:<id>')."""
 
+    auto_sync = True
+    # A generic REST endpoint has no agreed "changed since" parameter, so the
+    # whole list is re-read and dedup does the rest.
+    incremental = False
+
     def __init__(self, app: dict, store=None) -> None:
         super().__init__(store)
         self.app = app
@@ -139,7 +144,9 @@ class CustomAPIConnector(Connector):
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
 
-    def sync(self, *, max_items: int = 300, **_: Any) -> SyncResult:
+    def sync(self, *, max_items: int = 300, since: str | None = None,
+             limit: int | None = None, full_history: bool = False,
+             cancel=None, progress=None, **_: Any) -> SyncResult:
         result = SyncResult(connector=self.name)
         ready, reason = self.is_configured()
         if not ready:
@@ -159,27 +166,26 @@ class CustomAPIConnector(Connector):
             from ..brain import get_brain
             brain = get_brain()
             tf, bf = self.app.get("title_field"), self.app.get("body_field")
-            for it in items[:max_items]:
-                try:
-                    if not isinstance(it, dict):
-                        it = {"value": it}
-                    # Missing field → None; str(None) is "None" (truthy), so guard
-                    # explicitly rather than relying on `or` fallback, else field-less
-                    # records all collapse to an identical "None" and get deduped away.
-                    tval = _dig(it, tf) if tf else None
-                    bval = _dig(it, bf) if bf else None
-                    title = str(tval) if tval is not None else self.label
-                    body = (str(bval) if bval is not None
-                            else json.dumps(it, ensure_ascii=False)[:2000])
-                    text = f"{self.label} — {title}\n\n{body}"
-                    out = brain.ingest(text, source=self.name, kind="record",
-                                       title=title, fast=True)
-                    result.added += out["memories"]
-                    if not out["memories"]:
-                        result.skipped += 1
-                except Exception:
-                    result.skipped += 1        # one bad record never aborts the sync
-            result.detail = f"{len(items)} records from {self.label}"
+
+            def ingest(it) -> int:
+                if not isinstance(it, dict):
+                    it = {"value": it}
+                # Missing field → None; str(None) is "None" (truthy), so guard
+                # explicitly rather than relying on `or` fallback, else field-less
+                # records all collapse to an identical "None" and get deduped away.
+                tval = _dig(it, tf) if tf else None
+                bval = _dig(it, bf) if bf else None
+                title = str(tval) if tval is not None else self.label
+                body = (str(bval) if bval is not None
+                        else json.dumps(it, ensure_ascii=False)[:2000])
+                text = f"{self.label} — {title}\n\n{body}"
+                out = brain.ingest(text, source=self.name, kind="record",
+                                   title=title, fast=True)
+                return out["memories"]
+
+            self.each_guarded(items[:limit or max_items], result, ingest,
+                              cancel=cancel, progress=progress)
+            result.detail = result.detail or f"{len(items)} records from {self.label}"
         except urllib.error.HTTPError as exc:
             result.errors.append(
                 "auth failed — check the token" if exc.code in (401, 403)

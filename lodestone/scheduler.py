@@ -15,11 +15,34 @@ from typing import Any
 from .config import get_settings
 from .connectors import REGISTRY, get_connector
 from .connectors.files import FilesConnector
+from .log import suppressed
 
 log = logging.getLogger("lodestone.scheduler")
 
-# app connectors that can sync with defaults once configured (no user input)
-_AUTO = ["gmail", "gcal", "gdrive", "notion", "imessage"]
+def _auto_connectors() -> list[str]:
+    """Connectors the background loop re-runs, derived from the classes.
+
+    This was a hand-maintained list of five names, and the other six were
+    excluded by nothing more than not being in it — GitHub and Linear are
+    token-backed sources a user connects and which then never refreshed again.
+    A `auto_sync` flag on the class puts the decision where a reader of the
+    connector can see it, and makes a new connector state its own intent.
+    """
+    return [name for name, cls in REGISTRY.items()
+            if getattr(cls, "auto_sync", False) and cls.supported_here()]
+
+
+def _custom_apps() -> list[dict]:
+    """User-defined REST sources, which live outside REGISTRY (one per app).
+
+    They were never refreshed on the timer at all: a user could connect one and
+    watch it go stale forever with no way to tell why.
+    """
+    from .connectors.custom_api import list_apps
+
+    with suppressed("listing the user's custom apps"):
+        return list_apps()
+    return []
 
 
 class Scheduler:
@@ -61,7 +84,7 @@ class Scheduler:
         summary: dict[str, Any] = {}
 
         # app-based connectors
-        for name in _AUTO:
+        for name in _auto_connectors():
             if self._cancel.is_set():
                 summary["_cancelled"] = True
                 break
@@ -73,22 +96,43 @@ class Scheduler:
             if not ready:
                 continue
             try:
-                res = inst.sync(interactive=interactive)
+                # The cancel token goes *into* the connector. Checking it only
+                # here meant cancelling mid-Gmail still waited for every
+                # remaining message before the loop got another look.
+                res = inst.sync(interactive=interactive, cancel=self._cancel)
                 summary[name] = {"added": res.added, "errors": res.errors[:1]}
+                if res.cancelled:
+                    summary["_cancelled"] = True
             except Exception as exc:
                 summary[name] = {"added": 0, "errors": [str(exc)[:120]]}
 
-        # local files: re-index remembered folders
+        # local files: re-index remembered folders. Driven by what the user
+        # actually pointed at rather than by the class, which is why
+        # FilesConnector.auto_sync is False.
         for path in FilesConnector.synced_paths(store):
             if self._cancel.is_set():
                 summary["_cancelled"] = True
                 break
             try:
-                res = get_connector("files").sync(path=path)
+                res = get_connector("files").sync(path=path, cancel=self._cancel)
                 key = f"files:{path.split('/')[-1]}"
                 summary[key] = {"added": res.added, "errors": res.errors[:1]}
             except Exception as exc:
                 summary[f"files:{path}"] = {"added": 0, "errors": [str(exc)[:120]]}
+
+        # custom apps are registered outside REGISTRY, one per user definition
+        for app in _custom_apps():
+            if self._cancel.is_set():
+                summary["_cancelled"] = True
+                break
+            try:
+                res = get_connector(f"custom:{app['id']}").sync(
+                    interactive=interactive, cancel=self._cancel)
+                summary[f"custom:{app['id']}"] = {
+                    "added": res.added, "errors": res.errors[:1]}
+            except Exception as exc:
+                summary[f"custom:{app['id']}"] = {"added": 0,
+                                                  "errors": [str(exc)[:120]]}
 
         # self-heal: never leave duplicates behind (no manual dedup needed)
         removed = store.dedupe()

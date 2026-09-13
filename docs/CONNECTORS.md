@@ -40,24 +40,24 @@ connector fix in `JOURNEY.md` (HTML noise, `.docx`, shared files, duplicates,
 date parsing) was found by a **user**, not by the suite. That has to stop being
 the discovery mechanism before third-party code joins the pipeline.
 
-- [ ] **0.1 — `tests/connectors/` with a fake-transport harness.** Each
+- [x] **0.1 — `tests/connectors/` with a fake-transport harness.** Each
       connector's `sync()` runs against recorded fixtures, no network. The
       pattern already exists for models (`tests/test_cursor_cli_backend.py`);
       copy its shape.
-- [ ] **0.2 — Freeze the `Connector` contract.** A test that walks `REGISTRY`
+- [x] **0.2 — Freeze the `Connector` contract.** A test that walks `REGISTRY`
       and asserts every class declares `name`, `label`, `platforms`,
       `is_configured()` and a `sync()` returning `SyncResult`. Catches a new
       connector that forgets half the interface — which is exactly what a
       registry-plus-duck-typing design invites.
-- [ ] **0.3 — Per-item crash isolation, proven.** `gmail.py:100` already does
+- [x] **0.3 — Per-item crash isolation, proven.** `gmail.py:100` already does
       this correctly ("one bad message never aborts the sync", decision H2).
       Assert it for **every** connector by feeding one poisoned item into a
       fixture batch and checking the rest still land.
-- [ ] **0.4 — Re-sync is idempotent.** Sync the same fixture twice; memory count
+- [x] **0.4 — Re-sync is idempotent.** Sync the same fixture twice; memory count
       must not move. This currently works only because of the
       `idx_memories_chash` unique index — no connector checks anything. Freeze
       it before 1.1 changes how fetching works.
-- [ ] **0.5 — Redaction on the ingest path.** Brain v1.5 masks secrets on
+- [x] **0.5 — Redaction on the ingest path.** Brain v1.5 masks secrets on
       ingest; prove a connector carrying an API key in a message body cannot
       land it unmasked. Becomes load-bearing the moment MCP servers write here.
 
@@ -69,7 +69,7 @@ the discovery mechanism before third-party code joins the pipeline.
 
 Four gaps in `connectors/base.py`, all of which get worse with more connectors.
 
-- [ ] **1.1 — Incremental sync.** `connector_state.cursor` exists
+- [x] **1.1 — Incremental sync.** `connector_state.cursor` exists
       (`core/db.py:50`) and **no connector uses it as a watermark**. The one
       writer is `files.py:101`, which stores the list of synced folder paths in
       it; `notion.py`'s `start_cursor` is Notion's own pagination *within* a
@@ -80,17 +80,17 @@ Four gaps in `connectors/base.py`, all of which get worse with more connectors.
       time, battery and API quota. Give `SyncResult` a `cursor`, have
       `_finish()` persist it, and have `sync()` receive the previous one. (If
       `files.py` keeps the column for paths, it needs its own field first.)
-- [ ] **1.2 — A typed `sync()` signature.** Today it is `**kwargs: Any`, and six
+- [x] **1.2 — A typed `sync()` signature.** Today it is `**kwargs: Any`, and six
       connectors improvise their own window/limit/cursor arguments. Define the
       shared ones (`since`, `limit`, `full_history`, `cancel`) on the base.
-- [ ] **1.3 — Cooperative cancel reaches the connector.** `sync_all` checks
+- [x] **1.3 — Cooperative cancel reaches the connector.** `sync_all` checks
       `self._cancel` **between** connectors (`scheduler.py:65`), so cancelling
       mid-Gmail still waits for all 600 messages. Pass the token down and check
       it in the item loop.
-- [ ] **1.4 — Per-connector progress.** Long work must report progress that
+- [x] **1.4 — Per-connector progress.** Long work must report progress that
       survives a refresh (CLAUDE.md). A first sync reports nothing until the
       whole connector finishes. `SyncResult` needs a progress callback.
-- [ ] **1.5 — Decide `_AUTO` deliberately.** `scheduler.py:22` auto-syncs five of
+- [x] **1.5 — Decide `_AUTO` deliberately.** `scheduler.py:22` auto-syncs five of
       eleven: `gmail, gcal, gdrive, notion, imessage`. GitHub, Linear, Apple
       Mail, Apple Calendar and Notes never refresh on their own. Either that is
       a capability flag on the class, or it is a bug — right now it is a list a
