@@ -24,6 +24,15 @@ let cardHeight = 219;
 const cardEl = makeEl("card");
 cardEl.getBoundingClientRect = () => ({ height: cardHeight, width: 348 });
 
+// app.js installs a focus-management observer at load; every harness that
+// evaluates the file needs one to exist, or the whole script throws before the
+// function under test is ever reached.
+globalThis.MutationObserver = class {
+  observe() {}
+  disconnect() {}
+  takeRecords() { return []; }
+};
+
 globalThis.document = {
   getElementById: (id) => els.get(id) || makeEl(id),
   querySelector: (sel) => (sel === ".card" ? cardEl : makeEl(sel)),

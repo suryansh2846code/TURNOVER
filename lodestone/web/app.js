@@ -5,6 +5,14 @@ let agents = [];
 let CONNECTORS = [];
 
 function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
+// Has the user asked the system for less motion? A *function declaration*, not
+// a const arrow: it is called from _bsDraw, which runs far above this point in
+// the file, and a temporal-dead-zone ReferenceError here would blank the brain
+// screen exactly the way one blanked the model drawer. Hoisting removes the
+// question entirely.
+function _lessMotion() {
+  return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
 function esc(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
 // gradient orb avatar per agent (stable colour from the id; the lead is always blue)
@@ -52,7 +60,13 @@ function applyIcons() {
 function setCollapsed(on) {
   const app = document.querySelector(".app"); if (!app) return;
   app.classList.toggle("collapsed", on);
-  const b = $("#collapseBtn"); if (b) { b.textContent = on ? "›" : "‹"; b.title = on ? "Expand sidebar" : "Collapse sidebar"; }
+  const b = $("#collapseBtn");
+  if (b) {
+    b.textContent = on ? "›" : "‹";
+    b.title = on ? "Expand sidebar" : "Collapse sidebar";
+    b.setAttribute("aria-label", b.title);
+    b.setAttribute("aria-expanded", on ? "false" : "true");
+  }
   try { localStorage.setItem("ls_collapsed", on ? "1" : ""); } catch (_) {}
 }
 {
@@ -108,18 +122,29 @@ async function loadAgents() {
   $("#agentList").innerHTML = agents.map((a) => {
     const lead = a.id === leadId;
     return `
-    <div class="agent ${a.id === current ? "active" : ""}" data-id="${a.id}">
+    <div class="agent ${a.id === current ? "active" : ""}" data-id="${a.id}"
+         role="button" tabindex="0" aria-pressed="${a.id === current}"
+         aria-label="${esc(a.name)}${lead ? " (lead agent)" : ""} — ${esc(a.role)}">
       <span class="orb" style="${orbStyle(agentOrbId(a))}"></span>
       <div class="a-meta">
         <div class="n">${esc(a.name)}${lead ? ` <span class="lead-tag">Lead</span>` : ""}</div>
         <div class="r">${esc(a.role)}</div>
       </div>
-      ${a.custom && !lead ? `<span class="del-agent" data-del-agent="${a.id}">✕</span>`
+      ${a.custom && !lead ? `<button type="button" class="del-agent" data-del-agent="${a.id}" aria-label="Delete agent ${esc(a.name)}">✕</button>`
         : (a.id === current ? `<span class="dot"></span>` : "")}
     </div>`; }).join("");
-  document.querySelectorAll(".agent").forEach((el) => el.onclick = (e) => {
-    if (e.target.dataset.delAgent) return;   // handled below
-    selectAgent(el.dataset.id);
+  document.querySelectorAll(".agent").forEach((el) => {
+    el.onclick = (e) => {
+      if (e.target.closest("[data-del-agent]")) return;   // handled below
+      selectAgent(el.dataset.id);
+    };
+    // role="button" is a promise that Enter and Space work. Keep it.
+    el.onkeydown = (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      if (e.target.closest("[data-del-agent]")) return;
+      e.preventDefault();
+      selectAgent(el.dataset.id);
+    };
   });
   document.querySelectorAll("[data-del-agent]").forEach((el) => el.onclick = async (e) => {
     e.stopPropagation();
@@ -680,24 +705,45 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
   }
 
   // 4. Models Card
+  //
+  // Locked models stay visible — hiding them would leave a user wondering
+  // where a model they have heard of went — but they must LOOK locked and say
+  // why. This list rendered every model identically, so a ChatGPT Free account
+  // saw GPT-5.6-Terra and GPT-6-Astra presented exactly like the models it can
+  // actually run. The list also scrolls inside 140px, and the locked ones came
+  // first, so the three usable models were below the fold: the panel answered
+  // "what can I run?" with a list of things the account cannot run.
   let modelsCardHtml = "";
   if (models && models.length) {
+    const usable = models.filter((m) => !m.locked);
+    const locked = models.filter((m) => m.locked);
+    const ordered = usable.concat(locked);
+    const SHOWN = 8;
+    const hiddenCount = Math.max(0, ordered.length - SHOWN);
     modelsCardHtml = `
       <div style="margin-top:4px">
         <div class="pc-models-list">
-          ${models.slice(0, 8).map((m) => {
+          ${ordered.slice(0, SHOWN).map((m) => {
             const isReasoning = Boolean(m.reasoning);
             const hasTools = m.tool_calling !== false;
             const hasVision = Boolean(m.vision);
+            const isLocked = Boolean(m.locked);
+            const why = m.plan_required || "Not on your plan";
+            const tip = isLocked
+              ? `${m.name || m.id} — ${why}`
+              : (m.desc || m.id);
             return `
-              <div class="pc-model-pill" title="${esc(m.desc || m.id)}">
+              <div class="pc-model-pill ${isLocked ? "is-locked" : ""}" title="${esc(tip)}">
+                ${isLocked ? `<span class="pc-lock" aria-hidden="true">🔒</span>` : ""}
                 <span>${esc(m.name || m.id)}</span>
+                ${isLocked ? `<span class="pc-tag locked">${esc(why)}</span>` : ""}
                 ${isReasoning ? `<span class="pc-tag reasoning">r1/o1</span>` : ""}
                 ${hasTools ? `<span class="pc-tag tools">tools</span>` : ""}
                 ${hasVision ? `<span class="pc-tag vision">vision</span>` : ""}
               </div>
             `;
           }).join("")}
+          ${hiddenCount ? `<div class="pc-model-pill pc-model-more">+${hiddenCount} more</div>` : ""}
         </div>
       </div>
     `;
@@ -3078,7 +3124,7 @@ function _bsDraw() {
       const nearBoost = Math.max(proj[i].near, proj[j].near);
       if (d < (52 + nearBoost * 40) * (52 + nearBoost * 40) && (proj[i].depth > 0.3 || nearBoost > 0)) {
         const la = 0.04 + 0.08 * proj[i].depth * bright + nearBoost * 0.35;
-        ctx.strokeStyle = `rgba(${120 + nearBoost * 70 | 0},${160 + nearBoost * 40 | 0},255,${la.toFixed(3)})`;
+        ctx.strokeStyle = `rgba(${170 + nearBoost * 60 | 0},${188 + nearBoost * 45 | 0},${215 + nearBoost * 30 | 0},${la.toFixed(3)})`;
         ctx.beginPath(); ctx.moveTo(proj[i].sx, proj[i].sy); ctx.lineTo(proj[j].sx, proj[j].sy); ctx.stroke();
       }
     }
@@ -3087,7 +3133,7 @@ function _bsDraw() {
   if (_bsHoverX > -9000) {
     for (const p of proj) {
       if (p.near > 0.15) {
-        ctx.strokeStyle = `rgba(150,190,255,${(p.near * 0.4).toFixed(3)})`;
+        ctx.strokeStyle = `rgba(245,200,119,${(p.near * 0.4).toFixed(3)})`;   // the cursor draws in gold
         ctx.beginPath(); ctx.moveTo(_bsHoverX, _bsHoverY); ctx.lineTo(p.sx, p.sy); ctx.stroke();
       }
     }
@@ -3096,11 +3142,13 @@ function _bsDraw() {
     const pulse = 0.5 + 0.5 * Math.sin(t * 1.5 + p.p);
     const a = Math.min(1, (0.22 + 0.62 * p.depth) * (0.6 + 0.4 * pulse) * bright + p.near * 0.6);
     const rad = 0.7 + 1.8 * p.depth + p.near * 2.4;
-    const g = 195 + 40 * p.depth + p.near * 20;
-    ctx.fillStyle = `rgba(${170 + 60 * p.depth + p.near * 15 | 0},${g | 0},255,${a.toFixed(3)})`;
+    // --star #dfe7f2 as starlight: cool white, warming slightly toward the cursor
+    ctx.fillStyle = `rgba(${196 + 30 * p.depth + p.near * 45 | 0},${208 + 24 * p.depth + p.near * 20 | 0},${228 + 15 * p.depth - p.near * 30 | 0},${a.toFixed(3)})`;
     ctx.beginPath(); ctx.arc(p.sx, p.sy, rad, 0, 6.283); ctx.fill();
   }
-  _bsRaf = requestAnimationFrame(_bsDraw);
+  // A rAF loop is out of CSS's reach, so the same query is asked here: when the
+  // user wants less motion the field is painted once and left as a still.
+  if (!_lessMotion()) _bsRaf = requestAnimationFrame(_bsDraw);
 }
 async function _bsRefresh() {
   try {
@@ -3110,6 +3158,7 @@ async function _bsRefresh() {
     $("#bsEnt").textContent = ent.toLocaleString();
     $("#bsRel").textContent = rel.toLocaleString();
     _bsDensity = Math.min(1, 0.15 + mem / 4000 + ent / 2500);
+    if (_lessMotion()) _bsDraw();   // no loop is running — repaint the still
     // node count grows with the knowledge graph so the cloud visibly fills in while
     // enrichment runs (memories are static; entities are what climb).
     _bsVisTarget = Math.round(260 + Math.min(1, ent / 1600) * 840);
@@ -3348,3 +3397,66 @@ window.addEventListener("keydown", (e) => {
   setInterval(updateBrainStatus, 5000);
   setInterval(() => { loadReminders(); loadRoutines(); }, 45000);
 })();
+
+
+// ── dialogs: escape closes them, and focus goes in and comes back ──────────
+// Every overlay here is opened by clearing .hidden on its background element,
+// in about fifteen different places. Rather than edit fifteen call sites (and
+// miss the sixteenth), watch the attribute itself: an overlay that becomes
+// visible takes focus, and whatever opened it gets focus back on the way out.
+// Escape closes the topmost one by clicking its own close button, so each
+// modal's existing teardown still runs instead of being bypassed.
+// #welcome is deliberately excluded: its only exit is "Skip for now", which
+// writes a preference, and Escape must not quietly make that choice.
+{
+  const FOCUSABLE = [
+    'button:not([disabled])', 'a[href]', 'input:not([type="hidden"])',
+    'select', 'textarea', '[tabindex]:not([tabindex="-1"])',
+  ].join(",");
+  // .modal-bg is position:fixed, so offsetParent is always null — visibility
+  // has to be read from the attribute and from whether it has a box at all.
+  const shown = (el) => el && !el.hidden;
+  const boxed = (el) => el.getClientRects().length > 0;
+  const openers = new WeakMap();
+  const modals = () => [...document.querySelectorAll(".modal-bg")].filter(shown);
+
+  function focusInto(el) {
+    const all = [...el.querySelectorAll(FOCUSABLE)].filter(boxed);
+    // Prefer the first field over the first focusable. In DOM order the first
+    // focusable is the ✕ in the header, so "Create an agent" would open with
+    // focus on Close — technically focused, practically useless.
+    const field = all.find((n) =>
+      /^(INPUT|TEXTAREA|SELECT)$/.test(n.tagName) && n.type !== "hidden");
+    const target = field || all[0];
+    if (target) { target.focus({ preventScroll: true }); return; }
+    el.setAttribute("tabindex", "-1");
+    el.focus({ preventScroll: true });
+  }
+
+  const watch = new MutationObserver((muts) => {
+    for (const m of muts) {
+      if (m.attributeName !== "hidden") continue;
+      const el = m.target;
+      if (shown(el)) {
+        openers.set(el, document.activeElement);
+        focusInto(el);
+      } else {
+        const back = openers.get(el);
+        openers.delete(el);
+        if (back && back.isConnected && boxed(back)) back.focus({ preventScroll: true });
+      }
+    }
+  });
+  document.querySelectorAll(".modal-bg").forEach((el) =>
+    watch.observe(el, { attributes: true, attributeFilter: ["hidden"] }));
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    const open = modals();
+    const top = open[open.length - 1];   // last in the DOM is the one on top
+    if (!top) return;
+    e.preventDefault(); e.stopPropagation();
+    const close = top.querySelector(".modal-head button, .modal-head .ghost");
+    if (close) close.click(); else top.hidden = true;
+  });
+}

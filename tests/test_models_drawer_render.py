@@ -208,3 +208,55 @@ def test_the_browser_branch_keeps_the_cancel_row_on_screen(catalog_json):
     r = _click_signin("cursor", catalog_json, auth_start=BROWSER_FLOW)
     assert "ts-cancel-poll-btn" in r["containerHtml"], (
         "the cancel row was torn down when the browser opened")
+
+
+# ── locked models ────────────────────────────────────────────────────────
+# A ChatGPT Free account opened this drawer and saw GPT-5.6-Terra, -Luna, -Sol
+# and GPT-6-Astra rendered exactly like the models it can run — no lock, no
+# reason — while the three it actually had (gpt-5.5, gpt-5.4, gpt-5.4-mini)
+# sorted last and fell below the list's 140px scroll. The panel that answers
+# "what can I run?" was answering with models the account cannot run.
+_MIXED_CATALOG = [{
+    "id": "openai", "label": "OpenAI", "icon": "spark",
+    "default_model": "gpt-5.5", "key_env": "OPENAI_API_KEY", "key_url": "",
+    "models": [
+        {"id": "locked-flagship", "name": "Locked Flagship", "desc": "",
+         "locked": True, "plan_required": "Pro", "reasoning": True, "vision": True},
+        {"id": "usable-one", "name": "Usable One", "desc": "", "locked": False},
+    ],
+    "ready": True, "connected": True, "locked": False,
+    "connection": {"connection_status": "ACCOUNT_CONNECTED"},
+    "capabilities": {"display_name": "OpenAI", "api_key_only": False,
+                     "has_interactive_signin": True},
+    "credentials": {"api_key": {"connected": False}},
+    "detected_account": {}, "locality": "cloud",
+}]
+
+
+def _render_mixed() -> dict:
+    proc = subprocess.run(
+        ["node", str(HARNESS), str(APP_JS)],
+        input=json.dumps(_MIXED_CATALOG),
+        capture_output=True, text=True, timeout=90,
+    )
+    assert proc.returncode == 0, f"harness failed: {proc.stderr[:400]}"
+    return json.loads(proc.stdout)["openai"]
+
+
+def test_a_locked_model_is_rendered_as_locked():
+    html = _render_mixed()["modelsHtml"]
+    assert "Locked Flagship" in html, "a locked model must stay visible"
+    assert "is-locked" in html, "a locked model rendered like a usable one"
+    assert "Pro" in html, "a locked model must say what would unlock it"
+
+
+def test_a_usable_model_is_not_marked_locked():
+    html = _render_mixed()["modelsHtml"]
+    usable = html[html.index("Usable One") - 200:html.index("Usable One")]
+    assert "is-locked" not in usable, "a model this account can run looked locked"
+
+
+def test_models_this_account_can_run_are_listed_first():
+    """The list scrolls; whatever sorts last is effectively hidden."""
+    html = _render_mixed()["modelsHtml"]
+    assert html.index("Usable One") < html.index("Locked Flagship")

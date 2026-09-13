@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lodestone — workspace proof sheet</title>
+<!-- The REAL workspace stylesheet. If this sheet looks right, the app does. -->
+<link rel="stylesheet" href="../../lodestone/web/styles.css">
+<style>
+  body{padding:34px 40px;overflow-y:auto;height:auto}
+  .ps-h{font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+        color:var(--faint);margin:34px 0 12px;border-top:1px solid var(--line);padding-top:12px}
+  .ps-h:first-of-type{margin-top:18px}
+  .ps-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px}
+  .ps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+  .ps-title{font-family:var(--mono);font-size:12px;letter-spacing:.3em;text-transform:uppercase;color:var(--star)}
+  .ps-lede{color:var(--muted);font-size:13px;max-width:60ch;margin:8px 0 0}
+  .sw{display:flex;flex-direction:column;gap:6px}
+  .sw i{display:block;width:100%;height:46px;border-radius:9px;border:1px solid var(--line2)}
+  .sw b{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--muted);font-weight:400}
+  .ps-pane{background:var(--panel);border-radius:16px;padding:16px}
+</style></head>
+<body>
+
+<div class="ps-title" style="color:#dfe7f2">◆ Lodestone — workspace proof sheet</div>
+<p class="ps-lede" style="color:#7a8397">Every surface that carries colour, rendered against the real
+<code>styles.css</code>. One ground, one gold. Blue is gone.</p>
+
+<div class="ps-h">Ground &amp; stars</div>
+<div class="ps-grid">
+  <div class="sw"><i style="background:var(--ground)"></i><b>--ground #05070d</b></div>
+  <div class="sw"><i style="background:var(--panel)"></i><b>--panel #0b0f18</b></div>
+  <div class="sw"><i style="background:var(--panel-2)"></i><b>--panel-2 #111826</b></div>
+  <div class="sw"><i style="background:var(--raise)"></i><b>--raise #19212f</b></div>
+  <div class="sw"><i style="background:var(--star)"></i><b>--star #dfe7f2</b></div>
+  <div class="sw"><i style="background:var(--muted)"></i><b>--muted #7a8397</b></div>
+  <div class="sw"><i style="background:var(--faint)"></i><b>--faint #5c6473</b></div>
+  <div class="sw"><i style="background:var(--north)"></i><b>--north #f5c877 ← the one accent</b></div>
+  <div class="sw"><i style="background:var(--ok)"></i><b>--ok #5fcf8e (connected only)</b></div>
+  <div class="sw"><i style="background:var(--danger)"></i><b>--danger #ff6b6b (failed only)</b></div>
+</div>
+
+<div class="ps-h">Sidebar</div>
+<div class="ps-pane" style="max-width:260px">
+  <div class="brand"><span class="brand-mark"></span><span class="brand-word">Lodestone</span></div>
+  <div class="side-label">Agents</div>
+  <nav class="agents">
+    <div class="agent active"><span class="orb" style="background:radial-gradient(circle at 32% 26%,#f5c877,#7a5a1e 74%)"></span>
+      <span class="a-meta"><span class="n">Atlas <span class="lead-tag">Lead</span></span><span class="r">runs your team</span></span><span class="dot"></span></div>
+    <div class="agent"><span class="orb"></span><span class="a-meta"><span class="n">Inbox</span><span class="r">triage &amp; replies</span></span></div>
+  </nav>
+  <button class="new-agent"><span class="na-plus">+</span><span class="na-tx">New Agent</span></button>
+  <div class="side-nav">
+    <button class="snav"><span class="snav-ic">◆</span><span class="snav-tx">Brain</span></button>
+    <button class="snav"><span class="snav-ic">⛁</span><span class="snav-tx">Connectors</span></button>
+  </div>
+</div>
+
+<div class="ps-h">Chat header</div>
+<div class="ps-pane">
+  <div class="chat-head" style="padding:6px 2px">
+    <div class="ch-agent"><span class="orb"></span>
+      <div class="ch-meta"><div class="ch-name">Atlas</div><div class="ch-role">runs your team</div></div>
+      <button class="agent-model-chip"><span class="chip-dot"></span><span class="chip-label">Opus 5</span><span class="chip-arrow">▾</span></button>
+    </div>
+    <div class="ch-right"><span class="tb-trust">On-device · Private · Yours</span>
+      <button class="brain-status syncing"><span class="bs-dot"></span>1,284 memories</button>
+      <button class="ghost tiny">Clear chat</button></div>
+  </div>
+</div>
+
+<div class="ps-h">Conversation</div>
+<div class="ps-pane">
+  <div class="messages" style="padding:0;gap:14px;overflow:visible">
+    <div class="msg user">What did Dev say about the launch date?</div>
+    <div class="msg assistant"><span class="orb a-orb"></span><div class="a-body">
+      <p>He moved it to <strong>the 24th</strong> — see the <a href="#">thread</a>.</p>
+      <p>Two things still open: <code>pricing page</code> and the press note.</p></div></div>
+    <div class="trace"><div class="step"><span class="tname">search_brain</span>
+      <span class="res">3 memories · gmail, notes</span></div></div>
+    <div class="thinking"><div class="think-row"><span class="think-dot"></span>
+      <span class="think-msg">Reading your calendar…</span><span class="think-time">2.4s</span></div>
+      <div class="think-bar"><div class="think-fill" style="width:62%"></div></div></div>
+    <div class="action-card">
+      <div class="ac-head">Send email <span class="ac-tag">needs you</span></div>
+      <div class="ac-row"><b>To</b>dev@example.com</div>
+      <div class="ac-body">Confirming the 24th works on our side.</div>
+      <div class="ac-actions"><button class="ac-confirm">Confirm &amp; send</button><button class="ghost tiny">Discard</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="ps-h">Composer</div>
+<div class="composer" style="margin:0;max-width:720px">
+  <div class="cmp-main-row"><button class="cmp-ic">＋</button>
+    <textarea rows="1" placeholder="Message your agent… it already knows you."></textarea></div>
+  <div class="cmp-bottom-bar">
+    <div class="cmp-bar-left">
+      <button class="cmp-pill"><span class="cmp-pill-ic">📁</span><span class="cmp-pill-label">workspace</span><span class="cmp-pill-arrow">⌵</span></button>
+      <button class="cmp-pill cmp-pill-model"><span class="cmp-pill-label">Opus 5</span><span class="cmp-pill-arrow">⌵</span></button>
+    </div>
+    <div class="cmp-bar-right"><button class="cmp-send">↑</button></div>
+  </div>
+</div>
+
+<div class="ps-h">Empty state</div>
+<div class="ps-pane">
+  <div class="he-cards" style="grid-template-columns:repeat(4,1fr)">
+    <button class="he-card"><span class="hc-ic">✉</span><b>Catch me up</b><span>What moved today</span></button>
+    <button class="he-card"><span class="hc-ic">◷</span><b>My week</b><span>What's coming</span></button>
+    <button class="he-card"><span class="hc-ic">◆</span><b>Ask my brain</b><span>Anything you've stored</span></button>
+    <button class="he-card"><span class="hc-ic">⚑</span><b>Open loops</b><span>What you owe people</span></button>
+  </div>
+  <div class="he-tip"><span class="het-ic">◆</span>
+    <span class="het-tx"><b>Your brain is still thin.</b> Enrich it and your agents get sharper.</span>
+    <button class="het-go">Enrich</button><button class="het-x">✕</button></div>
+</div>
+
+<div class="ps-h">Status — green means connected, gold means live, red means failed</div>
+<div class="ps-pane">
+  <div class="ps-row">
+    <span class="pc-badge ready">Ready</span><span class="pc-badge unready">Needs a key</span><span class="pc-badge local">On this Mac</span>
+    <span class="ts-badge using">Using this account</span><span class="ts-badge found">Found on computer</span>
+    <span class="gchip">Gmail</span><span class="privacy-badge loc-local">On-device</span><span class="privacy-badge loc-cloud">Cloud</span>
+  </div>
+  <div class="ps-row">
+    <span class="pc-tag reasoning">reasoning</span><span class="pc-tag tools">tools</span><span class="pc-tag vision">vision</span>
+    <span class="etype tool">tool</span><span class="etype project">project</span><span class="etype org">org</span><span class="etype person">person</span>
+  </div>
+  <div class="ps-row" style="font-size:12.5px;color:var(--muted)">
+    <span><span class="dot ok"></span>connected</span><span><span class="dot syncing"></span>syncing</span>
+    <span><span class="dot stale"></span>stale</span><span><span class="dot off"></span>off</span>
+    <span class="gc-spin"></span><span class="ts-spinner"></span>
+  </div>
+  <div class="ps-row" style="width:100%;max-width:320px;display:block">
+    <div class="ts-usage-row"><span class="ts-usage-title">Plan usage</span><span class="ts-usage-remaining">38% left</span></div>
+    <div class="ts-progress-track"><div class="ts-progress-fill" style="width:62%"></div></div>
+  </div>
+  <div class="enrich-panel" style="max-width:340px;margin-top:12px">
+    <div class="ep-bar"><div class="ep-fill" style="width:46%"></div></div>
+    <div class="ep-line"><span id="epState">Reading your memories…</span><b>46%</b></div>
+  </div>
+</div>
+
+<div class="ps-h">Controls</div>
+<div class="ps-pane">
+  <div class="ps-row">
+    <button class="tiny">Sync now</button><button class="tiny ghost">Clean up</button>
+    <button class="ghost">Cancel</button>
+    <button style="background:var(--north);color:var(--north-ink);border-radius:10px;padding:10px 18px;font-weight:600">Create agent</button>
+    <button class="ts-btn-signin">Sign in with Claude</button>
+  </div>
+  <div class="ps-row" style="max-width:340px;display:block">
+    <input class="ctx-input" placeholder="Unfocused input"><br><br>
+    <input class="ctx-input" placeholder="Click me — focus ring is gold" autofocus>
+  </div>
+</div>
+
+</body></html>

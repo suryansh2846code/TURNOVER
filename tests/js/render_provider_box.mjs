@@ -25,6 +25,15 @@ const makeEl = () => {
   return e;
 };
 
+// app.js installs a focus-management observer at load; every harness that
+// evaluates the file needs one to exist, or the whole script throws before the
+// function under test is ever reached.
+globalThis.MutationObserver = class {
+  observe() {}
+  disconnect() {}
+  takeRecords() { return []; }
+};
+
 globalThis.document = {
   querySelector: () => makeEl(), querySelectorAll: () => [],
   getElementById: () => makeEl(), createElement: () => makeEl(),
@@ -60,6 +69,9 @@ for (const p of catalog) {
       hasSigninButton: html.includes("ts-signin-btn"),
       hasApiKeyCard: html.includes("ts-toggle-key-btn"),
       connectedBadge: html.includes("ts-badge using"),
+      // The model list is where "what can this account run?" is answered, so
+      // the test needs to see it, not just that something rendered.
+      modelsHtml: html.slice(html.indexOf("pc-models-list")),
     };
   } catch (e) {
     out[p.id] = { ok: false, error: `${e.constructor.name}: ${e.message}` };
