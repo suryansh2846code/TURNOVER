@@ -53,14 +53,67 @@ line-length = 110
 exclude = [".venv", "brain-export"]
 
 [tool.ruff.lint]
-# Correctness first. The wider style set (blind-except, import order, datetime
-# hygiene) reports ~480 pre-existing findings; enable those in waves rather than
-# shipping a pipeline that is red on arrival and therefore ignored.
-select = ["F", "E9"]
+# Wave 2. The gate opened on `F, E9` — correctness only — with a note to widen
+# it in waves rather than ship a pipeline that is red on arrival and therefore
+# ignored. This is that widening: ~340 findings were reviewed and fixed, three
+# of them real (a sort key computed as `0 if x else 0`, a `msg if ok else msg`,
+# duplicate members in a literal set).
+select = [
+    "F",      # pyflakes — undefined names, unused imports, real mistakes
+    "E4", "E7", "E9",  # pycodestyle errors worth having
+    "W",      # whitespace problems that hide diffs
+    "B",      # bugbear — mutable defaults, unchained raises, loop-variable bugs
+    "UP",     # pyupgrade — keep to the Python version we actually require
+    "I",      # import order, so diffs stay small
+    "SIM",    # simplifications that remove branches rather than shorten lines
+    "RUF",    # ruff's own checks
+    "C4", "PIE", "RET",
+    "ASYNC",  # blocking calls on the event loop — see api/concurrency.py
+    "LOG", "G",  # logging that is lazy and structured
+    "PTH", "N",
+]
+
+ignore = [
+    # Compact one-liners (`aid = f"{base}-{n}"; n += 1`) are used deliberately
+    # throughout; rewriting 39 of them is churn, not clarity.
+    "E702",
+    # A few modules import late on purpose — after an environment is pinned, or
+    # to keep an optional dependency optional.
+    "E402",
+    # `l` as a loop variable in a handful of tight numeric loops.
+    "E741",
+    # Nested `with patch(...)` reads better than one line of six contexts.
+    "SIM117",
+    # Judgement calls about readability, not correctness.
+    "SIM102", "SIM108",
+    # **Load-bearing.** SIM401 rewrites `row["k"] if "k" in row else d` into
+    # `row.get("k", d)`. Rows here are `sqlite3.Row`, which supports `in` and
+    # `[]` but has NO `.get` — applying this fix raised AttributeError at
+    # runtime and broke the graph store. Do not enable without checking the
+    # row type at every site.
+    "SIM401",
+    # **Load-bearing, same reason.** SIM118 strips `.keys()` from
+    # `"col" in row.keys()`. On a `sqlite3.Row`, `"col" in row` tests the row's
+    # VALUES, not its keys — it is not a shorter spelling, it is a different
+    # question. That exact guard, written without `.keys()`, is what made the
+    # graph store discard every stored importance and confidence
+    # (see tests/test_sqlite_row_membership.py).
+    "SIM118",
+    # Prose in this codebase uses —, ·, × and … on purpose.
+    "RUF001", "RUF002", "RUF003",
+    # Would require a ClassVar sweep for no behavioural gain.
+    "RUF012",
+    # StrEnum changes comparison semantics; not a lint-time decision.
+    "UP042",
+    # `os.path` is clearer than `Path` when manipulating a PATH string.
+    "PTH112", "PTH123",
+    # A few deliberate names (module aliases, a DATA constant).
+    "N802", "N806", "N812",
+]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests bind results they never read, purely to make the call happen.
-"tests/*" = ["F841"]
+"tests/*" = ["F841", "RUF059"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -68,3 +121,75 @@ markers = [
     "real_oauth_server: test drives the OAuth callback over real HTTP (binds port 1455)",
 ]
 filterwarnings = ["ignore::DeprecationWarning"]
+
+
+# ── Type checking ────────────────────────────────────────────────────────────
+# Same philosophy as the lint gate: strict where it pays, lenient where it would
+# only produce suppressions. The app is full of deliberately dynamic code —
+# provider payloads, duck-typed connectors, sqlite rows — and demanding full
+# annotations there would buy noise.
+#
+# Strict is switched on for the modules that are *contracts*: the security
+# boundary, the concurrency lanes, the shared request shapes, the error
+# taxonomy, the connection state machine. Those are where a wrong type is a
+# real bug and where the next person needs the signature to be true.
+#
+# Tighten module by module. A module joins the strict list once it is clean —
+# never by adding ignores to make it pass.
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true          # optional connector SDKs are not installed
+warn_unused_configs = true
+warn_redundant_casts = true
+check_untyped_defs = false
+exclude = ["^\\.venv/", "^brain-export/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "lodestone.api.app",
+    "lodestone.api.assets",
+    "lodestone.api.concurrency",
+    "lodestone.api.schemas",
+    "lodestone.api.security",
+    "lodestone.core.models",
+    "lodestone.log",
+    "lodestone.models.capabilities",
+    "lodestone.models.connections",
+    "lodestone.models.errors",
+]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_return_any = true
+warn_unreachable = true
+no_implicit_optional = true
+
+# Modules that predate the type gate. New code is checked by default — this list
+# is the grandfathered remainder, and it only ever gets shorter. Removing a name
+# and finding it clean is the whole ritual; adding one is not.
+#
+# What is left here is overwhelmingly *precision*, not bugs: provider payloads
+# typed as `Any`, duck-typed connector capabilities, sqlite rows. The errors
+# that were real have been fixed — a sort key that was always zero, a graph
+# store discarding every stored confidence, a `.write()` on a stdin that could
+# be None, a regex searched twice with the second search unguarded.
+[[tool.mypy.overrides]]
+module = [
+    "lodestone.agents.custom",
+    "lodestone.agents.tools",
+    "lodestone.api.routes.agents",
+    "lodestone.api.routes.providers",
+    "lodestone.brain.brain",
+    "lodestone.brain.graph",
+    "lodestone.connectors.apple_mail",
+    "lodestone.connectors.gcal",
+    "lodestone.core.embeddings",
+    "lodestone.core.store",
+    "lodestone.models.cursor",
+    "lodestone.models.gemini",
+    "lodestone.models.openai_compat",
+    "lodestone.models.registry",
+    "lodestone.reminders",
+    "lodestone.routines",
+    "lodestone.tasks",
+]
+ignore_errors = true

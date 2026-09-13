@@ -22,10 +22,16 @@ jobs:
         run: |
           uv venv
           uv pip install -e .
-          uv pip install pytest ruff
+          uv pip install pytest ruff mypy
 
       - name: Lint
         run: uv run ruff check lodestone tests
+
+      - name: Types
+        # Strict on the modules that are contracts (the security boundary, the
+        # concurrency lanes, the error taxonomy); the grandfathered list in
+        # pyproject.toml only ever gets shorter. See [tool.mypy] there.
+        run: uv run mypy lodestone
 
       - name: Frontend syntax
         run: node --check lodestone/web/app.js
