@@ -26,10 +26,13 @@ import subprocess
 import time
 from pathlib import Path
 
+from ..log import get_logger
 from . import login_processes
 from .base import ChatResult, LLMProvider, Message, parse_cli_json
 from .cache import ttl_cached
 from .errors import ErrorKind, ProviderError, classify_cli
+
+log = get_logger(__name__)
 
 # GUI-launched apps get a minimal PATH; the installer uses ~/.local/bin.
 _EXTRA_BIN_DIRS = [
@@ -270,6 +273,63 @@ class GrokCliProvider(LLMProvider):
         if hist:
             system = (system + "\n\nRecent conversation so far:\n" + hist).strip()
         return f"{system}\n\n---\n\n{prompt}" if system else prompt
+
+
+    def _stream_command(self, messages, tools):
+        """`grok --output-format streaming-messages-json` emits the Anthropic
+        Messages wire format directly; `--include-partial-messages` adds the
+        text deltas that make it a stream rather than one lump."""
+        import tempfile
+
+        workspace = tempfile.gettempdir()
+        cmd = [self._bin, "-p", self._prompt(messages),
+               "--output-format", "streaming-messages-json",
+               "--include-partial-messages", "--cwd", str(workspace)]
+        if self.model:
+            cmd += ["-m", self.model]
+        return cmd, None, {**os.environ, "PATH": _augmented_path()}
+
+    def stream(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
+        """Stream by asking the CLI for incremental events.
+
+        All three vendor CLIs emit Anthropic Messages events, one JSON object
+        per line, so `streaming.anthropic_events` parses them all.
+
+        If the stream produces no text at all — an older CLI that does not know
+        the flag, a format that has moved — nothing has been yielded yet, so the
+        plain call runs instead and the user gets an answer rather than silence.
+        Falling back *after* emitting text would duplicate it, which is why the
+        decision hangs on whether any arrived.
+        """
+        from .streaming import from_result, stream_cli
+
+        cmd, stdin, env = self._stream_command(messages, tools)
+        if cmd is None:
+            yield from from_result(self.chat(messages, tools=tools,
+                                             temperature=temperature,
+                                             max_tokens=max_tokens))
+            return
+
+        saw_text = False
+        done = None
+        try:
+            for event in stream_cli(cmd, env=env, stdin=stdin,
+                                    provider=self.name):
+                if event.kind == "text" and event.text:
+                    saw_text = True
+                    yield event
+                elif event.kind == "done":
+                    done = event
+        except Exception as exc:
+            log.debug("%s streaming failed: %s", self.name, exc)
+            saw_text = False
+
+        if saw_text and done is not None and done.result is not None:
+            yield done
+            return
+        yield from from_result(self.chat(messages, tools=tools,
+                                         temperature=temperature,
+                                         max_tokens=max_tokens))
 
     def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
         if not self._bin:

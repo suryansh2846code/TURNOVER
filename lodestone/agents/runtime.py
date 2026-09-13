@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -10,6 +11,7 @@ from ..brain import get_brain
 from ..config import get_settings
 from ..log import get_logger, suppressed
 from ..models import Message, get_provider
+from ..models.base import ChatResult
 from ..models.entitlements import resolve_usable_model
 from . import delegation, planning
 from .agent import Agent, AgentMemory
@@ -205,7 +207,23 @@ def format_runtime_context_prompt(identity: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _answer_without_tools(provider, messages, on_failure):
+def _collect(events, emit) -> ChatResult:
+    """Drain a provider stream, passing text on as it arrives.
+
+    The whole response is still assembled, because the agent loop needs the
+    tool calls from the same round — streaming only the prose would be simpler
+    and would break it.
+    """
+    result = None
+    for event in events:
+        if event.kind == "text" and event.text:
+            emit({"type": "token", "text": event.text})
+        elif event.kind == "done":
+            result = event.result
+    return result if result is not None else ChatResult(text="")
+
+
+def _answer_without_tools(provider, messages, on_failure, emit):
     """One last call with tools withheld, to turn research into an answer.
 
     Returning the failure `TurnResult` rather than raising keeps the contract
@@ -213,7 +231,8 @@ def _answer_without_tools(provider, messages, on_failure):
     401 into a 500 the last time.
     """
     try:
-        return provider.chat(messages, tools=None, temperature=0.15).text
+        return _collect(provider.stream(messages, tools=None, temperature=0.15),
+                        emit).text
     except Exception as exc:
         return on_failure(exc)
 
@@ -221,9 +240,14 @@ def _answer_without_tools(provider, messages, on_failure):
 def run_turn(agent_id: str, user_text: str, *,
              provider_name: str | None = None,
              model_name: str | None = None,
-             effort: str | Effort | None = None) -> TurnResult:
+             effort: str | Effort | None = None,
+             on_event: Callable[[dict], None] | None = None) -> TurnResult:
     agent = get_agent(agent_id)
     profile = effort if isinstance(effort, Effort) else get_effort(effort)
+    # Streaming is a callback rather than a second implementation of the loop.
+    # One code path answers whether or not anyone is watching it happen, which
+    # is the only way the streamed turn and the plain one cannot drift.
+    emit = on_event or (lambda _event: None)
     settings = get_settings()
     p_name = (provider_name.strip() if provider_name else None) or agent.model_provider or settings.model_provider
     m_name = (model_name.strip() if model_name else None) or agent.model_name
@@ -347,7 +371,8 @@ def run_turn(agent_id: str, user_text: str, *,
         for _step in range(budget):
             # low temperature → more reliable instruction-following & tool use
             try:
-                result = provider.chat(messages, tools=tools, temperature=0.15)
+                result = _collect(provider.stream(messages, tools=tools,
+                                                  temperature=0.15), emit)
             except Exception as exc:
                 return _failed(exc)
             if not result.wants_tools:
@@ -357,6 +382,9 @@ def run_turn(agent_id: str, user_text: str, *,
             messages.append(Message(
                 role="assistant", content=result.text, tool_calls=result.tool_calls,
             ))
+            for call in result.tool_calls:
+                emit({"type": "tool_call", "name": call.name,
+                      "arguments": call.arguments})
             outcomes = runner.run(result.tool_calls)
             for outcome in outcomes:
                 call = outcome.call
@@ -364,6 +392,9 @@ def run_turn(agent_id: str, user_text: str, *,
                     kind="tool_call", name=call.name, arguments=call.arguments))
                 trace.append(TraceStep(kind="tool_result", name=call.name,
                                        result=outcome.output, repeated=outcome.repeated))
+                emit({"type": "tool_result", "name": call.name,
+                      "result": outcome.output[:2000],
+                      "repeated": outcome.repeated})
                 messages.append(Message(
                     role="tool", content=outcome.output, tool_call_id=call.id,
                     name=call.name,
@@ -375,6 +406,7 @@ def run_turn(agent_id: str, user_text: str, *,
             plan = planning.current()
             if plan is not None and plan.steps:
                 messages.append(Message(role="system", content=plan.render()))
+                emit({"type": "plan", "steps": plan.as_list()})
 
             # "That did not work" is worth saying once, explicitly. Left to
             # itself a model often re-issues the same broken call, and the
@@ -391,7 +423,7 @@ def run_turn(agent_id: str, user_text: str, *,
                     log.debug("agent %s stalled after %d rounds; asking it to answer",
                               agent_id, _step + 1)
                     messages.append(Message(role="system", content=BUDGET_PROMPT))
-                    reply = _answer_without_tools(provider, messages, _failed)
+                    reply = _answer_without_tools(provider, messages, _failed, emit)
                     if isinstance(reply, TurnResult):
                         return reply
                     break
@@ -402,7 +434,7 @@ def run_turn(agent_id: str, user_text: str, *,
             # things up for twenty rounds can usually answer — it has just never
             # been told to stop.
             messages.append(Message(role="system", content=BUDGET_PROMPT))
-            reply = _answer_without_tools(provider, messages, _failed)
+            reply = _answer_without_tools(provider, messages, _failed, emit)
             if isinstance(reply, TurnResult):
                 return reply
 

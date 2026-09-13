@@ -1,6 +1,7 @@
 """The agents themselves: listing them, talking to them, and binding a model to one."""
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -264,6 +265,71 @@ def chat(agent_id: str, body: ChatIn):
         return {"agent_id": agent_id, "provider": "", "model": "", "trace": [],
                 "reply": f"⚠️ Something went wrong: {str(exc)[:200]}"}
     return result.as_dict()
+
+
+@router.post("/api/agents/{agent_id}/chat/stream")
+async def chat_stream(agent_id: str, body: ChatIn):
+    """The same turn as `/chat`, delivered as it happens.
+
+    Server-Sent Events rather than a WebSocket: the flow is one-way, it survives
+    a proxy that only speaks HTTP, and the browser reconnects on its own.
+
+    The turn itself is blocking — a model call, then tools, then another model
+    call — so it runs on the `MODEL_CALLS` lane and pushes each event back to
+    the event loop as it happens. Running it inline would hold a worker thread
+    for the whole conversation, which is the starvation this server already
+    learned about once.
+
+    Every event is a JSON object with a `type`: `token` as text is written,
+    `tool_call` / `tool_result` as work happens, `plan` when the agent revises
+    it, and exactly one `done` carrying the authoritative result. A client
+    should render `token`s as a preview and replace them with `done`'s reply —
+    the streamed text is what the model said on the way, and `done.reply` is
+    what was stored.
+    """
+    import anyio
+    from fastapi.responses import StreamingResponse
+
+    from ...agents import run_turn
+    from ..concurrency import MODEL_CALLS
+
+    message = (body.message or "").strip()
+    if not message:
+        raise HTTPException(400, "message is required")
+
+    send, receive = anyio.create_memory_object_stream(max_buffer_size=512)
+
+    def _work(push) -> None:
+        try:
+            result = run_turn(agent_id, message, provider_name=body.provider,
+                              model_name=body.model, effort=body.effort,
+                              on_event=push)
+            push({"type": "done", "result": result.as_dict()})
+        except KeyError:
+            push({"type": "error", "message": f"unknown agent '{agent_id}'"})
+        except Exception as exc:                       # never break the stream
+            log.debug("streamed turn failed: %s", exc)
+            push({"type": "error", "message": str(exc)[:300]})
+
+    async def _pump() -> None:
+        async with send:
+            def push(event: dict) -> None:
+                anyio.from_thread.run(send.send, event)
+
+            await anyio.to_thread.run_sync(lambda: _work(push),
+                                           limiter=MODEL_CALLS)
+
+    async def _events():
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_pump)
+            async for event in receive:
+                yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        _events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/api/agents/{agent_id}/clear")

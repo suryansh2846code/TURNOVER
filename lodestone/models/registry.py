@@ -57,6 +57,28 @@ class MockProvider(LLMProvider):
     def __init__(self, model: str | None = None) -> None:
         self.model = model or "mock-1"
 
+
+    def stream(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
+        """Stream the canned reply a few words at a time.
+
+        The offline model is how this app runs on first launch with no keys, so
+        it is also the only way to exercise the streaming path end to end — the
+        SSE endpoint, a reconnect, the incremental render — without spending
+        anyone's tokens.
+        """
+        from .streaming import StreamEvent, from_result
+
+        result = self.chat(messages, tools=tools, temperature=temperature,
+                           max_tokens=max_tokens)
+        if result.tool_calls or not result.text:
+            yield from from_result(result)
+            return
+        words = result.text.split(" ")
+        for i in range(0, len(words), 3):
+            chunk = " ".join(words[i:i + 3])
+            yield StreamEvent("text", chunk if i == 0 else " " + chunk)
+        yield StreamEvent("done", result=result)
+
     def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
         last = messages[-1]
         tool_names = {t.name for t in (tools or [])}

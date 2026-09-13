@@ -1540,3 +1540,15 @@ button.tiny.running:hover { background: linear-gradient(to right,
   font-size: 12px;
   color: var(--muted);
 }
+
+/* The reply as it is being written, inside the thinking card. Muted, because
+   it is a preview: the finished message replaces it a moment later. */
+.think-preview {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  color: var(--muted, #9aa3b2);
+  font-size: 0.95em;
+  line-height: 1.5;
+  max-height: 40vh;
+  overflow-y: auto;
+}

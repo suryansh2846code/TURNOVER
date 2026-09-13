@@ -95,6 +95,28 @@ class LLMProvider:
     ) -> ChatResult:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def stream(
+        self,
+        messages: list[Message],
+        *,
+        tools: list[Tool] | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 1500,
+    ):
+        """The same answer, delivered as it is written.
+
+        The default is a complete, correct stream that happens to arrive in one
+        piece, so every provider supports streaming from the day the seam
+        exists and callers never branch on whether a backend can do it. A
+        provider that really streams overrides this; the agent loop cannot tell
+        the difference except in timing, which is the whole point.
+        """
+        from .streaming import from_result
+
+        yield from from_result(self.chat(messages, tools=tools,
+                                         temperature=temperature,
+                                         max_tokens=max_tokens))
+
 
 def parse_cli_json(stdout: str) -> dict:
     """Pull a JSON object out of a CLI's stdout.

@@ -1987,8 +1987,31 @@ function makeThinking(provider) {
     if (want !== pi) { pi = want; msgEl.textContent = THINK_PHRASES[pi]; }
   };
   tick();
-  const timer = setInterval(tick, 150);
-  return { el, done: () => { clearInterval(timer); el.remove(); } };
+  let timer = setInterval(tick, 150);
+  let body = null;
+  // Once anything real arrives, stop guessing. The phrases and the countdown
+  // exist only to fill silence, and there is no longer any silence to fill.
+  const stopGuessing = () => {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (fill) fill.style.width = "100%";
+    if (timeEl) timeEl.textContent = "";
+  };
+  return {
+    el,
+    note: (label) => { stopGuessing(); if (msgEl) msgEl.textContent = label; },
+    preview: (textSoFar) => {
+      stopGuessing();
+      if (!body) {
+        body = document.createElement("div");
+        body.className = "think-preview";
+        el.appendChild(body);
+      }
+      body.textContent = textSoFar;
+      const wrap = $("#messages");
+      if (wrap) wrap.scrollTop = wrap.scrollHeight;
+    },
+    done: () => { if (timer) clearInterval(timer); el.remove(); },
+  };
 }
 
 async function send(text) {
@@ -2000,11 +2023,7 @@ async function send(text) {
   const thinkProv = (curAgent && curAgent.model_provider) || $("#provider").value;
   const think = makeThinking(thinkProv);
   try {
-    const res = await api(`/api/agents/${current}/chat`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text }),
-      signal: controller.signal,
-    });
+    const res = await streamTurn(text, think);
     think.done();
     addTrace(res.trace || []);
     addMsg("assistant", res.reply);
@@ -2018,6 +2037,82 @@ async function send(text) {
   }
   finally { controller = null; setBusy(false); }
 }
+
+// Run one turn over Server-Sent Events, showing the reply as it is written and
+// naming each tool as it runs. Falls back to the plain endpoint if streaming is
+// unavailable for any reason — a user whose stream broke wants an answer, not a
+// second kind of error.
+async function streamTurn(text, think) {
+  const body = JSON.stringify({
+    message: text, provider: $("#provider").value || undefined,
+    model: localStorage.getItem("lodestone_model") || undefined,
+    effort: localStorage.getItem("lodestone_effort") || undefined,
+  });
+  let resp;
+  try {
+    resp = await fetch(`/api/agents/${current}/chat/stream`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body, signal: controller.signal,
+    });
+  } catch (e) {
+    if (controller.signal.aborted) throw e;
+    resp = null;
+  }
+  if (!resp || !resp.ok || !resp.body) return plainTurn(body);
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "", preview = "", result = null, failure = null;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    // SSE frames are separated by a blank line; a chunk can split one.
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop();
+    for (const frame of frames) {
+      const line = frame.split("\n").find((l) => l.startsWith("data:"));
+      if (!line) continue;
+      let ev; try { ev = JSON.parse(line.slice(5)); } catch (_) { continue; }
+      if (ev.type === "token") {
+        preview += ev.text;
+        think.preview(preview);
+      } else if (ev.type === "tool_call") {
+        think.note(TOOL_LABELS[ev.name] || ev.name.replace(/_/g, " "));
+      } else if (ev.type === "plan") {
+        const next = (ev.steps || []).find((s) => !s.done);
+        if (next) think.note(next.text);
+      } else if (ev.type === "done") {
+        result = ev.result;
+      } else if (ev.type === "error") {
+        failure = ev.message;
+      }
+    }
+  }
+  if (result) return result;
+  if (failure) throw failure;
+  return plainTurn(body);        // stream ended with nothing usable
+}
+
+async function plainTurn(body) {
+  return api(`/api/agents/${current}/chat`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body, signal: controller.signal,
+  });
+}
+
+// What each tool is doing, in the user's words rather than ours.
+const TOOL_LABELS = {
+  search_brain: "Searching your brain…", remember: "Saving that…",
+  list_entities: "Looking at who and what you work with…",
+  web_search: "Searching the web…", gmail_search: "Reading your mail…",
+  add_task: "Adding a task…", list_tasks: "Checking your tasks…",
+  complete_task: "Ticking that off…", ask_agent: "Asking another agent…",
+  update_plan: "Planning…", create_open_loop: "Noting a loose end…",
+  list_open_loops: "Checking loose ends…", complete_open_loop: "Closing that off…",
+};
+
 
 function autoGrow() {
   const t = $("#input"); if (!t) return;

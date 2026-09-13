@@ -12,9 +12,11 @@ import uuid
 
 import httpx
 
-from ..log import suppressed
+from ..log import get_logger, suppressed
 from .base import ChatResult, LLMProvider, Message, ToolCall, _saved_key
 from .errors import ErrorKind, ProviderError, classify_exception, classify_http
+
+log = get_logger(__name__)
 
 
 class OpenAICompatProvider(LLMProvider):
@@ -86,6 +88,44 @@ class OpenAICompatProvider(LLMProvider):
     def _refine_error(self, err):
         """Hook for a provider to sharpen a classified error. Default: as-is."""
         return err
+
+    def stream(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
+        """Real streaming for anything speaking the chat-completions dialect.
+
+        The ChatGPT-subscription path (no API key) has its own transport, so it
+        falls through to the single-piece default rather than being reimplemented.
+        """
+        from .streaming import from_result, openai_events, sse_payloads
+
+        if self.name == "openai" and not self.api_key:
+            yield from from_result(self.chat(messages, tools=tools,
+                                             temperature=temperature,
+                                             max_tokens=max_tokens))
+            return
+
+        payload = {"model": self.model, "messages": self._to_openai(messages),
+                   "temperature": temperature, "max_tokens": max_tokens,
+                   "stream": True}
+        if tools:
+            payload["tools"] = [{"type": "function",
+                                 "function": {"name": t.name,
+                                              "description": t.description,
+                                              "parameters": t.parameters}}
+                                for t in tools]
+        headers = {"content-type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        try:
+            with httpx.stream("POST", f"{self.base_url}/chat/completions",
+                              headers=headers, json=payload, timeout=300) as resp:
+                resp.raise_for_status()
+                yield from openai_events(sse_payloads(resp.iter_lines()))
+            return
+        except Exception as exc:
+            log.debug("%s streaming failed, falling back: %s", self.name, exc)
+        yield from from_result(self.chat(messages, tools=tools,
+                                         temperature=temperature,
+                                         max_tokens=max_tokens))
 
     def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
         if self.name == "openai" and not self.api_key:

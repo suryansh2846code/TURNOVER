@@ -18,9 +18,11 @@ import uuid
 
 import httpx
 
-from ..log import suppressed
+from ..log import get_logger, suppressed
 from .base import ChatResult, LLMProvider, Message, ToolCall, _saved_key
 from .errors import ErrorKind, ProviderError, classify_exception, classify_http
+
+log = get_logger(__name__)
 
 
 class AnthropicProvider(LLMProvider):
@@ -96,6 +98,55 @@ class AnthropicProvider(LLMProvider):
                     "content": m.content,
                 }]})
         return system, out
+
+    def stream(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
+        """Real streaming over the Messages API.
+
+        With no API key this is a subscription, and the Claude CLI backend has
+        its own streaming — delegating keeps that one code path rather than
+        reimplementing it here.
+        """
+        from .streaming import anthropic_events, from_result, sse_payloads
+
+        if not self.api_key:
+            backend = self._subscription_backend()
+            if backend is None:
+                yield from from_result(self.chat(
+                    messages, tools=tools, temperature=temperature,
+                    max_tokens=max_tokens))
+                return
+            yield from backend.stream(messages, tools=tools,
+                                      temperature=temperature,
+                                      max_tokens=max_tokens)
+            return
+
+        system, msgs = self._to_blocks(messages)
+        payload = {"model": self.model, "max_tokens": max_tokens,
+                   "temperature": temperature, "messages": msgs, "stream": True}
+        if system:
+            payload["system"] = system
+        if tools:
+            payload["tools"] = [{"name": t.name, "description": t.description,
+                                 "input_schema": t.parameters} for t in tools]
+        try:
+            with httpx.stream(
+                "POST", f"{self.base_url}/v1/messages",
+                headers={"x-api-key": self.api_key,
+                         "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json=payload, timeout=300,
+            ) as resp:
+                resp.raise_for_status()
+                yield from anthropic_events(sse_payloads(resp.iter_lines()))
+            return
+        except Exception as exc:
+            # Falling back rather than surfacing a stream-specific failure: the
+            # non-streaming path has the full error taxonomy, and a user whose
+            # stream broke wants an answer, not a second kind of error message.
+            log.debug("anthropic streaming failed, falling back: %s", exc)
+        yield from from_result(self.chat(messages, tools=tools,
+                                         temperature=temperature,
+                                         max_tokens=max_tokens))
 
     def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
         if not self.api_key:
