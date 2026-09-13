@@ -514,6 +514,60 @@ actionable message, a redacted detail, and `retryable`.
 - A `chat()` must **return** a `ChatResult`, never raise: an uncaught
   `raise_for_status()` is what turned a Claude 401 into a 500.
 
+## The agent loop
+*(Scored, not asserted: `lodestone/agents/evaluation.py` runs the real loop
+against a scripted model — `GET /api/agents/evaluate`, or
+`tests/test_agent_evaluation.py`, which fails if any capability breaks.)*
+
+- **Effort is one gear selector, not a settings screen.** Low / Medium / High
+  derive the tool budget, parallelism, verbatim history window, who writes the
+  summary, delegation depth and recall size (`agents/effort.py`). Every one of
+  those trades quality for cost in the same direction, and the model runs on the
+  *user's* key or subscription — so a deeper loop spends their money. Low is a
+  real choice: a 3B model given 24 rounds mostly finds 24 ways to go wrong.
+- **Depth needs a memo and a stall detector.** A model with rounds left and
+  nothing new to learn re-issues the same call forever. `agents/loop.py` answers
+  a repeat from memory with a note to move on, and ends the turn after two
+  rounds that learn nothing. Two cases, not one: the same call three times in
+  *one* round is a wasteful model (run once, answer all three); the same call in
+  a *later* round is a model that has stopped making progress.
+- **Tool calls in a round run in parallel.** Safe because
+  `sqlite3.threadsafety` is 3, every store opens `check_same_thread=False` under
+  WAL with a busy timeout, and 60 concurrent mixed reads/writes across three
+  stores produced no errors. Results are reassembled in request order — each has
+  to match its `tool_call_id`.
+- **Compress old turns, never drop them.** The window was six messages. Recent
+  turns stay verbatim; older ones become a running summary that is *extended*,
+  not rewritten (`agents/context.py`), so a long conversation does not
+  re-summarise itself every message.
+- **Delegation's guards are the feature** (`agents/delegation.py`). Depth from
+  the effort profile, a sub-agent on half its parent's budget, and no agent
+  twice in one chain. The chain lives in a `ContextVar` and tools run in a
+  thread pool, which does **not** copy context — one `copy_context()` **per
+  call** (a `Context` cannot be entered twice at once). Miss that and the other
+  two guards are decoration. Refusals are returned as prose, not raised: the
+  caller is a model.
+- **A routine pre-authorises the routine, not the stranger who wrote the email
+  it read.** `new_email` hands an agent text an attacker controls, and that text
+  can contain an `<action type="send_email">`. Outbound actions therefore need a
+  recipient on the user's explicit allow-list (`agents/permissions.py`);
+  everything else queues for one tap (`agents/approvals.py`). Derived lists
+  ("people you've emailed") were rejected — a stranger already in your inbox is
+  exactly who an injection would name. Creating a routine is *never* unattended:
+  it widens its own authority. **Interactive chat is not gated** — the Confirm
+  button is a stronger signal, and a test fails if that path starts asking twice.
+- **Streaming is a callback on the same loop, never a second loop.**
+  `run_turn(on_event=…)`; a test asserts watching a turn does not change it.
+  Two wire formats cover everything (`models/streaming.py`): Anthropic Messages
+  (Claude API + Claude CLI's `stream_event` nesting + Grok CLI) and OpenAI
+  chat-completions (OpenAI, OpenRouter, Ollama, DeepSeek, xAI, Gemini).
+  `LLMProvider.stream()` defaults to yielding a whole `chat()` in one piece, so
+  no caller ever branches on whether a backend can stream. CLI backends fall
+  back when a stream yields no text — decided *before* emitting anything, since
+  falling back afterwards would duplicate it. **In the browser, reassemble SSE
+  frames across chunk boundaries**: one network chunk is not one frame, and a
+  reader that assumes it passes every hand test and drops tokens for real.
+
 ## Keep everything general / device-independent
 This app ships to many users on many machines. Do **not** bake in anything specific
 to one person or one computer:
