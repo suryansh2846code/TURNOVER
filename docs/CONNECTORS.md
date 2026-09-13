@@ -105,27 +105,27 @@ this interface. Fix the interface while there are eleven, not fifty.
 
 The whole point: **write this once, and every new source after it is config.**
 
-- [ ] **2.1 — `connectors/mcp_source.py`.** A `Connector` subclass that spawns an
+- [x] **2.1 — `connectors/mcp_source.py`.** A `Connector` subclass that spawns an
       MCP server over stdio and maps its tools onto `sync()`. The SDK is already
       installed and `ClientSession` / `stdio_client` both import — Lodestone
       currently uses MCP in one direction only (serving its brain out via
       `mcp_server/`). This is the same library pointed the other way.
-- [ ] **2.2 — Tool → memory mapping.** The hard part, and where this earns or
+- [x] **2.2 — Tool → memory mapping.** The hard part, and where this earns or
       loses its keep. A server exposing `list_messages` pages well; one exposing
       only `search_messages` cannot be bulk-synced and must degrade to
       on-demand recall instead of pretending to sync. Detect which, and say so
       in the UI rather than silently indexing nothing.
-- [ ] **2.3 — Sign-in belongs to the server.** A local stdio MCP server runs its
+- [x] **2.3 — Sign-in belongs to the server.** A local stdio MCP server runs its
       own browser OAuth against its own vendor — GitHub's official server does
       exactly this. So **we register no OAuth client, need no CASA assessment,
       and the consent screen shows the vendor's name.** This is the same shape
       as `auth_flows.py` for models ("the OAuth client belongs to that CLI"), so
       reuse that seam rather than inventing a parallel one.
-- [ ] **2.4 — Errors are translated, never dumped.** `models/errors.py` already
+- [x] **2.4 — Errors are translated, never dumped.** `models/errors.py` already
       has the taxonomy and `classify_cli()`. An MCP server that dies, hangs or
       returns a protocol error must surface as *what happened and what to do* —
       never raw JSON, never a stack trace.
-- [ ] **2.5 — Health, visibly.** A server that crashed on launch must not read
+- [x] **2.5 — Health, visibly.** A server that crashed on launch must not read
       as "Connected". Reuse the `is_configured() -> (ready, reason)` contract.
 
 ---

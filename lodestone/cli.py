@@ -78,9 +78,13 @@ def sync(connector: str = typer.Argument(..., help="gmail|gcal|gdrive|notion|ime
          path: str = typer.Option(None, help="folder path (files connector only)")):
     """Sync a connector. Runs interactive browser auth if needed (Gmail/Calendar/Drive)."""
     from .connectors import get_connector
-    params = {"path": path} if path else {}
     console.print(f"[dim]syncing {connector}…[/]")
-    res = get_connector(connector).sync(**params)
+    # `path` is the Files connector's own option, so it is passed explicitly
+    # rather than splatted from a dict — a `**dict[str, str]` hides every
+    # keyword behind one string type, which is exactly what let this call sit
+    # untypechecked until `sync()` gained a real signature.
+    res = (get_connector(connector).sync(path=path) if path
+           else get_connector(connector).sync())
     if res.errors:
         console.print(f"[red]errors:[/] {res.errors}")
     console.print(f"[green]+{res.added}[/] added, {res.skipped} skipped — {res.detail}")

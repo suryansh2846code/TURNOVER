@@ -45,6 +45,15 @@ def _custom_apps() -> list[dict]:
     return []
 
 
+def _mcp_servers() -> list[str]:
+    """Ids of the MCP-backed connectors the user has configured."""
+    from .connectors.mcp_source import list_servers
+
+    with suppressed("listing the user's MCP connectors"):
+        return [s.id for s in list_servers()]
+    return []
+
+
 class Scheduler:
     def __init__(self) -> None:
         self._thread: threading.Thread | None = None
@@ -119,6 +128,21 @@ class Scheduler:
                 summary[key] = {"added": res.added, "errors": res.errors[:1]}
             except Exception as exc:
                 summary[f"files:{path}"] = {"added": 0, "errors": [str(exc)[:120]]}
+
+        # MCP-backed connectors: one per server the user configured, so they
+        # live outside REGISTRY for the same reason custom apps do.
+        for server_id in _mcp_servers():
+            if self._cancel.is_set():
+                summary["_cancelled"] = True
+                break
+            try:
+                res = get_connector(f"mcp:{server_id}").sync(
+                    interactive=interactive, cancel=self._cancel)
+                summary[f"mcp:{server_id}"] = {"added": res.added,
+                                               "errors": res.errors[:1]}
+            except Exception as exc:
+                summary[f"mcp:{server_id}"] = {"added": 0,
+                                               "errors": [str(exc)[:120]]}
 
         # custom apps are registered outside REGISTRY, one per user definition
         for app in _custom_apps():
