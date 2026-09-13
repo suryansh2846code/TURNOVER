@@ -25,6 +25,10 @@ class OpenAICompatProvider(LLMProvider):
     default_model = "gpt-5.6-terra"
     key_env = "OPENAI_API_KEY"
     key_required = True
+    #: /v1/chat/completions takes an image as an image_url part, so every
+    #: backend on this wire format can carry one. Whether the chosen MODEL can
+    #: see it is a separate question, answered by the catalog.
+    supports_images = True
 
     def __init__(self, model: str | None = None, api_key: str | None = None,
                  base_url: str | None = None) -> None:
@@ -81,6 +85,16 @@ class OpenAICompatProvider(LLMProvider):
                     "content": m.content or None,
                     "tool_calls": tc_list,
                 })
+            elif m.role == "user" and m.images:
+                # The multimodal form is a content ARRAY; sending it for a
+                # text-only turn is a needless difference, so only user turns
+                # that actually carry an image take this shape.
+                parts: list[dict] = [{"type": "image_url",
+                                      "image_url": {"url": img.as_data_url()}}
+                                     for img in m.images]
+                if m.content:
+                    parts.append({"type": "text", "text": m.content})
+                out.append({"role": "user", "content": parts})
             else:
                 out.append({"role": m.role, "content": m.content})
         return out

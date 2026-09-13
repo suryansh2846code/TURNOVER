@@ -2003,7 +2003,7 @@ function actionCard(a) {
   return el;
 }
 
-function addMsg(role, text) {
+function addMsg(role, text, images) {
   const box = $("#messages");
   const he = box.querySelector(".hero-empty"); if (he) he.remove();
   if (role === "assistant") {
@@ -2017,7 +2017,26 @@ function addMsg(role, text) {
     box.scrollTop = 1e9; return el;
   }
   const el = document.createElement("div");
-  el.className = "msg " + role; el.textContent = text;
+  el.className = "msg " + role;
+  if (images && images.length) {
+    // textContent for the words, a built node for the pictures: the message
+    // is user input, so it must never be interpolated into innerHTML.
+    const strip = document.createElement("div");
+    strip.className = "msg-images";
+    for (const a of images) {
+      const im = document.createElement("img");
+      im.src = a.dataUrl; im.alt = a.name || "attached image";
+      strip.appendChild(im);
+    }
+    el.appendChild(strip);
+    if (text) {
+      const t = document.createElement("div");
+      t.textContent = text;
+      el.appendChild(t);
+    }
+  } else {
+    el.textContent = text;
+  }
   box.appendChild(el); box.scrollTop = 1e9; return el;
 }
 function addTrace(steps) {
@@ -2106,7 +2125,13 @@ async function send(text) {
   if (busy) return;             // guard: ignore sends while a turn is running
   setBusy(true);
   controller = new AbortController();
-  addMsg("user", text);
+  // Detach the attachments from the composer the moment the turn starts: the
+  // user can type the next message while this one runs, and anything still in
+  // the tray then belongs to THAT message, not this one.
+  sentImages = attachments;
+  attachments = [];
+  renderAttachments();
+  addMsg("user", text, sentImages);
   const curAgent = agents.find((x) => x.id === current);
   const thinkProv = (curAgent && curAgent.model_provider) || $("#provider").value;
   const think = makeThinking(thinkProv);
@@ -2135,6 +2160,7 @@ async function streamTurn(text, think) {
     message: text, provider: $("#provider").value || undefined,
     model: localStorage.getItem("lodestone_model") || undefined,
     effort: localStorage.getItem("lodestone_effort") || undefined,
+    images: sentImages.map((a) => ({ data_url: a.dataUrl, name: a.name })),
   });
   let resp;
   try {
@@ -2849,11 +2875,120 @@ $("#pickIngest").onclick = async () => {
   } catch (e) { toast(String(e)); }
 };
 
+// ── image attachments ──────────────────────────────────────────────────────
+// #attachBtn had an icon and no click handler — a control that could not work,
+// which is the one thing the product rules here are most explicit about. It
+// picks files now, and the same three checks guard every way in: the button,
+// a paste, and a drop.
+//
+// The vision check happens HERE, before the request, because we already know
+// the answer: the catalog says whether the chosen model can see. Sending it
+// anyway would bill the user for a failure we predicted. The server repeats
+// the check — the client is a convenience, never the guard.
+const IMG_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const IMG_MAX_BYTES = 5 * 1024 * 1024;     // decoded; the wire cap is larger
+const IMG_MAX = 4;
+let attachments = [];                       // {name, dataUrl, size}
+let sentImages = [];                        // the set belonging to the turn in flight
+
+function modelSeesImages() {
+  const pid = ($("#provider") && $("#provider").value) || localStorage.getItem("lodestone_provider") || "";
+  const mid = localStorage.getItem("lodestone_model") || "";
+  const prov = (MODEL_CATALOG || []).find((p) => p.id === pid);
+  if (!prov) return { ok: true };           // unknown is not "no"
+  // No model chosen means Auto, and Auto resolves to the best one available —
+  // refusing there would refuse a model that can probably see.
+  if (!mid) return { ok: true };
+  const m = (prov.models || []).find((x) => (x.id || x.name) === mid);
+  if (!m) return { ok: true };
+  if (m.vision) return { ok: true };
+  const alts = (prov.models || []).filter((x) => x.vision && !x.locked)
+    .slice(0, 3).map((x) => x.name || x.id);
+  return {
+    ok: false,
+    why: `${m.name || mid} can't read images.` +
+         (alts.length ? ` Try ${alts.join(", ")}.`
+                      : " Pick a model marked vision in Model settings."),
+  };
+}
+
+function renderAttachments() {
+  const box = $("#cmpAttachments");
+  if (!box) return;
+  box.hidden = attachments.length === 0;
+  box.innerHTML = attachments.map((a, i) => `
+    <div class="cmp-att" title="${esc(a.name || "image")}">
+      <img src="${a.dataUrl}" alt="${esc(a.name || "attached image")}" />
+      <button type="button" class="cmp-att-x" data-i="${i}" aria-label="Remove ${esc(a.name || "image")}">✕</button>
+    </div>`).join("");
+  box.querySelectorAll(".cmp-att-x").forEach((b) => {
+    b.onclick = () => { attachments.splice(+b.dataset.i, 1); renderAttachments(); };
+  });
+}
+
+function addImageFiles(files) {
+  const list = Array.from(files || []).filter((f) => f && f.type.startsWith("image/"));
+  if (!list.length) return;
+
+  const seeing = modelSeesImages();
+  if (!seeing.ok) { toast(`🔒 ${seeing.why}`); return; }
+
+  for (const f of list) {
+    if (attachments.length >= IMG_MAX) { toast(`Up to ${IMG_MAX} images at a time.`); break; }
+    if (!IMG_TYPES.includes(f.type)) {
+      toast(`${(f.type.split("/")[1] || f.type).toUpperCase()} isn't supported — use PNG, JPEG, GIF or WebP.`);
+      continue;
+    }
+    if (f.size > IMG_MAX_BYTES) {
+      toast(`"${f.name || "That image"}" is too large — images need to be under ${IMG_MAX_BYTES / (1024 * 1024)}MB.`);
+      continue;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      attachments.push({ name: f.name || "", dataUrl: String(reader.result), size: f.size });
+      renderAttachments();
+    };
+    reader.onerror = () => toast(`Couldn't read "${f.name || "that image"}".`);
+    reader.readAsDataURL(f);
+  }
+}
+
+{
+  const btn = $("#attachBtn"), file = $("#cmpFile");
+  if (btn && file) {
+    btn.removeAttribute("tabindex");        // it does something now
+    btn.onclick = () => file.click();
+    file.onchange = () => { addImageFiles(file.files); file.value = ""; };
+  }
+  // Paste: a screenshot in the clipboard is the most common way an image gets
+  // into a chat, and it arrives as a file on the paste event, not as text.
+  const input = $("#input");
+  if (input) input.addEventListener("paste", (e) => {
+    const items = (e.clipboardData && e.clipboardData.files) || [];
+    if (items.length) { e.preventDefault(); addImageFiles(items); }
+  });
+  // Drop anywhere on the conversation, not just on the button.
+  const zone = document.querySelector(".chat");
+  if (zone) {
+    const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+    ["dragenter", "dragover"].forEach((t) => zone.addEventListener(t, (e) => {
+      if (!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files"))) return;
+      stop(e); zone.classList.add("drop-target");
+    }));
+    ["dragleave", "drop"].forEach((t) => zone.addEventListener(t, (e) => {
+      if (t === "drop") { stop(e); addImageFiles(e.dataTransfer.files); }
+      zone.classList.remove("drop-target");
+    }));
+  }
+}
+
 $("#composer").onsubmit = (e) => {
   e.preventDefault();
   if (busy) { if (controller) controller.abort(); return; }   // Stop
   const v = $("#input").value.trim();
-  if (v && current) { $("#input").value = ""; autoGrow(); send(v); }
+  if ((v || attachments.length) && current) {
+    $("#input").value = ""; autoGrow(); send(v);
+  }
 };
 $("#input").addEventListener("input", autoGrow);
 $("#input").addEventListener("keydown", (e) => {

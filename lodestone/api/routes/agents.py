@@ -266,15 +266,35 @@ def delete_agent(agent_id: str):
     return {"deleted": agent_id}
 
 
+def _turn_images(body: ChatIn) -> list:
+    """Validate the attachments, or 422 with a message meant for the user.
+
+    A bad attachment is the user's to fix, so it is refused at the boundary
+    with the reason — not carried inward to fail somewhere less legible.
+    """
+    from ...models.images import ImageError, parse_many
+    if not getattr(body, "images", None):
+        return []
+    try:
+        return parse_many([i.data_url for i in body.images],
+                          names=[i.name for i in body.images])
+    except ImageError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+
 @router.post("/api/agents/{agent_id}/chat")
 @calls_a_model
 def chat(agent_id: str, body: ChatIn):
     message = (body.message or "").strip()
-    if not message:
+    images = _turn_images(body)
+    # An image on its own is a complete question ("what is this?"), so an empty
+    # message is only empty when nothing came with it.
+    if not message and not images:
         raise HTTPException(422, "message is empty")
     try:
         result = run_turn(agent_id, message, provider_name=body.provider,
-                          model_name=body.model, effort=body.effort)
+                          model_name=body.model, effort=body.effort,
+                          images=images)
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'") from None
     except Exception as exc:  # never 500 the chat — return a readable message
@@ -310,7 +330,8 @@ async def chat_stream(agent_id: str, body: ChatIn):
     from ..concurrency import MODEL_CALLS
 
     message = (body.message or "").strip()
-    if not message:
+    images = _turn_images(body)
+    if not message and not images:
         raise HTTPException(400, "message is required")
 
     send, receive = anyio.create_memory_object_stream(max_buffer_size=512)
@@ -319,7 +340,7 @@ async def chat_stream(agent_id: str, body: ChatIn):
         try:
             result = run_turn(agent_id, message, provider_name=body.provider,
                               model_name=body.model, effort=body.effort,
-                              on_event=push)
+                              images=images, on_event=push)
             push({"type": "done", "result": result.as_dict()})
         except KeyError:
             push({"type": "error", "message": f"unknown agent '{agent_id}'"})

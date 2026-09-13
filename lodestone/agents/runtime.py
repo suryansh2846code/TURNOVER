@@ -241,6 +241,7 @@ def run_turn(agent_id: str, user_text: str, *,
              provider_name: str | None = None,
              model_name: str | None = None,
              effort: str | Effort | None = None,
+             images: list | None = None,
              on_event: Callable[[dict], None] | None = None) -> TurnResult:
     agent = get_agent(agent_id)
     profile = effort if isinstance(effort, Effort) else get_effort(effort)
@@ -278,6 +279,20 @@ def run_turn(agent_id: str, user_text: str, *,
             provider=provider.name, model=provider.model,
             runtime_identity=identity,
         )
+    # Attached images, refused BEFORE any spend. A model that cannot see, or a
+    # backend with nowhere to put an image, is a fact we already know — sending
+    # the turn anyway would bill the user for a failure we predicted.
+    images = list(images or [])
+    if images:
+        from ..models.images import refusal_for
+        refusal = refusal_for(images, provider, p_name, provider.model)
+        if refusal:
+            return TurnResult(
+                agent_id=agent_id, reply=f"⚠️ {refusal}",
+                provider=provider.name, model=provider.model,
+                runtime_identity=identity,
+            )
+
     mem = AgentMemory()
     tools = build_tools(agent.tools, self_id=agent.id, effort=profile)
 
@@ -342,7 +357,8 @@ def run_turn(agent_id: str, user_text: str, *,
     messages += build_history(mem, agent, profile, provider)
     # model sees the date adjacent to the question; stored memory stays clean
     messages.append(Message(
-        role="user", content=f"[Today is {date_line}.]\n{user_text}"))
+        role="user", content=f"[Today is {date_line}.]\n{user_text}",
+        images=images))
     mem.append(agent.id, "user", user_text)
     runner = ToolRunner(effort=profile)
     budget = max(MIN_STEPS, profile.max_steps)

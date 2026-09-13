@@ -15,6 +15,19 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class ChatImageIn(BaseModel):
+    """One attached image on its way in from the browser.
+
+    `name` is the original filename where there was one — a pasted image has
+    none. It is shown back to the user and never sent to a provider.
+    """
+
+    #: A little over the base64 cap in models.images, leaving room for the
+    #: `data:image/jpeg;base64,` prefix itself.
+    data_url: str = Field(max_length=7 * 1024 * 1024 + 1024)
+    name: str = Field(default="", max_length=200)
+
+
 class ChatIn(BaseModel):
     """A message plus the model the client wants it answered with.
 
@@ -26,6 +39,12 @@ class ChatIn(BaseModel):
     message: str = Field(max_length=24000)   # guardrail against runaway input
     provider: str | None = None
     model: str | None = None
+    #: Images attached to this turn, as `data:image/...;base64,...` URLs. The
+    #: length cap is on the FIELD so pydantic rejects an oversized payload
+    #: before anything decodes it; the media type, the count and the real size
+    #: are checked by `models.images`, which is the one place that knows what
+    #: a provider will actually take.
+    images: list[ChatImageIn] = Field(default_factory=list)
     #: "low" | "medium" | "high". Absent means the level saved on this machine.
     #: An unknown value falls back rather than failing — it arrives from a
     #: client's localStorage, which can outlive a rename.

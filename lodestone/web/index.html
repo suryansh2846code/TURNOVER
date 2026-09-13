@@ -57,10 +57,14 @@
       <div id="messages" class="messages" role="log" aria-label="Conversation"></div>
 
       <form id="composer" class="composer">
+        <input type="file" id="cmpFile" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden />
+        <div class="cmp-stack">
+        <div class="cmp-attachments" id="cmpAttachments" hidden></div>
         <div class="cmp-main-row">
-          <button type="button" class="cmp-ic" id="attachBtn" title="Attach" aria-label="Attach a file" tabindex="-1"></button>
+          <button type="button" class="cmp-ic" id="attachBtn" title="Attach an image" aria-label="Attach an image"></button>
           <textarea id="input" rows="1" autocomplete="off" aria-label="Message your agent"
                  placeholder="Message your agent… it already knows you."></textarea>
+        </div>
         </div>
 
         <div class="cmp-bottom-bar">

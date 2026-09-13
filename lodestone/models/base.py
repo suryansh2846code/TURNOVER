@@ -38,6 +38,12 @@ class Message:
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_call_id: str | None = None   # for role=="tool": which call this answers
     name: str | None = None
+    #: Images attached to a user turn (`models.images.ImageInput`). Additive on
+    #: purpose: `content` stays a plain string, so every provider that has not
+    #: been taught about images keeps serialising exactly as it did, and the
+    #: ones that have opt in by reading this. Turning `content` into a union
+    #: would have been a rename landed on one side of eight call sites.
+    images: list[Any] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,6 +87,13 @@ class ChatResult:
 class LLMProvider:
     name: str = "base"
     model: str = ""
+    #: Can this BACKEND carry an image at all? Not "does the model see" — that
+    #: is per model and lives in the catalog. This is about the transport: a
+    #: vendor CLI takes a prompt on argv, so there is nowhere for an image to
+    #: go no matter which model is selected. Default False so a provider that
+    #: has not been taught about images refuses cleanly instead of silently
+    #: dropping them, which is the failure mode worth designing against.
+    supports_images: bool = False
 
     def is_ready(self) -> tuple[bool, str]:
         return True, ""

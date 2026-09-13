@@ -36,6 +36,13 @@ class AnthropicProvider(LLMProvider):
             "ANTHROPIC_BASE_URL", "https://api.anthropic.com"
         )
         self._cli: LLMProvider | None = None
+        # Images only work on the Messages API. Without a key this provider
+        # delegates to the Claude CLI, which takes its prompt on argv — there
+        # is nowhere for an image to go, whichever model is chosen. Set on the
+        # instance rather than as a property: the base declares a plain
+        # attribute, and overriding one with a read-only property is a
+        # narrowing mypy is right to reject.
+        self.supports_images = bool(self.api_key)
 
     def is_ready(self) -> tuple[bool, str]:
         if self.api_key:
@@ -80,7 +87,21 @@ class AnthropicProvider(LLMProvider):
             if m.role == "system":
                 system = (system + "\n" + m.content).strip()
             elif m.role == "user":
-                out.append({"role": "user", "content": m.content})
+                if m.images:
+                    # Images come FIRST: Anthropic's own guidance is that a
+                    # question placed after the image it refers to is answered
+                    # against the image rather than in the abstract.
+                    ublocks: list[dict] = [{
+                        "type": "image",
+                        "source": {"type": "base64",
+                                   "media_type": img.media_type,
+                                   "data": img.data},
+                    } for img in m.images]
+                    if m.content:
+                        ublocks.append({"type": "text", "text": m.content})
+                    out.append({"role": "user", "content": ublocks})
+                else:
+                    out.append({"role": "user", "content": m.content})
             elif m.role == "assistant":
                 blocks: list[dict] = []
                 if m.content:
