@@ -17,6 +17,26 @@ os.environ.setdefault("LODESTONE_HOME", tempfile.mkdtemp(prefix="lodestone-tests
 
 
 import pytest
+from starlette.testclient import TestClient
+
+# `TestClient` addresses the app as `http://testserver`, and the origin guard
+# (api/security.py) refuses any Host that is not this machine — rightly, since
+# that is what stops a DNS-rebinding page from reaching the API. Rather than
+# teach the guard a hostname that exists only in tests — a production allowance
+# bought for a test's convenience — the client is pointed at loopback, which is
+# where it is pretending to be anyway.
+#
+# Applied at import, not in a fixture: two modules build a client at module
+# scope, which runs before any fixture does.
+_real_test_client_init = TestClient.__init__
+
+
+def _from_loopback(self, app, *args, **kwargs):
+    kwargs.setdefault("base_url", "http://127.0.0.1")
+    return _real_test_client_init(self, app, *args, **kwargs)
+
+
+TestClient.__init__ = _from_loopback
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -99,3 +119,4 @@ def _no_stale_cli_auth_cache():
     for mod in (cursor, grok_cli):
         mod.reset_auth_cache()
         mod.reset_login_state()
+

@@ -1,0 +1,303 @@
+"""The agents themselves: listing them, talking to them, and binding a model to one."""
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from ...agents import list_agents, run_turn
+from ...agents.agent import AgentMemory
+from ...brain import get_brain
+from ...config import get_settings
+from ...log import get_logger
+from ..concurrency import calls_a_model
+from ..schemas import ChatIn
+
+log = get_logger(__name__)
+router = APIRouter()
+
+
+@router.get("/api/agents")
+def agents():
+    from ...agents.presets import PRESETS
+    mem = AgentMemory()
+    return {"agents": [
+        {"id": a.id, "name": a.name, "role": a.role, "tools": a.tools,
+         "custom": a.id not in PRESETS,
+         "model_provider": a.model_provider,
+         "model_name": a.model_name,
+         "messages": len(mem.history(a.id, limit=1000))}
+        for a in list_agents()
+    ]}
+
+
+@router.get("/api/agents/{agent_id}/history")
+def history(agent_id: str):
+    return {"history": AgentMemory().history(agent_id, limit=100)}
+
+
+class AgentModelIn(BaseModel):
+    provider: str
+    model: str | None = None
+
+
+@router.get("/api/agents/{agent_id}/model")
+def get_agent_model_endpoint(agent_id: str):
+    from ...agents.agent_models import get_agent_model
+    from ...agents.presets import get_agent
+    try:
+        get_agent(agent_id)          # existence check; raises KeyError below
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'") from None
+    prov, model = get_agent_model(agent_id)
+    s = get_settings()
+
+    from ...models.entitlements import is_provider_connected
+    if prov is not None:
+        is_prov_conn, _, _ = is_provider_connected(prov)
+        if not is_prov_conn:
+            from ...agents.agent_models import clear_agent_model
+            clear_agent_model(agent_id)
+            prov, model = None, None
+
+    is_override = prov is not None
+    effective_provider = prov or s.model_provider or "cursor"
+    if prov is not None:
+        if model:
+            effective_model = model
+        else:
+            from ...models.registry import MODEL_CATALOG
+            cat: dict[str, Any] = MODEL_CATALOG.get(prov, {})
+            effective_model = cat.get("default_model") or ""
+    else:
+        effective_model = model or s.model_name or ""
+    is_conn, _, _ = is_provider_connected(effective_provider)
+    return {
+        "agent_id": agent_id,
+        "provider": effective_provider,
+        "model": effective_model,
+        "configured_provider": prov,
+        "configured_model": model,
+        "is_override": is_override,
+        "is_connected": is_conn,
+    }
+
+
+@router.post("/api/agents/{agent_id}/model")
+@router.put("/api/agents/{agent_id}/model")
+def set_agent_model_endpoint(agent_id: str, body: AgentModelIn):
+    from ...agents.agent_models import set_agent_model
+    from ...agents.presets import get_agent
+    try:
+        get_agent(agent_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'") from None
+
+    from ...models.entitlements import evaluate_model_entitlement, is_provider_connected
+    is_conn, user_plan, _ = is_provider_connected(body.provider)
+    if not is_conn:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Provider '{body.provider}' is not connected (locked). Please connect it in Models & Accounts first."
+        )
+
+    is_auto = not body.model or body.model.lower() == "auto"
+    if is_auto:
+        from ...models.discovery import get_discovered_models
+        discovered, _ = get_discovered_models(body.provider, force_refresh=True)
+        unlocked = [m for m in discovered if not m.get("locked")]
+        if not unlocked:
+            raise HTTPException(
+                status_code=400,
+                detail=f"All models for provider '{body.provider}' are locked on your current plan."
+            )
+    else:
+        locked, plan_req = evaluate_model_entitlement(
+            body.provider, body.model, is_connected=is_conn, user_plan=user_plan
+        )
+        if locked:
+            req_msg = f"Requires {plan_req}." if plan_req else "Locked on current plan."
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{body.model}' is not supported on your {user_plan or 'current'} plan. {req_msg}"
+            )
+
+    from ...models.registry import clear_provider_cache
+    result = set_agent_model(agent_id, body.provider, body.model)
+    clear_provider_cache()  # invalidate cached provider instances so new model takes effect
+    return result
+
+
+@router.delete("/api/agents/{agent_id}/model")
+def clear_agent_model_endpoint(agent_id: str):
+    from ...agents.agent_models import clear_agent_model
+    from ...agents.presets import get_agent
+    try:
+        get_agent(agent_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'") from None
+    cleared = clear_agent_model(agent_id)
+    return {"cleared": cleared}
+
+
+class NewAgent(BaseModel):
+    name: str
+    role: str = ""
+    system_prompt: str = ""
+    tools: list[str] = []
+    recall_sources: list[str] = []
+
+
+@router.get("/api/agents/tools")
+def available_tools():
+    from ...agents.tools import TOOL_DEFS
+    return {"tools": [{"name": n, "description": t.description}
+                      for n, t in TOOL_DEFS.items()]}
+
+
+@router.post("/api/agents/custom")
+def create_agent(body: NewAgent):
+    from ...agents.custom import get_custom_store
+    a = get_custom_store().create(body.name, body.role, body.system_prompt,
+                                  body.tools, body.recall_sources)
+    return {"id": a.id, "name": a.name, "role": a.role}
+
+
+@router.delete("/api/agents/custom/{agent_id}")
+def delete_agent(agent_id: str):
+    from ...agents.custom import get_custom_store
+    if not get_custom_store().delete(agent_id):
+        raise HTTPException(404, "not a custom agent")
+    AgentMemory().clear(agent_id)
+    return {"deleted": agent_id}
+
+
+@router.post("/api/agents/{agent_id}/chat")
+@calls_a_model
+def chat(agent_id: str, body: ChatIn):
+    message = (body.message or "").strip()
+    if not message:
+        raise HTTPException(422, "message is empty")
+    try:
+        result = run_turn(agent_id, message,
+                          provider_name=body.provider, model_name=body.model)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'") from None
+    except Exception as exc:  # never 500 the chat — return a readable message
+        return {"agent_id": agent_id, "provider": "", "model": "", "trace": [],
+                "reply": f"⚠️ Something went wrong: {str(exc)[:200]}"}
+    return result.as_dict()
+
+
+@router.post("/api/agents/{agent_id}/clear")
+def clear(agent_id: str):
+    AgentMemory().clear(agent_id)
+    return {"cleared": agent_id}
+
+
+class LeadIn(BaseModel):
+    name: str = "Atlas"
+
+
+@router.post("/api/agents/lead")
+@calls_a_model
+def create_lead_agent(body: LeadIn):
+    """Create the user's lead agent — head of the team + chief of staff —
+    with a system prompt personalised from the brain."""
+    from ...agents.custom import get_custom_store
+    brain = get_brain()
+    name = (body.name or "").strip() or "Atlas"
+    ctx = brain.recall(
+        "who the user is — their work, projects, interests, the people in "
+        "their life, and how they spend their time", limit=16).get("context", "")
+    persona = (ctx or "").strip()[:2600]
+    system = (
+        f"You are {name}, the user's lead agent — the head of their Lodestone team "
+        "and their personal chief of staff. You are their first point of contact and "
+        "you help with everything: you know their whole world from the shared brain, "
+        "you coordinate the specialist agents (Inbox, Launch, Research, Personal), and "
+        "you hand off or pull them in when useful. Be warm, concise, and proactive; "
+        "when you don't know something, use your tools (search the brain, the web, "
+        "tasks, Gmail).\n\n"
+        + (f"WHAT YOU ALREADY KNOW ABOUT THE USER:\n{persona}\n" if persona else "")
+    )
+    a = get_custom_store().create(
+        name, "lead agent · chief of staff", system,
+        ["search_brain", "remember", "list_entities", "web_search",
+         "add_task", "list_tasks", "complete_task", "gmail_search"], [])
+    return {"id": a.id, "name": a.name, "role": a.role}
+
+
+def _fallback_welcome(name: str) -> str:
+    return (
+        f"Hi — I'm **{name}**, the lead of your Lodestone team. I know your world "
+        "from your brain and I'm your first stop for anything. Here's how to get "
+        "the most out of Lodestone:\n\n"
+        "- **Chat with me** for anything — I'll pull in the specialists (Inbox, "
+        "Launch, Research, Personal) when they fit. Switch agents in the left rail.\n"
+        "- **Your brain** (right panel) holds your memories and a knowledge graph. "
+        "Search it, click an entity for its facts, or *teach it* a new fact anytime.\n"
+        "- **Tasks & Automations** let me and the team act for you — capture to-dos "
+        "and set things to run on a trigger or schedule.\n"
+        "- **Connectors** keep your brain fresh — add more sources whenever you like; "
+        "everything stays on your Mac.\n\n"
+        "Ask me anything to get started — try *“what should I focus on today?”*"
+    )
+
+
+@router.post("/api/agents/{agent_id}/welcome")
+@calls_a_model
+def agent_welcome(agent_id: str, body: ChatIn | None = None):
+    """A one-time, personalised welcome from an agent that introduces itself and
+    teaches the app. Generated fresh (not persisted to chat history)."""
+    from ...agents.presets import get_agent
+    from ...agents.runtime import build_runtime_identity, format_runtime_context_prompt
+    from ...models.base import Message
+    from ...models.registry import get_provider
+    try:
+        agent = get_agent(agent_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'") from None
+    s = get_settings()
+    p_name = (body.provider if body else None) or agent.model_provider or s.model_provider
+    m_name = (body.model if body else None) or agent.model_name
+    # Only fall back to settings.model_name when provider matches — prevents
+    # leaking e.g. an Ollama model name into Gemini.
+    if not m_name and (p_name == s.model_provider or not agent.model_provider):
+        m_name = s.model_name
+    provider = get_provider(p_name, m_name)
+    identity = build_runtime_identity(agent, provider)
+    try:
+        ready, _ = provider.is_ready()
+    except Exception:
+        ready = False
+    if not ready:
+        return {"reply": _fallback_welcome(agent.name), "runtime_identity": identity,
+                "provider": provider.name, "model": provider.model}
+    seed = (
+        "You are meeting the user for the very first time as their lead agent. "
+        "Write a warm welcome that: (1) greets them and introduces yourself in 1-2 "
+        "sentences using what you already know about them from the brain (be specific "
+        "but natural); (2) teaches them how to use Lodestone in short skimmable "
+        "bullet points — chatting with you and switching to the specialist agents "
+        "(Inbox, Launch, Research, Personal); the Brain panel (memories, the knowledge "
+        "graph, and teaching it new facts); Tasks and Automations; and connecting more "
+        "sources (all on-device). End by inviting them to ask you anything. Use Markdown."
+    )
+    runtime_prompt = format_runtime_context_prompt(identity)
+    try:
+        res = provider.chat([
+            Message(role="system", content=runtime_prompt),
+            Message(role="system", content=agent.system_message()),
+            Message(role="user", content=seed),
+        ], temperature=0.5, max_tokens=700)
+        return {
+            "reply": (res.text or "").strip() or _fallback_welcome(agent.name),
+            "runtime_identity": identity,
+            "provider": provider.name,
+            "model": provider.model,
+        }
+    except Exception:
+        return {"reply": _fallback_welcome(agent.name), "runtime_identity": identity,
+                "provider": provider.name, "model": provider.model}
