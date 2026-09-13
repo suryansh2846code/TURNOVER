@@ -24,6 +24,35 @@ What that means concretely, and what it has already changed:
 - **Never surface an internal.** No raw provider JSON, no stack traces, no
   internal ids in user-facing text. Errors say what happened and what to do
   (`models/errors.py`).
+- **A floating card is a Spaces problem, not a z-order problem.** The sign-in
+  card kept vanishing when the user switched to the browser. It was never
+  *behind* anything — pywebview's `on_top` already gave it `NSStatusWindowLevel`
+  (25), above every normal window. With the default collection behaviour a
+  window belongs to **the Space it was created on**, so switching Spaces left it
+  behind. `hud._apply_float_behaviour` sets
+  `CanJoinAllSpaces | FullScreenAuxiliary`, drops the level to
+  **`NSFloatingWindowLevel`** (above every app's normal windows, below the menu
+  bar — status level claimed system UI it has no business covering), and sets
+  `hidesOnDeactivate = False`. *Not* `Stationary`: that pins a window to screen
+  coordinates during Space transitions, for wallpaper-like overlays, and is
+  redundant once a window joins every Space.
+  **Known macOS limit:** none of this reaches *another app's full-screen Space*.
+  Measured directly — levels 3, 25 and 101, with and without `Stationary`, and
+  with an accessory activation policy, all fail to appear over a full-screen
+  browser. Apps that manage it (Alfred, Raycast) are `LSUIElement` accessory
+  apps using a non-activating `NSPanel`; pywebview creates a plain `NSWindow`,
+  and making Lodestone dockless is not a trade worth this. The in-app row in the
+  Models panel is the fallback, which is why it stays on screen either way.
+- **Showing the card must not activate the app.** The backend's `show()` is
+  `makeKeyAndOrderFront_` + `activateIgnoringOtherApps_`, which yanks keyboard
+  focus out of the browser the user is signing in to — every time the card
+  updates. Use `orderFrontRegardless()` and let a click bring the app forward
+  normally. Every Cocoa window mutation goes through `AppHelper.callAfter`:
+  calling these setters from the js_api worker thread hangs the process.
+- **Position against `NSScreen.visibleFrame`, on the screen under the pointer.**
+  `webview.screens[0]` is the primary display's *full* frame — wrong monitor on a
+  multi-display desk, and it ignores the menu bar and Dock. Points, not pixels,
+  so Retina and mixed-scale arrangements need no special case.
 - **Follow the user out of the app.** A browser sign-in leaves Lodestone, so the
   status goes with them: `hud.py` raises a frameless, always-on-top window
   (`/signin-hud`) in the **top-right corner of the screen**, like a system

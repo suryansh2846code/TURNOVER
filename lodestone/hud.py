@@ -58,7 +58,11 @@ def available() -> bool:
 
 
 def _corner_position(width: int, height: int) -> tuple[int | None, int | None]:
-    """Top-right of the primary screen, where system notifications appear."""
+    """Top-right of the primary screen, where system notifications appear.
+
+    Only used to place the window at creation, before AppKit is reachable;
+    `_place_and_raise` re-positions it properly every time it is shown.
+    """
     try:
         import webview
 
@@ -67,6 +71,109 @@ def _corner_position(width: int, height: int) -> tuple[int | None, int | None]:
                 screen.y + _SCREEN_MARGIN)
     except Exception:
         return None, None
+
+
+def _native_window():
+    """The NSWindow behind the pywebview window, or None when there isn't one.
+
+    `lodestone serve` and the test suite have no Cocoa window at all, so every
+    caller must treat None as "do the portable thing instead".
+    """
+    if _hud_window is None:
+        return None
+    try:
+        from webview.platforms.cocoa import BrowserView
+
+        instance = BrowserView.instances.get(_hud_window.uid)
+        return instance.window if instance is not None else None
+    except Exception:
+        return None
+
+
+def _apply_float_behaviour(nswin) -> None:
+    """Make the card a floating panel rather than an ordinary window.
+
+    Must run on the main thread. Called every time the card is shown: these are
+    idempotent setters, and re-applying them is cheaper than reasoning about
+    whether anything downstream reset them.
+    """
+    import AppKit
+
+    # NSFloatingWindowLevel sits above every application's normal windows while
+    # staying below the menu bar and system UI. pywebview's `on_top` gives us
+    # NSStatusWindowLevel instead, which also covers the menu bar — more than a
+    # sign-in card has any business claiming.
+    nswin.setLevel_(AppKit.NSFloatingWindowLevel)
+
+    # This is what was actually broken. With the default collection behaviour a
+    # window belongs to the Space it was born on: switching to a browser on
+    # another Space — and a full-screen browser gets a Space of its own — left
+    # the card behind, still visible and still on top, just not where the user
+    # was. CanJoinAllSpaces makes it follow them; FullScreenAuxiliary lets it
+    # sit over a full-screen app rather than being hidden by it.
+    #
+    # Stationary is deliberately NOT set: it pins a window to screen coordinates
+    # during Space transitions, which is for wallpaper-like overlays, and it is
+    # redundant once the window joins every Space.
+    nswin.setCollectionBehavior_(
+        AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
+        | AppKit.NSWindowCollectionBehaviorFullScreenAuxiliary
+    )
+
+    # A sign-in card exists precisely for the moments this app is NOT active.
+    nswin.setHidesOnDeactivate_(False)
+
+
+def _visible_corner(width: int, height: int):
+    """Top-right of the screen the user is on, in Cocoa (bottom-left) coords.
+
+    visibleFrame, not frame, so the menu bar and Dock are respected; the screen
+    under the pointer, not screen zero, so the card appears where the user is
+    working on a multi-monitor desk. Everything here is in points, so Retina and
+    mixed-scale arrangements need no special handling.
+    """
+    import AppKit
+
+    mouse = AppKit.NSEvent.mouseLocation()
+    screen = None
+    for candidate in AppKit.NSScreen.screens():
+        if AppKit.NSPointInRect(mouse, candidate.frame()):
+            screen = candidate
+            break
+    if screen is None:
+        screen = AppKit.NSScreen.mainScreen()
+
+    area = screen.visibleFrame()
+    return AppKit.NSMakePoint(
+        area.origin.x + area.size.width - width - _SCREEN_MARGIN,
+        area.origin.y + area.size.height - height - _SCREEN_MARGIN,
+    )
+
+
+def _place_and_raise(nswin, width: int, height: int) -> None:
+    """Show the card without activating Lodestone.
+
+    `show()` in the pywebview backend calls makeKeyAndOrderFront_ followed by
+    activateIgnoringOtherApps_, which yanks keyboard focus out of the browser
+    the user is signing in to — every time the card updates.
+    orderFrontRegardless puts the window on screen and leaves the active
+    application alone; clicking the card still brings it forward normally.
+    """
+    from PyObjCTools import AppHelper
+
+    AppHelper.callAfter(_raise_now, nswin, width, height)
+
+
+def _raise_now(nswin, width: int, height: int) -> None:
+    """The main-thread half of `_place_and_raise`, split out so it can be tested
+    against a recording stub — the point of this code is which AppKit calls it
+    does and does not make."""
+    try:
+        _apply_float_behaviour(nswin)
+        nswin.setFrameOrigin_(_visible_corner(width, height))
+        nswin.orderFrontRegardless()
+    except Exception:
+        logger.warning("could not raise the sign-in window", exc_info=True)
 
 
 class _Bridge:
@@ -136,12 +243,20 @@ def open_signin(provider: str, brand: str, auth_url: str = "") -> bool:
     })
     with _lock:
         try:
+            # The same window every time — reloading it is what "update the
+            # existing card" means here, and it is why a second card cannot
+            # appear no matter how often a sign-in is started.
             _hud_window.load_url(f"{_origin}/signin-hud?{query}")
             width, height = _WINDOW_SIZE
-            x, y = _corner_position(width, height)
-            if x is not None:
-                _hud_window.move(x, y)
-            _hud_window.show()
+            nswin = _native_window()
+            if nswin is not None:
+                _place_and_raise(nswin, width, height)
+            else:
+                # No Cocoa window (plain server, tests). Best effort.
+                x, y = _corner_position(width, height)
+                if x is not None:
+                    _hud_window.move(x, y)
+                _hud_window.show()
             note("open_signin", provider=provider, ok=True)
             return True
         except Exception:
