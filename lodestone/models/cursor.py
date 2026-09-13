@@ -20,6 +20,8 @@ tools themselves.
 """
 from __future__ import annotations
 
+from . import login_processes
+
 import os
 import re
 import shutil
@@ -208,6 +210,8 @@ def cancel_cli_login() -> bool:
         return True
     except Exception:
         return False
+    finally:
+        login_processes.release(getattr(proc, "pid", None))
 
 
 def start_cursor_cli_login() -> tuple[bool, str]:
@@ -231,6 +235,7 @@ def start_cursor_cli_login() -> tuple[bool, str]:
                          stdin=subprocess.DEVNULL,
                          env={**os.environ, "PATH": _augmented_path()},
                          start_new_session=True)
+        login_processes.track(_login_proc, "login")
     except Exception as exc:
         return False, f"Could not start Cursor sign-in: {exc}"
     return True, "Opened Cursor sign-in in your browser."

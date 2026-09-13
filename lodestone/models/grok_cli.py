@@ -20,6 +20,8 @@ from the context Lodestone injects rather than calling tools themselves.
 """
 from __future__ import annotations
 
+from . import login_processes
+
 import os
 import shutil
 import subprocess
@@ -209,6 +211,8 @@ def cancel_cli_login() -> bool:
         return True
     except Exception:
         return False
+    finally:
+        login_processes.release(getattr(proc, "pid", None))
 
 
 def start_grok_cli_login() -> tuple[bool, str]:
@@ -231,6 +235,7 @@ def start_grok_cli_login() -> tuple[bool, str]:
                          stdin=subprocess.DEVNULL,
                          env={**os.environ, "PATH": _augmented_path()},
                          start_new_session=True)
+        login_processes.track(_login_proc, "login")
     except Exception as exc:
         return False, f"Could not start Grok sign-in: {exc}"
     return True, "Opened Grok sign-in in your browser."

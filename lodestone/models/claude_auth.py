@@ -20,6 +20,8 @@ from typing import Any
 
 from .connections import ConnectionStatus, get_connection, save_connection
 
+from . import login_processes
+
 logger = logging.getLogger(__name__)
 
 
@@ -112,6 +114,7 @@ def start_claude_login_flow() -> tuple[bool, str, str]:
                 _GLOBAL_CLAUDE_AUTH_STATE.proc.terminate()
             except Exception:
                 pass
+            login_processes.release(getattr(_GLOBAL_CLAUDE_AUTH_STATE.proc, "pid", None))
             _GLOBAL_CLAUDE_AUTH_STATE.proc = None
 
         try:
@@ -123,6 +126,7 @@ def start_claude_login_flow() -> tuple[bool, str, str]:
                 text=True,
             )
             _GLOBAL_CLAUDE_AUTH_STATE.proc = proc
+            login_processes.track(proc, "auth")
             _GLOBAL_CLAUDE_AUTH_STATE.status = "waiting"
             _GLOBAL_CLAUDE_AUTH_STATE.started_at = time.time()
             _GLOBAL_CLAUDE_AUTH_STATE.error_message = ""
