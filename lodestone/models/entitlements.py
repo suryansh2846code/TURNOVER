@@ -366,9 +366,13 @@ def _detect_account(pid: str) -> dict[str, Any]:
         # An OAuth token is deliberately NOT an account credential here: it
         # authenticates at api.x.ai and is then refused for billing. The
         # subscription runs through xAI's CLI instead.
-        from .grok_cli import find_grok_cli
+        from .grok_cli import find_grok_cli, grok_cli_auth_status
 
-        if find_grok_cli():
+        # The binary being on disk is detection, and detection is not an
+        # account: an installed-but-signed-out CLI was reported here as a Grok
+        # subscription, which put a "Connected" badge on a provider that could
+        # not answer a single message.
+        if find_grok_cli() and grok_cli_auth_status().get("authenticated"):
             return {"email": conn.email or "Grok CLI", "plan": "Grok subscription"}
         return {}
 

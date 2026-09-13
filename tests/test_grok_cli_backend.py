@@ -55,10 +55,36 @@ def test_an_api_key_still_uses_the_developer_api():
         assert "from the API" in XAIProvider(api_key="xai-real-key").chat(HELLO).text
 
 
-def test_ready_when_only_the_cli_is_present():
+def test_ready_when_the_cli_is_present_and_signed_in():
     with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
+         patch("lodestone.models.grok_cli.grok_cli_auth_status",
+               return_value={"installed": True, "authenticated": True}), \
          patch("lodestone.models.base._saved_key", return_value=""):
         assert XAIProvider(api_key=None).is_ready() == (True, "")
+
+
+def test_an_installed_but_signed_out_cli_is_not_ready():
+    """Reported from the running app, with a screenshot of the chat.
+
+    Readiness asked only whether the binary existed. So a CLI that had never
+    been signed in reported ready, `/refresh` wrote API_KEY_CONNECTED for an
+    account holding no credential at all, the drawer put a green "Connected"
+    badge on xAI — and the first message reached `grok -p`, which answered
+
+        Not signed in. To authenticate without a browser, run:
+          grok login --device-code
+
+    which was then rendered as the agent's reply. Every one of those surfaces
+    was downstream of this function returning True.
+    """
+    with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
+         patch("lodestone.models.grok_cli.grok_cli_auth_status",
+               return_value={"installed": True, "authenticated": False}), \
+         patch("lodestone.models.base._saved_key", return_value=""):
+        ready, reason = XAIProvider(api_key=None).is_ready()
+    assert ready is False
+    assert "Models" in reason, "the way out must be named, in the app"
+    assert "--device-code" not in reason and "$" not in reason
 
 
 def test_without_key_or_cli_it_explains_both_options():
@@ -66,7 +92,7 @@ def test_without_key_or_cli_it_explains_both_options():
          patch("lodestone.models.base._saved_key", return_value=""):
         ready, reason = XAIProvider(api_key=None).is_ready()
     assert ready is False
-    assert "XAI_API_KEY" in reason and "x.ai/cli/install.sh" in reason
+    assert "XAI_API_KEY" in reason and "Models" in reason
 
 
 # ── the CLI contract ─────────────────────────────────────────────────────
@@ -116,10 +142,35 @@ def test_response_shapes_are_tolerated(payload, expect):
         assert GrokCliProvider().chat(HELLO).text == expect
 
 
-def test_not_signed_in_says_grok_login():
+def test_not_signed_in_is_explained_in_the_app():
     with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
          patch("subprocess.run", return_value=_cp(1, "", "You are not authenticated")):
-        assert "grok login" in GrokCliProvider().chat(HELLO).text
+        text = GrokCliProvider().chat(HELLO).text
+    assert "Sign in with Grok" in text
+    assert "grok login" not in text, "the user was sent to a terminal"
+
+
+# The exact payload the CLI prints when it is not signed in, captured from
+# `grok -p "say OK" --output-format json` on 2026-09-13.
+NOT_SIGNED_IN = (
+    '{"type":"error","message":"Not signed in. To authenticate without a '
+    'browser, run:\\n  grok login --device-code\\n\\nAlternatively, set the '
+    'XAI_API_KEY environment variable or run `grok login` on a machine with a '
+    'browser."}'
+)
+
+
+def test_the_cli_error_text_is_never_returned_as_the_answer():
+    """A failed call fell through to `if text: return ChatResult(text=text)`,
+    and `text` was whatever the CLI had written — so the vendor's own error,
+    including two terminal commands, was rendered as the agent's reply in the
+    chat transcript. A failure gets our message, or none."""
+    with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
+         patch("subprocess.run", return_value=_cp(1, NOT_SIGNED_IN)):
+        text = GrokCliProvider().chat(HELLO).text
+    assert "--device-code" not in text
+    assert "Not signed in. To authenticate" not in text
+    assert "Sign in with Grok" in text
 
 
 def test_timeout_is_reported_not_raised():
@@ -128,10 +179,13 @@ def test_timeout_is_reported_not_raised():
         assert "timed out" in GrokCliProvider().chat(HELLO).text
 
 
-def test_missing_cli_explains_how_to_install():
+def test_missing_cli_points_at_the_install_we_run_ourselves():
+    """We download and pin this CLI (`models/cli_manager.py`), so the answer is
+    a button in Models & Accounts — not a curl command the user must paste."""
     with patch("lodestone.models.grok_cli.find_grok_cli", return_value=None):
         text = GrokCliProvider().chat(HELLO).text
-    assert "x.ai/cli/install.sh" in text
+    assert "Models" in text and "Install" in text
+    assert "curl" not in text
 
 
 # ── discovery comes from the account, not a hardcoded list ───────────────

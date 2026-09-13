@@ -439,13 +439,21 @@ def connect_local_account(provider: str) -> tuple[bool, str, dict[str, Any]]:
         info = detect_xai_local_session()
         if not info and not key:
             return False, "No xAI session or XAI_API_KEY found. Sign in or enter an API key.", {}
-        email = (info.get("email") if info else None) or (conn.email if conn.email else "xAI Account")
         conn = get_connection("xai")
+        email = (info.get("email") if info else None) or conn.email or "xAI Account"
         now = datetime.now(UTC).isoformat()
         conn.auth_method = "account" if info else "api_key"
         conn.email = email
         conn.account_display_name = (info.get("name") if info else None) or "xAI Grok"
-        conn.set_credential(ACCOUNT, ConnectionStatus.ACCOUNT_CONNECTED) if info else ConnectionStatus.API_KEY_CONNECTED
+        # This was written as `set_credential(...) if info else API_KEY_CONNECTED`
+        # — a conditional *expression* whose else branch is a bare enum value,
+        # so connecting with an API key recorded no credential at all while
+        # still reporting success. Credentials are independent; set the one we
+        # actually have.
+        if info:
+            conn.set_credential(ACCOUNT, ConnectionStatus.ACCOUNT_CONNECTED)
+        else:
+            conn.set_credential(API_KEY, ConnectionStatus.API_KEY_CONNECTED)
         conn.connected_at = conn.connected_at or now
         conn.last_verified_at = now
         conn.status_message = "Connected to xAI Grok"

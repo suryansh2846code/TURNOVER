@@ -539,11 +539,36 @@ def _compatible_model(provider_name: str, model: str | None) -> str | None:
     return None  # incompatible — let provider use its default
 
 
+def _entitled_model(provider_name: str, model: str | None) -> str | None:
+    """The nearest model to `model` that this account can actually run.
+
+    A model id reaches us from storage — an agent binding, localStorage, a
+    settings default — while the provider's catalog moves underneath it, so
+    sending one straight through is how a ChatGPT Free account ended up asking
+    for `gpt-5.6-terra` and being told it needs Pro. `run_turn` already
+    re-checked, but every other caller that builds a provider itself (the lead
+    agent's welcome, the onboarding digest) skipped the check and hit exactly
+    that error on the user's first two screens.
+
+    Doing it here makes the repair a property of *getting a provider* rather
+    than of one route remembering to ask. A discovery failure never blocks the
+    call: the requested id is honoured, as before.
+    """
+    from ..log import suppressed
+
+    resolved = model
+    with suppressed("from .entitlements import resolve_usable_model …"):
+        from .entitlements import resolve_usable_model
+
+        resolved, _replaced = resolve_usable_model(provider_name, model)
+    return resolved
+
+
 @lru_cache
 def get_provider(name: str | None = None, model: str | None = None) -> LLMProvider:
     name = (name or get_settings().model_provider or "mock").lower()
     cls = _REGISTRY.get(name, MockProvider)
-    safe_model = _compatible_model(name, model)
+    safe_model = _entitled_model(name, _compatible_model(name, model))
     p = cls(model=safe_model)
     _wrap_usage(p)
     return p

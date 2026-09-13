@@ -43,10 +43,16 @@ _EXTRA_BIN_DIRS = [
     str(Path.home() / ".npm-global" / "bin"),
 ]
 
+# We install and pin this CLI ourselves (`models/cli_manager.py`), so the way
+# out of both of these is a button in the Models drawer, never a terminal.
 INSTALL_HINT = (
-    "Grok CLI not found. Install it with "
-    "`curl -fsSL https://x.ai/cli/install.sh | bash` (or "
-    "`npm i -g @xai-official/grok`), then run `grok login`."
+    "Grok needs xAI's Grok CLI. Open Models & Accounts and choose Install "
+    "under xAI — Lodestone downloads it for you."
+)
+
+SIGNIN_HINT = (
+    "Grok isn't signed in. Open Models & Accounts and choose Sign in with "
+    "Grok — it opens xAI's own sign-in page in your browser."
 )
 
 
@@ -253,8 +259,20 @@ class GrokCliProvider(LLMProvider):
             self.model = model
 
     def is_ready(self) -> tuple[bool, str]:
+        """Installed is not signed in.
+
+        This used to return ready as soon as the binary existed, which made
+        every surface downstream lie: `/refresh` marked xAI connected with no
+        credential at all, the drawer showed a green "Connected" badge, and the
+        first message reached `grok -p`, which answered "Not signed in. …run
+        `grok login --device-code`" — a vendor error rendered as the agent's
+        reply. A provider that cannot answer must say so here, once, where the
+        user can act on it.
+        """
         if not self._bin:
             return False, INSTALL_HINT
+        if not grok_cli_auth_status().get("authenticated"):
+            return False, SIGNIN_HINT
         return True, ""
 
     def _prompt(self, messages: list[Message]) -> str:
@@ -363,12 +381,19 @@ class GrokCliProvider(LLMProvider):
         if not text and not data:
             text = (proc.stdout or "").strip()
 
-        if proc.returncode != 0 or data.get("is_error"):
-            if text:
-                return ChatResult(text=text, finish_reason="stop")
-            err = classify_cli("xai", proc.returncode, proc.stdout or "",
+        failed = (proc.returncode != 0 or data.get("is_error")
+                  or data.get("type") == "error")
+        if failed:
+            # `text` here is the CLI's own error prose — it was being returned
+            # as the agent's answer, which is how "Not signed in. To
+            # authenticate without a browser, run: grok login --device-code"
+            # arrived in the chat as if Grok had said it. Classify it instead,
+            # so the user gets our message and a way out inside the app.
+            err = classify_cli("xai", proc.returncode,
+                               f"{proc.stdout or ''}\n{text}",
                                proc.stderr or "", model=self.model)
             if err.kind is ErrorKind.AUTH:
-                err.message = "The Grok CLI isn't signed in. Run `grok login`, then retry."
+                err.message = SIGNIN_HINT
+                err.detail = ""
             return ChatResult(text=err.as_reply())
         return ChatResult(text=text, finish_reason="stop")
