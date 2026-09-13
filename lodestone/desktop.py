@@ -22,31 +22,43 @@ def _wait_for_port(host: str, port: int, timeout: float = 15.0) -> bool:
     return False
 
 
-def _free_port(host: str) -> int:
-    """Ask the OS for a free loopback port so the app never clashes."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((host, 0))
-        return s.getsockname()[1]
+def _bind(host: str, port: int) -> socket.socket:
+    """Bind a listening socket the way uvicorn would.
+
+    SO_REUSEADDR is not a detail here. A server that has just exited leaves
+    connections in TIME_WAIT, and a plain bind on that port fails while uvicorn's
+    would succeed — so a probe without it calls the port taken one launch after
+    every quit.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind((host, port))
+    s.listen(128)
+    return s
 
 
-def _stable_port(host: str) -> int:
-    """Reuse the same loopback port across launches so the webview keeps a stable
-    origin — otherwise localStorage (onboarding flag, chosen model, lead agent…)
-    resets on every launch. Falls back to a fresh free port if it's taken."""
+def _reserve_port(host: str) -> tuple[int, socket.socket]:
+    """Claim the port we will serve on, and hold it.
+
+    Reusing one port across launches is what keeps the webview origin stable;
+    localStorage lives on the origin, so a different port means the onboarding
+    flag, the chosen model and the lead agent all silently vanish and the app
+    looks empty on launch. Returning the bound socket also closes the gap
+    between checking a port and serving on it.
+    """
     from .config import get_settings
     pf = get_settings().home / ".port"
     try:
-        p = int(pf.read_text().strip())
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((host, p))        # still free → reuse it
+        sock = _bind(host, int(pf.read_text().strip()))
     except Exception:
-        p = _free_port(host)
+        sock = _bind(host, 0)        # genuinely taken (or never saved) → fresh one
+    port = sock.getsockname()[1]
     try:
         pf.parent.mkdir(parents=True, exist_ok=True)
-        pf.write_text(str(p))
+        pf.write_text(str(port))
     except Exception:
         pass
-    return p
+    return port, sock
 
 
 def run_app(dev: bool = False) -> None:
@@ -62,7 +74,8 @@ def run_app(dev: bool = False) -> None:
 
     get_settings()          # load settings / ensure the home dir exists
     host = "127.0.0.1"
-    port = _stable_port(host)    # reuse a port across launches → stable webview origin
+    # Held until the server takes it over, so nothing can slip in between.
+    port, sock = _reserve_port(host)
 
     server = None
     proc = None
@@ -72,6 +85,7 @@ def run_app(dev: bool = False) -> None:
         import subprocess
         import sys
         from pathlib import Path
+        sock.close()             # the reloader subprocess binds it itself
         pkg = str(Path(__file__).resolve().parent)
         proc = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "lodestone.api.app:app",
@@ -82,7 +96,10 @@ def run_app(dev: bool = False) -> None:
         from .api.app import app as fastapi_app
         config = uvicorn.Config(fastapi_app, host=host, port=port, log_level="warning")
         server = uvicorn.Server(config)
-        threading.Thread(target=server.run, daemon=True).start()
+        # Serve on the socket we already own rather than binding again — a second
+        # bind can lose the port to whatever grabbed it in the meantime, and the
+        # window would then load a stranger's server.
+        threading.Thread(target=lambda: server.run(sockets=[sock]), daemon=True).start()
 
     if not _wait_for_port(host, port, timeout=30.0 if dev else 15.0):
         print("Lodestone server failed to start.")
