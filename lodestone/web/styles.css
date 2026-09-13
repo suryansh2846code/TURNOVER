@@ -860,7 +860,24 @@ textarea:focus-visible, a:focus-visible, [tabindex]:focus-visible,
 
 /* tools / skills list */
 .tool-intro { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; }
-.tools { display: flex; flex-direction: column; gap: 7px; }
+.tools { display: flex; flex-direction: column; gap: 15px; }
+/* One group per place a skill came from: us, or something the user connected.
+   The group head is a HUD label per the brief — uppercase mono, letter-spaced,
+   quiet — so provenance reads as framing rather than as another row. */
+.tool-group { display: flex; flex-direction: column; gap: 7px; }
+.tool-group-head { display: flex; align-items: center; gap: 6px; font-family: var(--mono);
+  font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.tool-group-nm { color: var(--muted); }
+.tool-group-ct { margin-left: auto; letter-spacing: .08em; }
+/* Unreachable: the name comes forward and the reason carries the red, because
+   "failed" is the one meaning gold cannot hold. The skills stay visible and
+   dimmed — they exist, they just cannot run until the connector answers. */
+.tool-group.down .tool-group-nm { color: var(--text); }
+.tool-group.down .tool-group-ct { color: var(--danger); }
+.tool-group.down .tool { opacity: .5; }
+.tool-why { background: var(--panel-2); border-radius: 10px; padding: 10px 13px; margin: 0;
+  font-size: 12px; line-height: 1.5; color: var(--muted); }
+.tool-fix { align-self: flex-start; }
 .tool { background: var(--panel-2); border-radius: 10px; padding: 11px 13px; }
 .tool-nm { font-family: var(--mono); font-size: 12.5px; color: var(--text); }
 .tool-ds { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.45; }
