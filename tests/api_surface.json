@@ -2,6 +2,7 @@
  "DELETE /api/agents/custom/{agent_id}",
  "DELETE /api/agents/permissions/{value}",
  "DELETE /api/agents/{agent_id}/model",
+ "DELETE /api/brain/memories/{memory_id}",
  "DELETE /api/connectors/mcp/{server_id}",
  "DELETE /api/custom-apps/{app_id}",
  "DELETE /api/reminders/{rid}",

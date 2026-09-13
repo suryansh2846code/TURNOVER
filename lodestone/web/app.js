@@ -2403,7 +2403,7 @@ async function searchBrain(q) {
      </div>`).join("");
   openBrainModal(`Search: "${q}"`, rows);
   document.querySelectorAll("[data-delmem]").forEach((b) => b.onclick = async () => {
-    await api(`/api/memories/${b.dataset.delmem}`, { method: "DELETE" });
+    await api(`/api/brain/memories/${b.dataset.delmem}`, { method: "DELETE" });
     toast("Deleted"); b.closest(".bm-mem").remove(); loadBrain();
   });
 }
