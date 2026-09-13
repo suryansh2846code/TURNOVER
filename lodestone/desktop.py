@@ -73,6 +73,15 @@ def run_app(dev: bool = False) -> None:
     from .config import get_settings
 
     get_settings()          # load settings / ensure the home dir exists
+
+    # A sign-in the user walked away from leaves its CLI running forever. Clear
+    # out anything a previous launch left behind before starting another.
+    from .models import login_processes
+    strays = login_processes.reap_all()
+    if strays:
+        print(f"Cleaned up {strays} unfinished sign-in "
+              f"process{'es' if strays != 1 else ''} from a previous session.")
+
     host = "127.0.0.1"
     # Held until the server takes it over, so nothing can slip in between.
     port, sock = _reserve_port(host)
@@ -136,6 +145,9 @@ def run_app(dev: bool = False) -> None:
     try:
         webview.start()          # blocks until the window is closed
     finally:
+        # Quitting must not leave a login process waiting for a callback that
+        # will never come — that is how 158 of them piled up on one machine.
+        login_processes.reap_all()
         if server is not None:
             server.should_exit = True
         if proc is not None:
