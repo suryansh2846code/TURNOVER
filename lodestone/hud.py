@@ -33,7 +33,11 @@ logger = logging.getLogger(__name__)
 # the app being broken.
 SIGNIN_TIMEOUT_SECONDS = 180
 
+# Starting size. The card measures its own copy and calls `fit`, so the height
+# here only has to be big enough not to clip before that lands.
 _WINDOW_SIZE = (348, 250)
+_MIN_HEIGHT = 150
+_MAX_HEIGHT = 420
 _SCREEN_MARGIN = 18          # gap from the screen edge, like a system notification
 
 # Set by desktop.run_app; absent when running as a plain server.
@@ -172,6 +176,23 @@ def _place_and_raise(nswin, width: int, height: int) -> None:
     AppHelper.callAfter(_raise_now, nswin, width, height)
 
 
+def _resize_now(nswin, height: int) -> None:
+    """Main-thread half of `_Bridge.fit`."""
+    import AppKit
+
+    try:
+        frame = nswin.frame()
+        if abs(frame.size.height - height) < 1:
+            return                        # already the right height
+        top = frame.origin.y + frame.size.height      # Cocoa y grows upward
+        nswin.setFrame_display_(
+            AppKit.NSMakeRect(frame.origin.x, top - height,
+                              frame.size.width, height), True)
+        nswin.invalidateShadow()          # the shape changed
+    except Exception:
+        logger.warning("could not resize the sign-in window", exc_info=True)
+
+
 def _raise_now(nswin, width: int, height: int) -> None:
     """The main-thread half of `_place_and_raise`, split out so it can be tested
     against a recording stub — the point of this code is which AppKit calls it
@@ -186,6 +207,26 @@ def _raise_now(nswin, width: int, height: int) -> None:
 
 class _Bridge:
     """Exposed to the HUD page as `window.pywebview.api`."""
+
+    def fit(self, height: float) -> bool:
+        """Trim the window to the height the card actually needs.
+
+        The copy differs per provider and per state, so a fixed height either
+        leaves a hole under the text or clips it. The card measures itself and
+        asks for that height; the window keeps its **top edge** so it stays
+        pinned to the corner and grows downward instead of drifting.
+        """
+        nswin = _native_window()
+        if nswin is None:
+            return False
+        try:
+            wanted = max(_MIN_HEIGHT, min(_MAX_HEIGHT, int(round(float(height)))))
+        except (TypeError, ValueError):
+            return False
+        from PyObjCTools import AppHelper
+
+        AppHelper.callAfter(_resize_now, nswin, wanted)
+        return True
 
     def close_hud(self) -> None:
         close()

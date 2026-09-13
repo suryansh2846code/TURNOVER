@@ -26,6 +26,9 @@
        window by the window server, so the card fills the window edge to edge
        and every pixel of it is card. */
     padding: 0;
+    /* Let the card be exactly as tall as its content instead of stretching to
+       the window; `fit()` then trims the window to match. */
+    align-items: flex-start;
     -webkit-user-select: none;
     user-select: none;
     cursor: default;
@@ -78,7 +81,10 @@
   .close:hover { background: #3a3a3d; }
 
   .action {
-    margin-top: auto;
+    /* A fixed gap, not a spring. Letting this margin absorb the leftover
+       space shoved the button to the bottom of the window and left a hole
+       under the text whenever the copy was short. */
+    margin-top: 14px;
     display: flex; align-items: center; justify-content: center; gap: 8px;
     width: 100%; padding: 10px;
     border: 1px solid var(--line); border-radius: 11px;
@@ -157,6 +163,24 @@
 
   const api = (p, o) => fetch(p, o).then((r) => r.json());
   const bridge = () => window.pywebview?.api;
+
+  // The card is as tall as its copy, and the copy changes with the provider and
+  // the state. Trim the window to match, so there is no dead strip below the
+  // card quietly swallowing clicks meant for whatever is behind it. Declared
+  // after `bridge`, which it reads — the ordering trap that cost a day already.
+  const fit = () => {
+    const h = Math.ceil(document.querySelector(".card").getBoundingClientRect().height);
+    if (h > 0) bridge()?.fit?.(h);
+  };
+  window.addEventListener("pywebviewready", fit);
+  // Text metrics decide the card's height, and the first measurement lands
+  // before the system font is ready — three pixels short, enough to clip the
+  // cancel link. Measure again once the font is in.
+  if (document.fonts?.ready) document.fonts.ready.then(fit);
+  // Watch the card rather than calling fit() from each place that rewrites the
+  // copy: every state already changes the text, and one missed call leaves the
+  // card clipped against a window that no longer matches it.
+  new ResizeObserver(fit).observe(document.querySelector(".card"));
 
   let done = false;
   const started = Date.now();

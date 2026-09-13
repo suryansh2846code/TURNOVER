@@ -175,3 +175,56 @@ def test_one_padding_value_governs_every_edge():
     assert "padding: var(--pad)" in css, "the card does not use the shared padding"
     assert "top: var(--pad); right: var(--pad)" in css, (
         "the close button is inset by hand and will drift from the card padding")
+
+
+# ── the window tracks the card's height ──────────────────────────────────
+def test_resizing_keeps_the_top_edge_anchored():
+    """The card is pinned to the top-right corner, so it has to grow downward.
+    Cocoa's origin is the BOTTOM-left, so resizing naively moves the top edge and
+    the card creeps up the screen every time the copy changes."""
+    win = FakeWindow()
+    win.frame = lambda: AppKit.NSMakeRect(1000, 500, 348, 250)   # bottom-left origin
+    hud._resize_now(win, 219)
+
+    call = win.named("setFrame_display_")
+    assert call, "never resized"
+    rect = call[0][1][0]
+    assert round(rect.size.height) == 219
+    assert round(rect.size.width) == 348, "width must not change"
+    assert round(rect.origin.y + rect.size.height) == 750, "top edge moved"
+
+
+def test_resizing_refreshes_the_shadow():
+    """The shadow is cached from the old shape; a taller card keeps the old one."""
+    win = FakeWindow()
+    win.frame = lambda: AppKit.NSMakeRect(0, 0, 348, 250)
+    hud._resize_now(win, 200)
+    assert win.named("invalidateShadow")
+
+
+def test_an_unchanged_height_is_left_alone():
+    """The page re-measures on every state change; resizing to the height it
+    already has would churn the window for nothing."""
+    win = FakeWindow()
+    win.frame = lambda: AppKit.NSMakeRect(0, 0, 348, 219)
+    hud._resize_now(win, 219)
+    assert not win.named("setFrame_display_")
+
+
+def test_fit_is_harmless_without_a_window():
+    """`lodestone serve` has no Cocoa window; the page still calls fit()."""
+    previous = hud._hud_window
+    hud._hud_window = None
+    try:
+        assert hud._Bridge().fit(220) is False
+    finally:
+        hud._hud_window = previous
+
+
+def test_the_card_does_not_pad_itself_to_the_window():
+    """`margin-top: auto` shoved the button to the bottom of a fixed-height
+    window, leaving a hole under the text whenever the copy was short."""
+    css = CARD_HTML.read_text()
+    assert "margin-top: auto" not in css, "the button is spring-loaded again"
+    assert "align-items: flex-start" in css, "the card stretches to the window"
+    assert "ResizeObserver" in css, "nothing re-fits the window when the copy changes"
