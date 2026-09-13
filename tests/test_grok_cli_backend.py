@@ -265,7 +265,7 @@ def test_status_reports_waiting_then_success():
     class _Running:
         def poll(self): return None
 
-    mod._login_proc, mod._login_baseline = _Running(), {"authenticated": False}
+    mod._session.proc, mod._session.baseline = _Running(), {"authenticated": False}
     mod.reset_auth_cache()
     with patch("lodestone.models.grok_cli.find_grok_cli", return_value=GROK), \
          patch("subprocess.run", return_value=_cp(0, MODELS_OUT)):
@@ -327,7 +327,7 @@ def test_cancelling_terminates_the_login_and_stops_tracking_it():
     login_processes.track(proc, "login")
     assert proc.pid in _tracked_pids()
 
-    mod._login_proc, mod._login_baseline = proc, {"authenticated": False}
+    mod._session.proc, mod._session.baseline = proc, {"authenticated": False}
     assert mod.cancel_cli_login() is True
     assert proc.terminated is True
     # Released from the on-disk record, or the next launch reaps a PID that is
@@ -338,16 +338,16 @@ def test_cancelling_terminates_the_login_and_stops_tracking_it():
 def test_cancelling_clears_the_in_flight_state():
     from lodestone.models import grok_cli as mod
 
-    mod._login_proc, mod._login_baseline = _Spawned(), {"authenticated": False}
+    mod._session.proc, mod._session.baseline = _Spawned(), {"authenticated": False}
     mod.cancel_cli_login()
-    assert mod._login_proc is None
-    assert mod._login_baseline is None
+    assert mod._session.proc is None
+    assert mod._session.baseline is None
 
 
 def test_cancelling_with_nothing_in_flight_is_a_no_op():
     from lodestone.models import grok_cli as mod
 
-    mod._login_proc = None
+    mod._session.proc = None
     assert mod.cancel_cli_login() is False
 
 
@@ -355,7 +355,7 @@ def test_cancelling_a_login_that_already_finished_reports_nothing_to_cancel():
     """The user completed it in the browser a moment before clicking cancel."""
     from lodestone.models import grok_cli as mod
 
-    mod._login_proc = _AlreadyExited()
+    mod._session.proc = _AlreadyExited()
     assert mod.cancel_cli_login() is False
 
 
@@ -367,6 +367,6 @@ def test_a_terminate_that_fails_still_stops_tracking_the_process():
     proc = _Spawned(pid=4243)
     login_processes.track(proc, "login")
     with patch.object(_Spawned, "terminate", side_effect=OSError("gone")):
-        mod._login_proc = proc
+        mod._session.proc = proc
         assert mod.cancel_cli_login() is False
     assert proc.pid not in _tracked_pids()

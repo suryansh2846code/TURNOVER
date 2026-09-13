@@ -173,7 +173,7 @@ def test_status_polls_the_cli_and_connects_on_success():
          patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')):
         assert TestClient(app).get("/api/providers/cursor/auth/status").json()["status"] == "idle"
 
-    mod._login_proc, mod._login_baseline = _Running(), {"authenticated": False, "email": None}
+    mod._session.proc, mod._session.baseline = _Running(), {"authenticated": False, "email": None}
     mod.reset_auth_cache()
     with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')):
@@ -303,14 +303,14 @@ def _flow_status(proc, baseline, cli_json):
     from lodestone.models import cursor as mod
     from lodestone.models.auth_flows import get_flow
 
-    mod._login_proc, mod._login_baseline = proc, baseline
+    mod._session.proc, mod._session.baseline = proc, baseline
     mod.reset_auth_cache()
     try:
         with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
              patch("subprocess.run", return_value=_proc(cli_json)):
             return get_flow("cursor").status().status
     finally:
-        mod._login_proc, mod._login_baseline = None, None
+        mod._session.proc, mod._session.baseline = None, None
         mod.reset_auth_cache()
 
 
@@ -343,7 +343,7 @@ def test_no_sign_in_running_just_reports_the_current_state():
 def test_cancelling_clears_the_in_flight_state():
     from lodestone.models import cursor as mod
 
-    mod._login_proc, mod._login_baseline = _Running(), BASE
+    mod._session.proc, mod._session.baseline = _Running(), BASE
     with patch.object(_Running, "terminate", create=True):
         mod.cancel_cli_login()
     assert mod.login_progress()["in_flight"] is False
