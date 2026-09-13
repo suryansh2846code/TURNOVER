@@ -19,9 +19,23 @@ jobs:
         run: uv python install 3.11
 
       - name: Install
+        # `-e .` alone installs the base package, and the Google SDK is an
+        # optional extra — so `google_auth.get_credentials()` raised
+        # ModuleNotFoundError here while passing on any developer machine that
+        # happened to have it. The suite needs the real Google auth path (the
+        # connector SDKs are faked in tests/connectors/harness.py; this one is
+        # not), so the extra has to be installed rather than the test skipped.
+        #
+        # `gdrive` is the whole shared Google stack — gmail/gcal/gdrive all go
+        # through google_auth.py, so installing one connector's extra to fix a
+        # shared-auth failure would only look right by accident.
+        #
+        # NOT `.[all]`: it drags in sentence-transformers, and torch is 505 MB
+        # for a job that already forces LODESTONE_EMBEDDING_PROVIDER=hash. It is
+        # also not "all" — it omits python-docx and python-pptx.
         run: |
           uv venv
-          uv pip install -e .
+          uv pip install -e ".[gdrive]"
           uv pip install pytest ruff mypy
 
       - name: Lint
