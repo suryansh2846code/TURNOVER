@@ -951,8 +951,9 @@ def hud_note(body: HudNoteIn):
 def hud_diagnostics():
     """Whether the floating sign-in window exists, and what the last click did."""
     from .. import hud
+    from ..models import login_processes
 
-    return hud.diagnostics()
+    return {**hud.diagnostics(), "login_processes": login_processes.alive()}
 
 
 @app.get("/api/providers/{name}/cli")

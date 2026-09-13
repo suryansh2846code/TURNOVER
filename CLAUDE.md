@@ -64,7 +64,27 @@ What that means concretely, and what it has already changed:
   `login_progress()` records who was signed in at start and compares.
   `AuthStatus`: **idle** = nothing in flight, **waiting** = a sign-in we started
   is running, **success** = it finished.
-- **Anything the user starts, they can stop.** Sign-in is cancellable from both
+- - **Anything we spawn, we clean up — across runs.** A vendor CLI's `login`
+  waits for a browser callback that may never arrive. Nothing reaped them, and
+  the only handle lived in module state, so every launch forgot the previous
+  launch's: **158 live `claude auth login` processes** were found on one machine,
+  each holding memory and the vendor's OAuth callback port until sign-in stopped
+  working and the app had to be force-quit. `models/login_processes.py` records
+  every spawned login to disk (the process that must clean up is not the one
+  that made the mess) and `run_app` reaps on launch *and* on quit. Only recorded
+  PIDs are ever signalled, and each is re-checked against the command line we
+  recorded first — PIDs get reused, and killing what inherited one is worse than
+  the leak.
+- **The webview origin is user state.** localStorage is keyed to it, so the port
+  is not an implementation detail: a launch that lands on a different port loses
+  the onboarding flag, the chosen model and the lead agent, and the app opens
+  looking empty. `_reserve_port` binds the saved port the way uvicorn does
+  (**SO_REUSEADDR** — without it a port the previous server just released, still
+  holding connections in TIME_WAIT, reads as taken) and hands that socket
+  straight to the server. Symptom when this broke: every *other* launch was
+  empty.
+
+**Anything the user starts, they can stop.** Sign-in is cancellable from both
   the floating card and the Models card: `/auth/cancel` → `AuthFlow.cancel()`
   terminates the CLI's login process. Dismissing the floating card cancels too —
   a close button that silently leaves work running is a lie.
