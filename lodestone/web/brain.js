@@ -33,45 +33,7 @@ async function loadBrain() {
   CONNECTORS = connectors;
   if ($("#ctxSources")) $("#ctxSources").textContent = connectors.filter((c) => c.ready).length;
   const staleAfterMin = Math.max(120, (SYNC_INTERVAL_MIN || 30) * 4);
-  $("#connectors").innerHTML = connectors.map((c) => {
-    const ls = c.state?.last_sync ? new Date(c.state.last_sync) : null;
-    const ageMin = ls ? (Date.now() - ls.getTime()) / 60000 : null;
-    const stale = c.ready && ageMin !== null && ageMin > staleAfterMin;
-    const last = ls ? ls.toLocaleDateString() : "";
-    const dot = !c.ready ? "off" : stale ? "stale" : "ok";
-    const sub = !c.ready ? (c.reason || "not configured")
-      : !last ? "ready · not synced yet"
-      : stale ? `stale · last ${last}` : `synced ${last}`;
-    const sync = c.ready ? `<button class="tiny ghost" data-sync="${esc(c.name)}">sync</button>` : "";
-    const setup = c.custom
-      ? `<button class="tiny ghost" data-editapp="${esc(c.name)}">edit</button>`
-      : (c.ready ? "" : `<button class="tiny" data-setup="${esc(c.name)}">setup</button>`);
-    const del = c.custom
-      ? `<button class="tiny ghost" data-delapp="${esc(c.name)}" title="remove">✕</button>`
-      : c.mcp ? `<button class="tiny ghost" data-delmcp="${esc(c.name)}" title="remove">✕</button>` : "";
-    return `<div class="conn" data-conn="${esc(c.name)}">
-      <span class="conn-meta"><span class="dot ${dot}"></span>
-        <span><span class="conn-name">${esc(c.label)}</span><span class="conn-sub">${esc(sub)}</span></span></span>
-      <span style="display:flex;gap:4px">${sync}${setup}${del}</span></div>`;
-  }).join("");
-  document.querySelectorAll("[data-sync]").forEach((b) => b.onclick = () => syncConn(b.dataset.sync));
-  document.querySelectorAll("[data-setup]").forEach((b) => b.onclick = () => connectorHelp(b.dataset.setup));
-  document.querySelectorAll("[data-editapp]").forEach((b) => b.onclick = () =>
-    customAppForm(CONNECTORS.find((x) => x.name === b.dataset.editapp)?.config));
-  document.querySelectorAll("[data-delapp]").forEach((b) => b.onclick = async () => {
-    const id = b.dataset.delapp.split(":")[1];
-    if (!confirm("Remove this custom app? (synced records stay in the brain.)")) return;
-    await api(`/api/custom-apps/${id}`, { method: "DELETE" });
-    toast("custom app removed"); loadBrain();
-  });
-  document.querySelectorAll("[data-delmcp]").forEach((b) => b.onclick = async () => {
-    const id = b.dataset.delmcp.split(":")[1];
-    // Say what removing does and does not do. Silently keeping the memories
-    // would be a surprise; silently deleting them would be worse.
-    if (!confirm("Remove this connector? (what it already synced stays in your brain.)")) return;
-    await api(`/api/connectors/mcp/${encodeURIComponent(id)}`, { method: "DELETE" });
-    toast("connector removed"); loadBrain();
-  });
+  renderConnectors(connectors, staleAfterMin);
   loadSyncStatus();
   loadApprovals();
   try { renderGoogleCard(await api("/api/google/status")); } catch (_) {}

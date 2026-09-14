@@ -953,6 +953,72 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   .set-ctl { width: 100%; }
 }
 
+/* ── connectors page ───────────────────────────────────────────────────── */
+.sp[hidden] { display: none; }
+.cn-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.cn-search { position: relative; flex: 1; min-width: 0; }
+.cn-search input { width: 100%; background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 12px 10px 34px; font: inherit; font-size: 13.5px; }
+.cn-search input:focus { outline: none; border-color: var(--accent); }
+.cn-search input::-webkit-search-cancel-button { filter: invert(.6); }
+.cn-search-ic { position: absolute; left: 12px; top: 50%; width: 13px; height: 13px;
+  transform: translateY(-50%); border: 1.5px solid var(--faint); border-radius: 50%; }
+.cn-search-ic::after { content: ""; position: absolute; right: -4px; bottom: -3px;
+  width: 6px; height: 1.5px; background: var(--faint); transform: rotate(45deg); }
+
+.cn-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 22px; }
+.cn-chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+  padding: 6px 12px; font-size: 12.5px; color: var(--muted);
+  background: transparent; border: 1px solid transparent; }
+.cn-chip:hover { color: var(--text); background: rgba(255,255,255,.05); }
+.cn-chip.is-on { background: var(--panel-2); color: var(--text); border-color: var(--line2); }
+.cn-chip-n { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.cn-chip.is-on .cn-chip-n { color: var(--muted); }
+
+.cn-group { margin-bottom: 30px; }
+.cn-group-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; margin-bottom: 12px; }
+.cn-group-title { font-size: 16px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 3px; }
+.cn-group-sub { font-size: 13px; color: var(--muted); margin: 0; }
+.cn-group-count { flex: none; font-size: 12.5px; color: var(--faint); padding-top: 2px; }
+
+/* One card per group, hairline between rows — the same shape the model page
+   uses for providers, so the two settings pages read as one product. */
+.cn-card { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; overflow: hidden; }
+.cn-row { display: flex; align-items: center; gap: 13px; padding: 14px 16px; }
+.cn-row + .cn-row { border-top: 1px solid var(--line); }
+.cn-logo { width: 32px; height: 32px; border-radius: 9px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--panel-2); color: var(--muted); position: relative; }
+.cn-logo svg { display: block; }
+/* A connected source is marked on its own logo rather than by a separate dot
+   in the row: the mark is what the eye lands on first. */
+.cn-logo[data-state="ok"]::after,
+.cn-logo[data-state="stale"]::after {
+  content: ""; position: absolute; right: -2px; bottom: -2px;
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 2px solid var(--panel); background: var(--ok); }
+.cn-logo[data-state="stale"]::after { background: var(--north); }
+.cn-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cn-name { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 600; }
+.cn-sub { font-size: 12.5px; color: var(--muted); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.cn-badge { font-family: var(--mono); font-size: 9px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ok); border: 1px solid currentColor;
+  border-radius: 999px; padding: 1px 7px; font-weight: 500; }
+.cn-badge.is-stale { color: var(--north); }
+.cn-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+.cn-x { color: var(--faint); }
+.cn-x:hover { color: var(--danger); }
+.cn-empty { color: var(--muted); font-size: 13.5px; padding: 26px 2px; }
+.cn-add { display: flex; gap: 8px; margin-top: 6px; }
+@media (max-width: 700px) {
+  .cn-group-head { flex-direction: column; gap: 4px; }
+  .cn-row { flex-wrap: wrap; }
+}
+
 /* full-screen brain screen */
 .brainscreen { position: fixed; inset: 0; z-index: 70; background: #05070d; overflow: hidden; }
 .brainscreen[hidden] { display: none; }

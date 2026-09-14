@@ -160,16 +160,6 @@
       <div class="drawer-body">
 
         <!-- Connectors -->
-        <div class="dpanel" data-d="sources" hidden>
-          <div class="ctx-label">Connected sources <button id="syncAll" class="tiny ghost">sync all</button></div>
-          <div id="approvals" class="approvals" hidden></div>
-          <div id="syncStatus" class="sync-status"></div>
-          <div id="googleCard" class="google-card" hidden></div>
-          <div id="connectors" class="connectors"></div>
-          <button id="addConnector" class="tiny" style="margin-top:10px;width:100%">+ Add a connector</button>
-          <button id="addCustomApp" class="tiny ghost" style="margin-top:6px;width:100%">+ Connect a custom app</button>
-        </div>
-
         <!-- Tasks -->
         <div class="dpanel" data-d="tasks" hidden>
           <div class="ctx-label">Tasks <span id="taskCount" class="muted"></span></div>
@@ -311,20 +301,50 @@
        account, a plan, usage limits and a model list. It is now a screen of
        its own, opened the same way Brain is. -->
   <div id="modelScreen" class="modelscreen" hidden>
-    <!-- Settings rail. Brain and Model are the two full-window screens that
-         exist today; the rest of the workspace nav is still drawers, so
-         listing them here would be a control that does not work. -->
+    <!-- One shell, several panels. Connectors and Model are both settings
+         pages, so they share the rail rather than each raising a screen with
+         its own copy of it — a duplicated rail is a rail that drifts. Brain is
+         a different kind of screen (a canvas) and is linked out to. -->
     <aside class="ms-nav">
       <button id="msClose" class="ms-back"><span class="ms-back-ic" aria-hidden="true">←</span>Back</button>
       <div class="ms-nav-label">Settings</div>
       <nav class="ms-nav-list">
         <button class="ms-nav-item" data-msnav="brain"><span class="ms-nav-ic" aria-hidden="true"></span><span>Brain</span></button>
+        <button class="ms-nav-item" data-msnav="connectors"><span class="ms-nav-ic" aria-hidden="true"></span><span>Connectors</span></button>
         <button class="ms-nav-item is-active" data-msnav="model" aria-current="page"><span class="ms-nav-ic" aria-hidden="true"></span><span>Model</span></button>
       </nav>
     </aside>
 
     <div class="ms-main">
-    <div class="ms-body">
+
+    <!-- ── panel: connectors ───────────────────────────────────────────── -->
+    <div class="ms-body sp" data-sp="connectors" hidden>
+      <h1 class="ms-h1">Connectors</h1>
+      <p class="ms-sub" style="margin-bottom:18px">Everything your agents can read. Nothing leaves this machine.</p>
+
+      <div class="cn-toolbar">
+        <div class="cn-search">
+          <span class="cn-search-ic" aria-hidden="true"></span>
+          <input id="cnSearch" type="search" autocomplete="off" placeholder="Search sources…" aria-label="Search sources" />
+        </div>
+        <button id="syncAll" class="tiny ghost">Sync all</button>
+      </div>
+      <div class="cn-filters" id="cnFilters" role="tablist" aria-label="Filter sources"></div>
+
+      <div id="approvals" class="approvals" hidden></div>
+      <div id="syncStatus" class="sync-status"></div>
+      <div id="googleCard" class="google-card" hidden></div>
+      <div id="connectors" class="connectors"></div>
+      <div id="cnEmpty" class="cn-empty" hidden>No source matches that.</div>
+
+      <div class="cn-add">
+        <button id="addConnector" class="tiny">+ Add a connector</button>
+        <button id="addCustomApp" class="tiny ghost">+ Connect a custom app</button>
+      </div>
+    </div>
+
+    <!-- ── panel: model ────────────────────────────────────────────────── -->
+    <div class="ms-body sp" data-sp="model">
       <h1 class="ms-h1">Models</h1>
 
       <!-- What a new agent opens on. Provider and model already persist in

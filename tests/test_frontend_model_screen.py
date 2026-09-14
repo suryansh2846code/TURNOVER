@@ -38,15 +38,23 @@ def test_the_harness_reached_the_handlers(clicked):
     assert clicked["error"] is None, clicked["error"]
 
 
-def test_model_opens_the_full_screen_and_not_the_drawer(clicked):
-    assert clicked["opened"]["model"] == {"modelScreen": True, "drawer": False}
+@pytest.mark.parametrize("nav,panel", [("model", "model"), ("sources", "connectors")])
+def test_a_settings_item_opens_the_screen_on_its_own_panel(clicked, nav, panel):
+    """Model and Connectors share one shell, so opening the screen is only half
+    of it — landing on the wrong panel shows the screen with the other page on
+    it, which reads as the nav item doing nothing."""
+    got = clicked["opened"][nav]
+    assert got["modelScreen"] is True and got["drawer"] is False, got
+    assert got["panel"] == panel, (
+        f"{nav} opened the settings screen on the {got['panel']!r} panel")
 
 
-@pytest.mark.parametrize("nav", ["tasks", "tools", "sources"])
-def test_every_other_nav_item_still_opens_the_drawer(clicked, nav):
-    """The delegation must catch "model" and nothing else."""
-    assert clicked["opened"][nav] == {"modelScreen": False, "drawer": True}, (
-        f"{nav} was dragged along with the model screen — the openDrawer "
+@pytest.mark.parametrize("nav", ["tasks", "tools"])
+def test_the_remaining_drawers_are_still_drawers(clicked, nav):
+    """The delegation must catch the two that became screens and nothing else."""
+    got = clicked["opened"][nav]
+    assert got["modelScreen"] is False and got["drawer"] is True, (
+        f"{nav} was dragged onto the settings screen — the openDrawer "
         "delegation is matching more than it should"
     )
 
@@ -56,6 +64,12 @@ def test_the_screen_can_be_closed(clicked):
 
 
 # ── the panel really left the drawer ──────────────────────────────────────
+def test_no_sources_panel_is_left_inside_the_drawer():
+    assert 'data-d="sources"' not in INDEX, (
+        "the drawer still has a sources panel — two copies of #connectors would "
+        "mean the renderer fills whichever the DOM happens to return first")
+
+
 def test_no_model_panel_is_left_inside_the_drawer():
     assert 'data-d="model"' not in INDEX, (
         "the drawer still has a model panel — two copies of these ids would "

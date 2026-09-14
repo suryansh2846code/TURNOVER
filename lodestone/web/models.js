@@ -848,10 +848,28 @@ async function loadEnrichCap() {
 // Model used to be a 380px slide-over. Its content is a grid of provider
 // cards — each an account, a plan, usage limits and a model list — so it gets
 // the whole window, opened exactly the way the brain screen is.
+// Which settings panel is on screen. Model and Connectors share the shell, so
+// showing one is hiding the others — a panel left visible underneath is how a
+// "page" quietly becomes two pages stacked.
+function showSettingsPanel(name) {
+  document.querySelectorAll(".sp").forEach((el) => { el.hidden = el.dataset.sp !== name; });
+  document.querySelectorAll(".ms-nav-item").forEach((b) => {
+    const on = b.dataset.msnav === name;
+    b.classList.toggle("is-active", on);
+    if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  });
+  const main = $(".ms-main"); if (main) main.scrollTop = 0;
+}
+async function openConnectorsScreen() {
+  const m = $("#modelScreen"); if (!m) return;
+  m.hidden = false;
+  showSettingsPanel("connectors");
+  try { await loadBrain(); } catch (_) {}   // fills #connectors, #googleCard, sync status
+}
 async function openModelScreen() {
   const m = $("#modelScreen"); if (!m) return;
   m.hidden = false;
-  const main = $(".ms-main"); if (main) main.scrollTop = 0;
+  showSettingsPanel("model");
   updateUsage();
   // Nothing here may reject: openDrawer() calls this without awaiting, so an
   // unhandled rejection is all the user would get. The defaults are built FROM
@@ -870,7 +888,8 @@ function closeModelScreen() {
 document.querySelectorAll(".ms-nav-item").forEach((b) => {
   b.onclick = () => {
     const to = b.dataset.msnav;
-    if (to === "model") { const m = $(".ms-main"); if (m) m.scrollTop = 0; return; }
+    if (to === "model") return openModelScreen();
+    if (to === "connectors") return openConnectorsScreen();
     closeModelScreen();
     if (to === "brain") openBrainScreen();
   };

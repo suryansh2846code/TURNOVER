@@ -36,10 +36,20 @@ const el = (sel) => {
 const NAVS = ["brain", "sources", "tasks", "tools", "model"];
 const navButtons = NAVS.map((nav) => Object.assign(makeEl("button"), { dataset: { nav } }));
 
+// Model and Connectors share one shell, so "did the screen open" is only half
+// the question — the other half is which panel it opened on. Both panels have
+// to exist for showSettingsPanel() to have anything to hide.
+const panels = ["connectors", "model"].map((sp) =>
+  Object.assign(makeEl("div"), { dataset: { sp }, hidden: true }));
+const railItems = ["brain", "connectors", "model"].map((msnav) =>
+  Object.assign(makeEl("button"), { dataset: { msnav } }));
+
 globalThis.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
 globalThis.document = {
   querySelector: (sel) => el(sel),
-  querySelectorAll: (sel) => (sel === ".snav" ? navButtons : []),
+  querySelectorAll: (sel) => (sel === ".snav" ? navButtons
+    : sel === ".sp" ? panels
+    : sel === ".ms-nav-item" ? railItems : []),
   getElementById: (id) => el(`#${id}`),
   createElement: () => makeEl(),
   addEventListener() {}, body: makeEl(), documentElement: makeEl(),
@@ -64,12 +74,15 @@ try {
   for (const nav of ["model", "tasks", "tools", "sources"]) {
     el("#modelScreen").hidden = true;
     el("#drawerBg").hidden = true;
+    panels.forEach((p) => { p.hidden = true; });
     const btn = navButtons.find((b) => b.dataset.nav === nav);
     if (typeof btn.onclick !== "function") { opened[nav] = "unbound"; continue; }
     try { btn.onclick(); } catch (e) { opened[nav] = `threw: ${e.message}`; continue; }
+    const shown = panels.filter((p) => p.hidden === false).map((p) => p.dataset.sp);
     opened[nav] = {
       modelScreen: el("#modelScreen").hidden === false,
       drawer: el("#drawerBg").hidden === false,
+      panel: shown.length === 1 ? shown[0] : shown,   // an array means ambiguous
     };
   }
   // …and the screen closes again.

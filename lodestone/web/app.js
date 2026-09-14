@@ -118,15 +118,15 @@ async function loadAgents() {
 
 
 // ── slide-over drawers opened from the left nav ─────────────────────────────
-const DRAWER_TITLES = { sources: "Connectors", tasks: "Tasks", tools: "Tools & skills" };  // model is a screen now
+const DRAWER_TITLES = { tasks: "Tasks", tools: "Tools & skills" };  // model and connectors are screens now
 
 function openDrawer(name) {
-  if (name === "model") return openModelScreen();   // no longer a drawer
+  if (name === "model") return openModelScreen();        // no longer a drawer
+  if (name === "sources") return openConnectorsScreen();  // nor is this one
   const bg = $("#drawerBg"); if (!bg) return;
   $("#drawerTitle").textContent = DRAWER_TITLES[name] || name;
   document.querySelectorAll(".dpanel").forEach((p) => p.hidden = p.dataset.d !== name);
   bg.hidden = false;
-  if (name === "sources") loadBrain();
   if (name === "tasks") { loadTasks(); loadReminders(); loadRoutines(); }
   if (name === "tools") loadTools();
 }
