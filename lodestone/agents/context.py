@@ -19,6 +19,8 @@ because a real summary keeps intent and decisions that a heuristic drops.
 """
 from __future__ import annotations
 
+import json
+
 from ..log import get_logger, suppressed
 from ..models import Message
 from .agent import Agent, AgentMemory
@@ -32,6 +34,16 @@ MIN_TO_COMPACT = 4
 
 #: Keeps the note small enough to stay cheap on every subsequent turn.
 MAX_SUMMARY_CHARS = 1500
+
+#: How much of one tool's answer is kept for later turns. Enough to recognise
+#: what was found and answer "what was that third one again?"; short enough that
+#: a handful of them do not crowd out the conversation.
+MAX_DIGEST_CHARS = 320
+
+#: Tool calls kept per turn, and turns kept. A turn that made twenty calls is
+#: not twenty things worth remembering — the first few are what it was doing.
+MAX_DIGEST_CALLS = 6
+MAX_DIGEST_TURNS = 3
 
 _SUMMARY_SYSTEM = (
     "You maintain a running summary of an ongoing conversation between a user "
@@ -83,6 +95,53 @@ def _model_summary(provider, previous: str, turns: list[dict]) -> str | None:
     return text[:MAX_SUMMARY_CHARS] or None
 
 
+def digest_of(trace: list) -> list[dict]:
+    """What this turn's tools found, small enough to keep.
+
+    Only the names used to be stored, and the outputs were thrown away — so
+    "what was that third result again?" sent the agent to search all over again
+    (a fresh turn, so the memo is empty and it pays for it twice) or to
+    reconstruct it from its own prose, which is where invented detail comes from.
+    """
+    pairs: list[dict] = []
+    pending: dict | None = None
+    for step in trace:
+        if step.kind == "tool_call":
+            pending = {"name": step.name, "args": step.arguments}
+        elif step.kind == "tool_result" and pending is not None:
+            text = " ".join((step.result or "").split())
+            pending["found"] = text[:MAX_DIGEST_CHARS]
+            pairs.append(pending)
+            pending = None
+        if len(pairs) >= MAX_DIGEST_CALLS:
+            break
+    return pairs
+
+
+def _tool_note(rows: list[dict]) -> str:
+    """The recent tool findings, as one compact note the model can refer back to."""
+    lines: list[str] = []
+    for row in rows[-MAX_DIGEST_TURNS:]:
+        try:
+            entries = json.loads(row.get("tool_json") or "[]")
+        except (TypeError, ValueError):
+            continue
+        for entry in entries:
+            # Rows written before results were kept hold a bare list of names.
+            if not isinstance(entry, dict):
+                continue
+            found = (entry.get("found") or "").strip()
+            if not found:
+                continue
+            args = entry.get("args") or {}
+            shown = ", ".join(f"{k}={v}" for k, v in list(args.items())[:2])
+            lines.append(f"- {entry.get('name')}({shown}) → {found}")
+    if not lines:
+        return ""
+    return ("What your tools found earlier in this conversation (use it instead "
+            "of running the same lookup again):\n" + "\n".join(lines[-8:]))
+
+
 def build_history(mem: AgentMemory, agent: Agent, effort: Effort,
                   provider=None) -> list[Message]:
     """The conversation as the model should see it: a summary, then recent turns.
@@ -116,6 +175,9 @@ def build_history(mem: AgentMemory, agent: Agent, effort: Effort,
                 mem.set_summary(agent.id, summary, pending[-1]["ts"])
 
     messages: list[Message] = []
+    note = _tool_note([r for r in verbatim_rows if r.get("tool_json")])
+    if note:
+        messages.append(Message(role="system", content=note))
     if summary:
         messages.append(Message(
             role="system",

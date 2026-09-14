@@ -14,7 +14,7 @@ from ..log import get_logger, suppressed
 from ..models import Message, get_provider
 from ..models.base import ChatResult
 from ..models.entitlements import resolve_usable_model
-from . import background, cancellation, delegation, grounding, planning
+from . import background, cancellation, context, delegation, grounding, planning
 from .agent import Agent, AgentMemory
 from .context import build_history
 from .effort import Effort, get_effort
@@ -559,8 +559,7 @@ def run_turn(agent_id: str, user_text: str, *,
 
     if persist:
         mem.append(agent.id, "assistant", reply,
-                   tool_json=json.dumps([s.name for s in trace
-                                         if s.kind == "tool_call"]))
+                   tool_json=json.dumps(context.digest_of(trace)))
 
     if was_stopped:
         # Both of the calls below are model calls, and a stopped turn has no
