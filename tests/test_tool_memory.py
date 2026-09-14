@@ -63,10 +63,10 @@ def test_the_next_turn_is_told_what_the_last_one_found(scripted):
     tools_mod.TOOL_IMPLS["list_entities"] = lambda **kw: "Sokrates, Bellweather, Crane"
     try:
         scripted([[("list_entities", {"limit": 3})], "those three"])
-        runtime.run_turn("launch", "who are the top entities?")
+        runtime.run_turn("writer", "who are the top entities?")
 
         provider = scripted([], final_answer="the third was Crane")
-        runtime.run_turn("launch", "what was the third one again?")
+        runtime.run_turn("writer", "what was the third one again?")
     finally:
         tools_mod.TOOL_IMPLS["list_entities"] = saved
 
@@ -83,11 +83,11 @@ def test_the_stored_row_carries_the_result_not_only_the_name(scripted):
     tools_mod.TOOL_IMPLS["list_entities"] = lambda **kw: "a distinctive finding"
     try:
         scripted([[("list_entities", {})], "done"])
-        runtime.run_turn("launch", "look something up")
+        runtime.run_turn("writer", "look something up")
     finally:
         tools_mod.TOOL_IMPLS["list_entities"] = saved
 
-    rows = AgentMemory().history("launch", limit=4)
+    rows = AgentMemory().history("writer", limit=4)
     stored = [r["tool_json"] for r in rows if r["tool_json"]]
     assert stored, "nothing was stored about the tools at all"
     assert "a distinctive finding" in stored[-1]

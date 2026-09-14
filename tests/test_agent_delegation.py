@@ -133,7 +133,7 @@ def test_the_chain_survives_parallel_tool_calls(scripted):
     try:
         scripted([[("ask_agent", {"agent_id": "research", "question": "a"}),
                    ("ask_agent", {"agent_id": "personal", "question": "b"}),
-                   ("ask_agent", {"agent_id": "launch", "question": "c"})],
+                   ("ask_agent", {"agent_id": "writer", "question": "c"})],
                   "done"])
         runtime.run_turn("inbox", "ask everyone", effort="high")
     finally:

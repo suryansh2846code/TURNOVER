@@ -1,7 +1,12 @@
 # `lodestone/agents/` — the loop
 
 The turn loop, tools, effort, delegation, planning, grounding, approvals,
-permissions.
+permissions — and `library.py`, which is what Lodestone *offers*.
+
+- **The library is not the roster.** `library.py` holds every agent that ships;
+  the roster is the few the user took on, and `list_agents()` returns only
+  those. An agent nobody picked is one nobody opens. A template that leaves the
+  roster keeps its conversation — removing is not deleting.
 
 - Effort is one gear selector (Low/Medium/High), not a settings screen — it
   derives every budget at once, and it spends the *user's* money. It caps

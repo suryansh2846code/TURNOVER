@@ -1920,3 +1920,84 @@ button.tiny.running:hover { background: linear-gradient(to right,
 .apr-why { font-size: 12px; opacity: .68; margin-top: 3px; line-height: 1.45; }
 .apr-btns { display: flex; gap: 6px; margin-top: 9px; }
 .apr-busy { opacity: .5; pointer-events: none; }
+
+/* ── Agent Library ───────────────────────────────────────────────────────
+   A shelf per kind of work, a card per specialist. Two states only: in your
+   roster, or not. The card carries what the agent needs and what it can do
+   to the machine, because adding it is the consent. */
+.libscreen {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--bg, #0b0d10);
+  overflow-y: auto;
+}
+.lib-top {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 14px 22px;
+  background: inherit;
+  border-bottom: 1px solid var(--line, #1e232b);
+}
+.lib-top-title { font-weight: 600; letter-spacing: -.01em; }
+.lib-body { max-width: 1100px; margin: 0 auto; padding: 34px 22px 80px; }
+.lib-head { margin-bottom: 26px; }
+.lib-h1 {
+  margin: 0 0 6px; font-size: clamp(1.7rem, 3.6vw, 2.6rem);
+  font-weight: 600; letter-spacing: -.025em; line-height: 1.08;
+  text-wrap: balance;
+}
+.lib-sub { margin: 0 0 20px; color: var(--muted, #8a94a3); }
+.lib-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lib-search {
+  flex: 1 1 260px; max-width: 460px;
+  padding: 10px 14px; border-radius: 10px;
+  border: 1px solid var(--line, #1e232b);
+  background: var(--panel, #12161c); color: inherit; font: inherit;
+}
+.lib-count { color: var(--muted, #8a94a3); font-size: .85rem; }
+.lib-cats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.lib-cat {
+  padding: 7px 13px; border-radius: 999px; cursor: pointer;
+  border: 1px solid transparent; background: transparent;
+  color: var(--muted, #8a94a3); font: inherit; font-size: .9rem;
+}
+.lib-cat:hover { color: inherit; }
+.lib-cat.is-on {
+  background: var(--panel, #12161c); color: inherit;
+  border-color: var(--line, #1e232b);
+}
+.lib-grid {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+}
+.lib-card {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 18px; border-radius: 14px;
+  border: 1px solid var(--line, #1e232b);
+  background: var(--panel, #12161c);
+}
+.lib-card.is-mine { border-color: color-mix(in srgb, var(--accent, #6c8cff) 45%, transparent); }
+.lib-card-head { display: flex; align-items: center; gap: 11px; }
+.lib-orb { width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto; }
+.lib-cat-tag {
+  font-size: .64rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--muted, #8a94a3);
+}
+.lib-name { font-weight: 600; letter-spacing: -.01em; }
+.lib-desc { margin: 0; color: var(--muted, #8a94a3); font-size: .92rem; line-height: 1.5; }
+.lib-works, .lib-powers { font-size: .78rem; color: var(--muted, #8a94a3); }
+.lib-powers { color: color-mix(in srgb, var(--accent, #6c8cff) 70%, var(--muted, #8a94a3)); }
+.lib-foot {
+  margin-top: auto; padding-top: 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap;
+}
+.lib-missing { font-size: .78rem; color: var(--warn, #e0a45e); }
+.lib-btn {
+  margin-left: auto; padding: 8px 14px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--line, #1e232b);
+  background: var(--accent, #6c8cff); color: #0b0d10;
+  font: inherit; font-size: .88rem; font-weight: 500;
+}
+.lib-btn.ghost { background: transparent; color: var(--muted, #8a94a3); }
+.lib-btn:disabled { opacity: .6; cursor: default; }
+.lib-empty { color: var(--muted, #8a94a3); padding: 30px 0; }

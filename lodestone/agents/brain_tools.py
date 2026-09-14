@@ -47,6 +47,15 @@ MAX_TIMELINE = 25
 #: quietly destroying something the user said.
 MIN_MATCH_SCORE = 1.2
 
+#: The same problem one layer over: `match_entities` returns its best guess and
+#: only discards scores at or below 0.05, so asking about a name the graph has
+#: never seen came back with whatever was nearest and described it confidently.
+#: Measured on a real graph: a true name match scores ~1.3, and the best match
+#: for a name that is not there tops out around 0.70. A name or alias hit is
+#: worth +0.5 on its own, so a floor just under 1.0 means an answer needs either
+#: that or a very strong embedding match.
+MIN_ENTITY_SCORE = 0.9
+
 
 def _confident_hit(brain, text: str) -> dict | None:
     """The memory `text` refers to, or None if nothing is close enough."""
@@ -79,7 +88,8 @@ def who_is(name: str) -> ToolResult:
         return ToolResult.failed("Give a name to look up.")
 
     brain = get_brain()
-    matches = brain.graph.match_entities(query, limit=3)
+    matches = [m for m in brain.graph.match_entities(query, limit=3)
+               if float(m.get("score") or 0) >= MIN_ENTITY_SCORE]
     if not matches:
         # Not a failure: the honest answer is that this person is not in the
         # brain yet, and saying so is more useful than a retry.

@@ -142,7 +142,10 @@ def test_an_agent_without_the_sentinel_gets_exactly_the_built_ins(connectors):
     names = [t.name for t in build_tools(list(TOOL_DEFS), self_id="inbox", effort=HIGH)]
 
     assert names == list(TOOL_DEFS)
-    assert len(names) == 13
+    # Every built-in and nothing else. Against len(TOOL_DEFS) rather than a
+    # literal: the line above already pins the exact set, so a hardcoded count
+    # only breaks whenever a tool is added without saying anything new.
+    assert len(names) == len(TOOL_DEFS)
     assert fake.calls == []
 
 

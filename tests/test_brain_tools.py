@@ -33,11 +33,12 @@ def test_who_is_answers_from_the_graph(seeded):
     assert "Divyansh" in out
 
 
-def test_who_is_says_plainly_when_someone_is_not_known_yet():
-    """Not a failure — repeating the lookup would not help."""
+def test_who_is_does_not_describe_the_nearest_stranger():
+    """match_entities returns its best guess however poor; describing it as the
+    answer is worse than saying nobody by that name is known."""
     out = run_tool("who_is", {"name": "Zzyzx Nobody Qqq"})
     assert out.ok, "an unknown name was reported as a tool failure"
-    assert "not" in out.lower()
+    assert "Nothing in the knowledge graph matches" in out, out[:200]
 
 
 def test_who_is_needs_a_name():

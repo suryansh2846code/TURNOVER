@@ -1,7 +1,7 @@
 # `lodestone/web/` — the frontend
 
 Vanilla JS, **no build step**. The workspace is `index.html` + `styles.css` +
-eleven plain scripts; `onboarding.html` and `signin_hud.html` are self-contained
+twelve plain scripts; `onboarding.html` and `signin_hud.html` are self-contained
 pages.
 
 **`index.html` declares the script order, and that is the only place it is
@@ -21,6 +21,7 @@ read before its definition is a temporal dead-zone `ReferenceError` that
 | `workspace.js` | approvals, tasks, reminders, routines, first-run |
 | `brain-screen.js` | the full-screen canvas view |
 | `usage.js` | the token meter and enrichment progress |
+| `library.js` | the Agent Library screen — templates, shelves, the roster |
 | `tools.js` | the Tools & skills panel |
 | `app.js` | the shell: state, chrome, agent rail, drawers, keyboard, boot |
 

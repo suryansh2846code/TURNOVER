@@ -35,9 +35,21 @@ def test_brain_recall_fuses_graph_and_memories():
     assert "sokoarena" in res["context"].lower() or res["memory_hits"]
 
 
-def test_four_agents_exist():
+def test_the_starter_roster_is_what_a_new_user_gets():
+    """Not the whole library: an agent nobody picked is one nobody opens.
+
+    This used to assert the four that shipped, because the four that shipped
+    WERE the roster. Now the library offers more than anyone starts with, and
+    what matters is that a fresh install begins with a small, useful team.
+    """
+    from lodestone.agents.library import BY_ID, DEFAULT_ROSTER
+
     ids = {a.id for a in list_agents()}
-    assert ids == {"inbox", "launch", "research", "personal"}
+    assert set(DEFAULT_ROSTER) <= ids, "the starter roster is not all present"
+    assert 2 <= len(DEFAULT_ROSTER) < len(BY_ID), (
+        "a starter roster should be a choice, not the whole catalogue")
+    for tid in DEFAULT_ROSTER:
+        assert tid in BY_ID
 
 
 def test_agent_tool_loop_uses_brain():

@@ -44,7 +44,7 @@ def test_one_agent_with_multiple_models():
 
 def test_one_model_with_multiple_agents():
     """Verify multiple distinct agents can use the same model without changing identity."""
-    agents = ["inbox", "launch", "research", "personal"]
+    agents = ["inbox", "writer", "research", "personal"]
     for aid in agents:
         agent = get_agent(aid)
         res = run_turn(aid, "Status check", provider_name="mock", model_name="mock-1")

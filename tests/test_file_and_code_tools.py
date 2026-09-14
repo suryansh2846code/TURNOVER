@@ -160,17 +160,31 @@ def test_empty_code_is_a_failure_not_a_run():
 
 
 # ── consent ──────────────────────────────────────────────────────────────
-def test_no_shipped_agent_can_run_code():
-    """The user adds this to an agent themselves — running code is the consent."""
+def test_only_agents_whose_job_is_code_can_run_it_and_the_library_says_so():
+    """Adding one of these from the library IS the consent — so the card must
+    say what it does before the user adds it, not after."""
+    from lodestone.agents.library import describe
+
+    coders = {t["id"] for t in describe(include_status=False) if t["runs_code"]}
+    assert coders, "no template declares that it runs code"
     for agent in PRESETS.values():
-        assert "run_python" not in agent.tools, f"{agent.id} ships with run_python"
+        if "run_python" in agent.tools:
+            assert agent.id in coders, (
+                f"{agent.id} runs code but its library card does not say so")
+        else:
+            assert agent.id not in coders
 
 
-def test_the_shipped_agents_do_get_the_file_tools():
-    """Safe to ship, because they reach nothing until a folder is granted."""
+def test_an_agent_that_declares_the_file_tools_really_gets_them():
+    """Safe to ship with, because they reach nothing until a folder is granted."""
+    checked = 0
     for agent in PRESETS.values():
+        if "read_file" not in agent.tools:
+            continue
+        checked += 1
         names = {t.name for t in build_tools(agent.tools, self_id=agent.id)}
         assert {"read_file", "write_file", "list_dir"} <= names
+    assert checked >= 3, "almost no shipped agent can touch a file"
 
 
 def test_every_new_tool_is_declared_and_implemented():

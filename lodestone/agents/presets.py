@@ -1,6 +1,13 @@
-"""The four built-in agents, mirroring Turnstone: Inbox, Launch, Research, Personal.
+"""Resolving an agent by id — from the library, or from the user's own.
 
-All share one Brain; each is scoped to a domain with its own tools and voice.
+This file used to *be* the roster: four hardcoded agents, all present, none of
+them chosen. That moved to `library.py`, which offers templates and remembers
+which ones this person took on. What is left here is the lookup every other
+module already used, so nothing had to learn a new way to ask.
+
+`PRESETS` is kept as the whole library keyed by id. It was the name for "the
+agents that ship", and it still means that — it is simply no longer the same as
+"the agents this user has".
 """
 from __future__ import annotations
 
@@ -8,88 +15,10 @@ import dataclasses
 
 from .agent import Agent
 from .agent_models import get_agent_model
-from .mcp_tools import SENTINEL as MCP_TOOLS
+from .library import BY_ID, rostered_agents
 
-#: `MCP_TOOLS` is a category, not a tool: whatever the user's own connectors can
-#: *read*, resolved when the turn starts. A preset shipped today cannot name a
-#: server the user adds tomorrow, and an install with no connectors gains
-#: nothing from it. Connector writes are never included — they go through
-#: propose → confirm (`permissions.NEVER_UNATTENDED`).
-#: `run_python` is deliberately absent too, and for the same reason one step
-#: further: it runs code. The user adds it to an agent themselves. The file
-#: tools ARE here, because they can reach nothing at all until the user opens a
-#: folder — the grant is the consent, and there are no grants by default.
-#:
-#: `forget_fact` is deliberately absent. These agents read email, issues and
-#: messages other people wrote, and "forget everything about X" is a sentence an
-#: injection would write — so an agent gets it only when the user puts it in
-#: that agent's own tool list. `correct_fact` is safe by construction: it
-#: supersedes, so the old version is kept and nothing is destroyed.
-_BASE_TOOLS = ["search_brain", "who_is", "whats_true_about_me", "timeline",
-               "why_do_you_think_that", "correct_fact", "remember",
-               "list_entities", "web_search", "ask_agent", "ask_agents",
-               "update_plan", "calendar_lookup", "sync_source", "search_source",
-               "list_routines", "pause_routine", "list_pending_approvals",
-               "list_scheduled", "list_dir", "read_file", "write_file",
-               MCP_TOOLS]
-
-PRESETS: dict[str, Agent] = {
-    "inbox": Agent(
-        id="inbox",
-        name="Inbox",
-        role="email & communications",
-        system_prompt=(
-            "You handle the user's email and messages. You draft replies, "
-            "summarize threads, and surface what needs a response — always in the "
-            "user's voice and aware of their commitments. Pull real messages with "
-            "gmail_search when useful."
-        ),
-        tools=[*_BASE_TOOLS, "gmail_search", "web_search"],
-        recall_sources=["gmail", "gcal"],
-        actions=["send_email", "create_event", "set_reminder", "create_routine"],
-    ),
-    "launch": Agent(
-        id="launch",
-        name="Launch",
-        role="go-to-market & shipping",
-        system_prompt=(
-            "You are the user's GTM / launch operator. You help plan launches, "
-            "write announcements, landing copy and outreach, and track what ships "
-            "when — grounded in the user's actual projects from the brain. Capture "
-            "action items as tasks."
-        ),
-        tools=[*_BASE_TOOLS, "web_search", "add_task", "list_tasks", "complete_task"],
-        actions=["send_email", "create_event", "set_reminder", "create_routine"],
-    ),
-    "research": Agent(
-        id="research",
-        name="Research",
-        role="research & analysis",
-        system_prompt=(
-            "You are the user's research assistant. You investigate topics, "
-            "compare options, and synthesize findings — combining the public web "
-            "with what the user already knows in their brain. Cite sources."
-        ),
-        # No actions at all: Research investigates and reports. It has nothing
-        # to send with, so it is not taught a protocol for sending — which also
-        # removes any way for it to claim it sent something.
-        tools=[*_BASE_TOOLS, "web_search"],
-    ),
-    "personal": Agent(
-        id="personal",
-        name="Personal",
-        role="personal life & assistant",
-        system_prompt=(
-            "You are the user's personal chief of staff. You help with their "
-            "personal life, schedule, reminders, tasks, notes and anything that "
-            "doesn't belong to a work agent. When they mention something to do, "
-            "add it as a task; when they ask what's on, list their tasks. Warm, "
-            "discreet, and proactive."
-        ),
-        tools=[*_BASE_TOOLS, "add_task", "list_tasks", "complete_task"],
-        actions=["send_email", "create_event", "set_reminder", "create_routine"],
-    ),
-}
+#: Every agent Lodestone ships, by id. Not the same as the user's roster.
+PRESETS: dict[str, Agent] = {tid: t.to_agent() for tid, t in BY_ID.items()}
 
 
 def _apply_agent_model(agent: Agent) -> Agent:
@@ -100,12 +29,25 @@ def _apply_agent_model(agent: Agent) -> Agent:
 
 
 def list_agents() -> list[Agent]:
+    """The user's team: the templates they took on, plus the ones they built.
+
+    Only rostered templates, not the whole library — otherwise `ask_agent` would
+    offer every agent that exists rather than the ones this person uses, and the
+    sidebar would be a catalogue again.
+    """
     from .custom import get_custom_store
-    raw = list(PRESETS.values()) + get_custom_store().list()
+
+    raw = rostered_agents() + get_custom_store().list()
     return [_apply_agent_model(a) for a in raw]
 
 
 def get_agent(agent_id: str) -> Agent:
+    """One agent by id, whether or not it is currently in the roster.
+
+    A template that has been removed still resolves, because its conversation
+    is still there to read and a routine created while it was in the roster
+    should not break when the sidebar changes.
+    """
     if agent_id in PRESETS:
         return _apply_agent_model(PRESETS[agent_id])
     from .custom import get_custom_store

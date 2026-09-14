@@ -13,11 +13,16 @@ from lodestone.agents.tools import TOOL_DEFS, TOOL_IMPLS, build_tools, run_tool
 
 
 # ── calendar ─────────────────────────────────────────────────────────────
-def test_the_shipped_agents_can_look_at_a_calendar():
-    """The omission that made "chief of staff" a claim we could not keep."""
-    for agent in PRESETS.values():
+def test_the_agents_that_run_your_day_can_look_at_a_calendar():
+    """The omission that made "chief of staff" a claim we could not keep.
+
+    Not every agent: a researcher has no business in the diary. What matters is
+    that the ones whose job is the user's day can see it.
+    """
+    for agent_id in ("chief-of-staff", "inbox", "personal"):
+        agent = PRESETS[agent_id]
         names = {t.name for t in build_tools(agent.tools, self_id=agent.id)}
-        assert "calendar_lookup" in names, f"{agent.id} cannot see the calendar"
+        assert "calendar_lookup" in names, f"{agent_id} cannot see the calendar"
 
 
 def test_calendar_lookup_understands_the_periods_people_say():

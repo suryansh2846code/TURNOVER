@@ -16,10 +16,10 @@ from lodestone.api.app import app
 @pytest.fixture(autouse=True)
 def clean_agent_models():
     """Clear test bindings before and after tests."""
-    for agent_id in ["inbox", "launch", "research", "personal", "test-agent"]:
+    for agent_id in ["inbox", "writer", "research", "personal", "test-agent"]:
         clear_agent_model(agent_id)
     yield
-    for agent_id in ["inbox", "launch", "research", "personal", "test-agent"]:
+    for agent_id in ["inbox", "writer", "research", "personal", "test-agent"]:
         clear_agent_model(agent_id)
 
 
@@ -56,15 +56,15 @@ def test_agent_model_crud():
 def test_agent_instance_overlay():
     """Verify get_agent() and list_agents() reflect the bound model."""
     set_agent_model("inbox", "claude", "claude-3-7-sonnet-latest")
-    set_agent_model("launch", "xai", "grok-2-latest")
+    set_agent_model("personal", "xai", "grok-2-latest")
 
     inbox = get_agent("inbox")
     assert inbox.model_provider == "claude"
     assert inbox.model_name == "claude-3-7-sonnet-latest"
 
-    launch = get_agent("launch")
-    assert launch.model_provider == "xai"
-    assert launch.model_name == "grok-2-latest"
+    personal = get_agent("personal")
+    assert personal.model_provider == "xai"
+    assert personal.model_name == "grok-2-latest"
 
     # Research has no override
     research = get_agent("research")
@@ -73,7 +73,7 @@ def test_agent_instance_overlay():
     # Check list_agents()
     all_agents = {a.id: a for a in list_agents()}
     assert all_agents["inbox"].model_provider == "claude"
-    assert all_agents["launch"].model_provider == "xai"
+    assert all_agents["personal"].model_provider == "xai"
     assert all_agents["research"].model_provider is None
 
 

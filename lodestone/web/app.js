@@ -134,6 +134,7 @@ function closeDrawer() { const bg = $("#drawerBg"); if (bg) bg.hidden = true; }
 document.querySelectorAll(".snav").forEach((b) => b.onclick = () => {
   if (b.id === "helpBtn") { window.location.href = "/onboarding?replay=1"; return; }  // re-experience onboarding (won't wipe)
   if (b.dataset.nav === "brain") return openBrainScreen();   // Brain → full-screen viz + tools
+  if (b.dataset.nav === "library") return openLibrary();     // Agent Library → full-screen picker
   openDrawer(b.dataset.nav);
 });
 $("#drawerClose").onclick = closeDrawer;

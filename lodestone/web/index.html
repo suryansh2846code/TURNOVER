@@ -20,6 +20,7 @@
 
       <div class="side-nav">
         <button class="snav" data-nav="brain"><span class="snav-ic"></span><span class="snav-tx">Brain</span></button>
+        <button class="snav" data-nav="library"><span class="snav-ic"></span><span class="snav-tx">Agent Library</span></button>
         <button class="snav" data-nav="sources"><span class="snav-ic"></span><span class="snav-tx">Connectors</span></button>
         <button class="snav" data-nav="tasks"><span class="snav-ic"></span><span class="snav-tx">Tasks</span></button>
         <button class="snav" data-nav="tools"><span class="snav-ic"></span><span class="snav-tx">Tools</span></button>
@@ -440,6 +441,28 @@
     </div>
   </div>
 
+  <!-- ── Agent Library: what Lodestone offers, and who you have ────────── -->
+  <div id="libraryScreen" class="libscreen" hidden>
+    <div class="lib-top">
+      <div class="lib-top-title">Agent Library</div>
+      <button id="libClose" class="ghost tiny">Close ✕</button>
+    </div>
+    <div class="lib-body">
+      <header class="lib-head">
+        <h1 class="lib-h1">Ready-made agents for the work you do.</h1>
+        <p class="lib-sub">Start with a specialist, then make it yours.</p>
+        <div class="lib-controls">
+          <input id="libSearch" class="lib-search" type="search"
+                 autocomplete="off" placeholder="Search agents…" />
+          <span id="libCount" class="lib-count"></span>
+        </div>
+        <nav id="libCats" class="lib-cats"></nav>
+      </header>
+      <div id="libGrid" class="lib-grid"></div>
+      <p id="libEmpty" class="lib-empty" hidden>No agent matches that.</p>
+    </div>
+  </div>
+
   <div id="brainScreen" class="brainscreen" hidden>
     <canvas id="bsCanvas" aria-hidden="true"></canvas>
     <div class="bs-top">
@@ -520,6 +543,7 @@
   <script src="/static/brain.js"></script>
   <script src="/static/connectors.js"></script>
   <script src="/static/workspace.js"></script>
+  <script src="/static/library.js"></script>
   <script src="/static/brain-screen.js"></script>
   <script src="/static/usage.js"></script>
   <script src="/static/tools.js"></script>

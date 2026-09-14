@@ -282,6 +282,42 @@ def _turn_images(body: ChatIn) -> list:
         raise HTTPException(422, str(exc)) from None
 
 
+class RosterIn(BaseModel):
+    """A library template the user is taking on, or putting back."""
+
+    template_id: str
+
+
+@router.get("/api/agents/library")
+def agent_library():
+    """Every agent Lodestone offers, and which ones this user has.
+
+    `missing` per template is what keeps the library honest: a card can say
+    "connect Gmail first" rather than offering an agent that will disappoint.
+    """
+    from ...agents.library import CATEGORIES, describe
+
+    return {"categories": list(CATEGORIES), "templates": describe()}
+
+
+@router.post("/api/agents/roster")
+def add_agent_to_roster(body: RosterIn):
+    from ...agents.library import add_to_roster
+
+    try:
+        return {"roster": add_to_roster(body.template_id)}
+    except KeyError:
+        raise HTTPException(404, "That agent is not in the library.") from None
+
+
+@router.delete("/api/agents/roster/{template_id}")
+def remove_agent_from_roster(template_id: str):
+    """Take an agent out of the sidebar. Its conversation is kept."""
+    from ...agents.library import remove_from_roster
+
+    return {"roster": remove_from_roster(template_id)}
+
+
 class FolderIn(BaseModel):
     """A folder the user is opening to their agents, or closing again."""
 
