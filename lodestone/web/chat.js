@@ -462,9 +462,29 @@ async function send(text) {
 // naming each tool as it runs. Falls back to the plain endpoint if streaming is
 // unavailable for any reason — a user whose stream broke wants an answer, not a
 // second kind of error.
+// Which provider this turn runs on.
+//
+// This read `$("#provider").value`, a hidden <select> that is EMPTY until
+// loadProviders() fills it — and loadProviders fetches the model catalog,
+// measured cold at ~10s. For those ten seconds the composer showed the
+// provider read from localStorage while the request carried nothing, the
+// server fell back to settings.model_provider (`mock` on a fresh install),
+// and the offline model answered in a real model's clothes. Two messages in a
+// row came back as a truncated echo of the recall block.
+//
+// localStorage is the store the picker actually writes to (setActiveModel),
+// and it is readable synchronously on the first paint. The select is a slow
+// copy of it, kept only as a fallback for anything that still writes there.
+function chosenProvider() {
+  const saved = (localStorage.getItem("lodestone_provider") || "").trim();
+  if (saved) return saved;
+  const sel = $("#provider");
+  return (sel && sel.value) || undefined;
+}
+
 async function streamTurn(text, think) {
   const body = JSON.stringify({
-    message: text, provider: $("#provider").value || undefined,
+    message: text, provider: chosenProvider(),
     model: localStorage.getItem("lodestone_model") || undefined,
     effort: localStorage.getItem("lodestone_effort") || undefined,
     images: sentImages.map((a) => ({ data_url: a.dataUrl, name: a.name })),

@@ -15,6 +15,7 @@ import uuid
 from functools import lru_cache
 
 from ..config import get_settings
+from ..log import get_logger
 from .anthropic import AnthropicProvider
 from .base import ChatResult, LLMProvider, ToolCall
 from .claude_code import ClaudeCodeProvider
@@ -23,6 +24,8 @@ from .deepseek import DeepSeekProvider
 from .gemini import GeminiProvider
 from .openai_compat import OllamaProvider, OpenAICompatProvider, OpenRouterProvider
 from .xai import XAIProvider
+
+log = get_logger(__name__)
 
 
 class SubscriptionProvider(OpenAICompatProvider):
@@ -48,10 +51,25 @@ class SubscriptionProvider(OpenAICompatProvider):
         return True, ""
 
 
+#: Every mock reply opens with this. The offline model is the default on a
+#: fresh install, so it is what answers before anything is connected — and its
+#: replies are prose in a chat bubble, indistinguishable from a real model's.
+#: Two of them in a row read as "the app is broken" rather than "nothing is
+#: connected yet", which is a different problem with a different fix.
+_OFFLINE_NOTE = ("_Offline model — no AI provider is connected, so this is a "
+                 "canned reply from your brain. Pick a model in **Model** "
+                 "settings._\n\n")
+
+
 class MockProvider(LLMProvider):
     """Deterministic offline provider. Calls search_brain once, then answers
     from the tool result — enough to exercise the full agent tool loop with no
-    network or API key."""
+    network or API key.
+
+    Every reply is prefixed so it cannot be mistaken for a real model's: this
+    is what runs before anything is connected, and an unmarked canned answer
+    is worse than an honest refusal.
+    """
     name = "mock"
 
     def __init__(self, model: str | None = None) -> None:
@@ -84,7 +102,7 @@ class MockProvider(LLMProvider):
         tool_names = {t.name for t in (tools or [])}
         # If we just got a tool result, produce a final answer from it.
         if last.role == "tool":
-            return ChatResult(text=f"Based on your brain: {last.content[:400]}")
+            return ChatResult(text=_OFFLINE_NOTE + f"Based on your brain: {last.content[:400]}")
         # Otherwise, if a brain-search tool exists and we haven't used it, do so.
         already = any(m.role == "tool" for m in messages)
         user = next((m.content for m in reversed(messages) if m.role == "user"), "")
@@ -567,7 +585,14 @@ def _entitled_model(provider_name: str, model: str | None) -> str | None:
 @lru_cache
 def get_provider(name: str | None = None, model: str | None = None) -> LLMProvider:
     name = (name or get_settings().model_provider or "mock").lower()
-    cls = _REGISTRY.get(name, MockProvider)
+    # An unknown name used to resolve to MockProvider, which answers — so a
+    # typo, a retired id, or a provider added to the catalog but not here came
+    # back as a confident fake reply instead of an error. Mock is reachable
+    # only by asking for it.
+    cls = _REGISTRY.get(name)
+    if cls is None:
+        log.warning("unknown provider %r — falling back to the offline model", name)
+        cls = MockProvider
     safe_model = _entitled_model(name, _compatible_model(name, model))
     p = cls(model=safe_model)
     _wrap_usage(p)

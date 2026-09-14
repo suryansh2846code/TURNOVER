@@ -461,7 +461,7 @@ async function agentWelcome(id) {
   try {
     const res = await api(`/api/agents/${id}/welcome`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "welcome", provider: $("#provider").value,
+      body: JSON.stringify({ message: "welcome", provider: chosenProvider(),
         model: $("#modelName").value.trim() || null }) });
     think.done();
     addMsg("assistant", res.reply);

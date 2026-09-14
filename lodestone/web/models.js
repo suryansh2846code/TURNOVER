@@ -814,7 +814,7 @@ async function loadProviders() {
 function enrichModel() {
   const p = (localStorage.getItem("lodestone_enrich_provider") || "").trim();
   if (p) return { provider: p, model: (localStorage.getItem("lodestone_enrich_model") || "").trim() || null };
-  return { provider: $("#provider").value, model: $("#modelName").value.trim() || null };
+  return { provider: chosenProvider(), model: $("#modelName").value.trim() || null };
 }
 
 async function loadEnrichCap() {
