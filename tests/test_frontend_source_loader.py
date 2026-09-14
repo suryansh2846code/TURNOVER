@@ -64,17 +64,19 @@ def test_a_script_on_disk_that_the_page_never_loads_is_not_included():
         orphan.unlink()
 
 
-def test_while_the_app_is_one_file_the_source_is_that_file_unchanged():
-    """The no-op property that makes the harness migration safe to land alone.
+def test_the_source_is_exactly_its_parts_and_nothing_else():
+    """Concatenation adds nothing and drops nothing.
 
-    Step 2 of the split points nine harnesses at this loader while `app.js` is
-    still whole. If this ever stops holding, that step was not a no-op and the
-    failure would be attributed to whichever module moved next.
+    This began life as "while app.js is one file, the source is that file
+    unchanged" — the no-op property that made pointing nine harnesses at this
+    loader safe to land on its own. app.js is three files now, so that wording
+    could only ever skip. This is the same guarantee stated for any number of
+    them: what the harnesses evaluate is the files the page lists, joined, with
+    nothing invented in between.
     """
-    scripts = _probe("appScripts(webDir)")
-    if len(scripts) != 1:
-        pytest.skip(f"app.js has been split into {len(scripts)} files")
-    assert _probe("appSource(webDir)") == (WEB / "app.js").read_text()
+    scripts = [pathlib.Path(p) for p in _probe("appScripts(webDir)")]
+    expected = "\n".join(p.read_text() for p in scripts)
+    assert _probe("appSource(webDir)") == expected
 
 
 def test_the_concatenation_cannot_glue_two_files_together():
@@ -101,3 +103,33 @@ def test_python_and_node_agree_on_what_the_app_is_made_of():
 
     assert [str(p) for p in app_scripts()] == _probe("appScripts(webDir)")
     assert app_source() == _probe("appSource(webDir)")
+
+
+# ── the guard ────────────────────────────────────────────────────────────────
+
+def test_no_test_reads_app_js_when_it_means_the_whole_frontend():
+    """A grep of one file out of several passes for the wrong reason.
+
+    `app.js` was the whole frontend, so tests that assert something about the
+    workspace's JavaScript read it directly. It is not any more, and the failure
+    that causes is the bad kind: when `providers.js` was extracted, eleven tests
+    went red at once — and the ones that would have stayed green while checking
+    nothing are the reason this guard exists rather than a note in a doc.
+
+    Passing the path to a node harness is fine and stays fine: the harness
+    derives the web directory from it and asks `_app_source.mjs` for the app.
+    Only *reading* it here is the mistake, so only that is banned.
+    """
+    import re
+
+    tests_dir = pathlib.Path(__file__).parent
+    offenders = []
+    reads_app_js = re.compile(r'app\.js"\s*\)?\s*\.read_text\(\)|app_js\s*=.*app\.js.*read_text')
+    for path in sorted(tests_dir.glob("test_*.py")):
+        for n, line in enumerate(path.read_text().splitlines(), 1):
+            if "app.js" in line and reads_app_js.search(line):
+                offenders.append(f"{path.name}:{n}")
+
+    assert not offenders, (
+        "these read app.js directly; use `from web_sources import app_source` "
+        f"so the whole frontend is checked: {offenders}")

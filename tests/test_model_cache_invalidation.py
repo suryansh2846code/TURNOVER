@@ -8,9 +8,9 @@ discovery may be cached, lock state never is.
 """
 import json
 import re
-from pathlib import Path
 
 import pytest
+from web_sources import app_source
 
 from lodestone.models import discovery, entitlements
 from lodestone.models.discovery import (
@@ -178,7 +178,7 @@ def test_composer_picker_offers_every_selectable_provider():
     the one Claude path that actually works could not be chosen."""
     from lodestone.models.registry import PRIMARY_PROVIDERS
 
-    app_js = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
+    app_js = app_source()
     block = re.search(r"const COMPOSER_PROVIDERS = \[(.*?)\];", app_js, re.S)
     assert block, "COMPOSER_PROVIDERS not found in app.js"
     listed = set(re.findall(r'id:\s*"([^"]+)"', block.group(1)))

@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from web_sources import app_source
 
 from lodestone.api.app import app
 from lodestone.models.auth_flows import (
@@ -136,8 +137,7 @@ def test_legacy_submit_code_route_still_answers(client):
 
 
 def test_frontend_uses_the_unified_routes():
-    from pathlib import Path
 
-    src = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
+    src = app_source()
     assert "/auth/start" in src and "/auth/status" in src and "/auth/code" in src
     assert "/oauth-status" not in src, "frontend still calls a per-provider route"
