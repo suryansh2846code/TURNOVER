@@ -24,6 +24,8 @@ _BASE_TOOLS = ["search_brain", "who_is", "whats_true_about_me", "timeline",
                "why_do_you_think_that", "correct_fact", "remember",
                "list_entities", "web_search", "ask_agent", "ask_agents",
                "update_plan", "calendar_lookup", "sync_source", "search_source",
+               "list_routines", "pause_routine", "list_pending_approvals",
+               "list_scheduled",
                MCP_TOOLS]
 
 PRESETS: dict[str, Agent] = {

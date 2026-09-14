@@ -10,7 +10,7 @@ from typing import Any
 
 from ..brain import get_brain
 from ..models.base import Tool
-from . import brain_tools, mcp_tools, source_tools
+from . import automation_tools, brain_tools, mcp_tools, source_tools
 from .effort import get_effort
 from .results import ToolResult
 
@@ -240,6 +240,10 @@ TOOL_IMPLS = {
     "web_search": _web_search,
     "gmail_search": _gmail_search,
     "calendar_lookup": source_tools.calendar_lookup,
+    "list_routines": automation_tools.list_routines,
+    "pause_routine": automation_tools.pause_routine,
+    "list_pending_approvals": automation_tools.list_pending_approvals,
+    "list_scheduled": automation_tools.list_scheduled,
     "sync_source": source_tools.sync_source,
     "search_source": source_tools.search_source,
     "add_task": _add_task,
@@ -446,6 +450,42 @@ TOOL_DEFS: dict[str, Tool] = {
         parameters={"type": "object", "properties": {
             "query": {"type": "string", "description": "Gmail search query"},
             "max_results": {"type": "integer", "default": 10}}},
+    ),
+    "list_routines": Tool(
+        name="list_routines",
+        description=(
+            "Every standing automation the user has, and whether each is "
+            "running or paused. Use it for 'what do you have running for me', "
+            "and before setting a new one up, so you do not create a duplicate."
+        ),
+        parameters={"type": "object", "properties": {}},
+    ),
+    "pause_routine": Tool(
+        name="pause_routine",
+        description=(
+            "Stop one of the user's automations from running, or start it "
+            "again with resume=true. Use it when they say to stop or pause "
+            "something you set up."
+        ),
+        parameters={"type": "object", "properties": {
+            "routine": {"type": "string", "description": "Its name or id"},
+            "resume": {"type": "boolean", "default": False}},
+            "required": ["routine"]},
+    ),
+    "list_pending_approvals": Tool(
+        name="list_pending_approvals",
+        description=(
+            "Actions an automation proposed that are waiting for the user to "
+            "approve. Use it when they ask what needs them, or whether "
+            "something was sent. None of these have happened yet."
+        ),
+        parameters={"type": "object", "properties": {}},
+    ),
+    "list_scheduled": Tool(
+        name="list_scheduled",
+        description="Actions the user already confirmed that will fire at a "
+                    "later time — a scheduled email or calendar event.",
+        parameters={"type": "object", "properties": {}},
     ),
     "calendar_lookup": Tool(
         name="calendar_lookup",
