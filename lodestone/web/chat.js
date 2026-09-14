@@ -110,6 +110,22 @@ function parseActions(text) {
     else if (a.type === "create_event") a.params.description = inner.trim();
     else if (a.type === "set_reminder") a.params.message = inner.trim();
     else if (a.type === "create_routine") a.params.instruction = inner.trim();
+    else if (a.type === "mcp_action") {
+      // A connector tool takes an object, and attributes are flat strings — so
+      // the arguments are the body, as JSON. Mirrors `actions.parse_actions`.
+      a.params.server_id = a.params.server || a.params.server_id || "";
+      delete a.params.server;
+      try {
+        let body = inner.trim();
+        if (body.startsWith("```")) body = body.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
+        a.params.arguments = body ? JSON.parse(body) : {};
+      } catch {
+        // Malformed JSON is dropped, never guessed at — the same rule the
+        // server applies, so the card and the execution agree about what
+        // exists. Returning here leaves the tag stripped and no card shown.
+        return "";
+      }
+    }
     if (a.type) actions.push(a);
     return "";   // strip the tag from the visible text
   });
@@ -139,6 +155,19 @@ function actionCard(a) {
     rows = `<div class="ac-row"><b>Name</b> ${esc(p.name || "Automation")}</div>
        <div class="ac-row"><b>Runs</b> ${trig} · ${esc(p.agent || p.agent_id || "personal")}</div>
        <div class="ac-body">${esc(p.instruction || "")}</div>`;
+  } else if (a.type === "mcp_action") {
+    // Previously this fell through to the calendar branch, so a connector
+    // action would have been presented as "Create calendar event" — a card
+    // describing something other than what the button runs.
+    title = `Run this in ${esc(p.connector || p.server_id || "a connector")}`;
+    verb = "run";
+    const args = p.arguments && typeof p.arguments === "object" ? p.arguments : {};
+    const shown = Object.keys(args).map((k) => {
+      const v = typeof args[k] === "string" ? args[k] : JSON.stringify(args[k]);
+      return `<div class="ac-row"><b>${esc(k)}</b> ${esc(String(v).slice(0, 400))}</div>`;
+    }).join("");
+    rows = `<div class="ac-row"><b>Action</b> <code>${esc(p.tool || "")}</code></div>`
+      + (shown || `<div class="ac-row"><b>Arguments</b> none</div>`);
   } else {
     title = "Create calendar event"; verb = "create";
     rows = `<div class="ac-row"><b>Title</b> ${esc(p.title || "")}</div>

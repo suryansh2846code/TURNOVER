@@ -230,3 +230,47 @@ Turnstone actually closes — **locally**, which is the entire point.
 - **No server.** Nango, Activepieces and Open Connector are all real open-source
   options and all of them are services with a database. We are a Mac app; an MCP
   server is a subprocess.
+
+
+---
+
+## Phase 6 — Making it reachable
+
+Phases 0–5 built the layer correctly and nothing could get to it. An audit in
+September 2026 found **zero of four catalog entries able to start**: two npm
+packages deprecated upstream, one that had never existed on npm at all, and one
+needing a positional argument the catalog had no way to express. Underneath
+that, connector writes were classified by a name denylist that let
+`merge_pull_request` through as a read, and no agent could propose a write at
+all — `parse_actions()` had no `mcp_action` arm and the prompt never mentioned
+the tag.
+
+Contract: [`development/mcp-contract.md`](development/mcp-contract.md).
+
+- [x] **6.1 — Remote servers, as a first-class transport.** `transport="http"`
+      reaches the vendor's own endpoint over HTTPS. Nothing is downloaded, no
+      third-party code runs as the user, and there is no package to rot — the
+      failure that emptied the catalog. OAuth 2.1 with Dynamic Client
+      Registration means we still register no OAuth client and the consent
+      screen still carries the vendor's name. Seven of the nine catalog entries
+      are now remote; each endpoint was checked to exist and to answer an
+      unauthenticated call with an OAuth challenge before being listed.
+- [x] **6.2 — A catalog that resolves.** Plus `needs_args`, so a server that
+      takes a folder can be given one.
+- [x] **6.3 — Writes fail closed.** Evidence is required to call a tool a read.
+- [x] **6.4 — An agent can propose a connector write.** The tag, the prompt, the
+      server-side parser, the client-side parser and the card. `mcp_action`
+      stays in `NEVER_UNATTENDED`.
+- [x] **6.5 — Least privilege the user can set.** `allowed_tools` had no writer
+      outside tests; it now has a screen and a `PATCH`.
+- [x] **6.6 — Credentials in the Keychain.** `mcp_servers.json` is served to the
+      page, so it holds names only. Legacy plaintext migrates on read.
+- [x] **6.7 — Reachable at all.** The launch PATH a Dock-launched `.app` does
+      not have, one bounded session per operation instead of two unbounded
+      ones, and a tool list that survives a server the SDK will not model.
+- [x] **6.8 — Add your own.** The catalog is what we vetted; it will never be
+      all of it.
+
+**Still open, deliberately:** `MCPConnector.sync()` ingests one page. MCP is an
+ask/act surface — the line this phase draws — and bulk ingest belongs to the
+deep connectors and `custom_api.py`, so paging is tracked rather than rushed.

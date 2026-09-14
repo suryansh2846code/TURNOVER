@@ -27,7 +27,10 @@ whether a tool can be called with no arguments.
 from __future__ import annotations
 
 import json
+import os
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from ..config import get_settings
@@ -41,26 +44,88 @@ log = get_logger(__name__)
 CALL_TIMEOUT_SECONDS = 45.0
 LIST_TIMEOUT_SECONDS = 20.0
 
+#: A sign-in the user is actively completing gets the whole consent window, not
+#: the twenty seconds a background probe gets. Kept in step with
+#: `mcp_auth.CONSENT_TIMEOUT_SECONDS`, which is what the waiter uses.
+CONSENT_TIMEOUT_SECONDS = 310.0
+
 #: Tool-name stems that mean "give me the records". Checked as a fallback to
 #: the argument test below, never instead of it: a name is a hint, a required
 #: `query` parameter is proof.
 _BULK_HINTS = ("list", "recent", "all", "fetch", "export", "read", "get_many",
                "history", "items", "entries")
 
+#: Stems that mean "this only looks". Used to decide a tool is a **read** —
+#: which is the direction that now needs evidence, see `_is_write`.
+_READ_STEMS = ("list", "get", "read", "search", "find", "query", "fetch",
+               "view", "show", "describe", "lookup", "recent", "history",
+               "export", "count", "summar", "stat", "info", "detail",
+               "browse", "diff", "resolve", "check", "inspect", "whoami")
+
+#: Words a tool named for its *contents* rather than its verb is made of —
+#: `entries`, `recent_items`, `my_issues`. A name built only from these has no
+#: verb in it at all, and a tool with no verb does not act on anything.
+#:
+#: Matched as whole underscore-separated segments, never as substrings. A
+#: substring test put `clear_all` in the read pile, because "all" is in it.
+_LISTING_WORDS = frozenset((
+    "entries", "items", "records", "messages", "results", "rows", "values",
+    "history", "recent", "feed", "inbox", "threads", "events", "documents",
+    "docs", "pages", "issues", "channels", "files", "folders", "notes",
+    "tasks", "projects", "repos", "repositories", "users", "members",
+    "my", "all", "mine", "open", "active", "current", "latest",
+))
+
 #: Arguments a listing tool may require without ceasing to be a listing tool.
 _PAGING_ARGS = {"cursor", "page", "page_token", "offset", "start", "limit",
                 "count", "max_results", "per_page", "page_size", "after"}
 
 
+def secret_key(server_id: str, var: str) -> str:
+    """Where one server's one environment value is kept.
+
+    The same shape `custom_api.py` uses for its token, for the same reason: a
+    connector's credential belongs in the Keychain, not in a JSON file that a
+    backup or a synced home directory will happily carry off the machine.
+    """
+    return f"mcp:{server_id}:{var}"
+
+
 @dataclass
 class MCPServerSpec:
-    """How to start one server, and what to read out of it."""
+    """How to reach one server, and what to read out of it.
+
+    A server is either a **local subprocess** (`transport="stdio"`) or the
+    **vendor's own endpoint** (`transport="http"`). The second is not a step
+    away from local-first: the data still travels vendor → this machine with
+    nothing in between, and unlike a community npm package it does not run
+    third-party code as the user with access to their tokens.
+    """
 
     id: str
     name: str
-    command: str
+    #: "stdio" — we launch it. "http" — the vendor already runs it.
+    transport: str = "stdio"
+    #: stdio only.
+    command: str = ""
     args: list[str] = field(default_factory=list)
-    env: dict[str, str] = field(default_factory=dict)
+    #: http only. The MCP endpoint, e.g. https://mcp.example.com/mcp
+    url: str = ""
+    #: How a remote server is authenticated.
+    #:   "oauth" — the vendor's own consent screen, registered dynamically.
+    #:   "token" — a key the user pastes, sent as `Authorization: Bearer …`.
+    #:   "none"  — open endpoint.
+    #: Two mechanisms rather than one because the vendors genuinely split:
+    #: Linear, Notion and Sentry run a full OAuth server; GitHub's takes the
+    #: personal access token the user already has.
+    auth: str = "oauth"
+    #: For `auth="token"`, which stored value carries the key.
+    token_key: str = ""
+    #: **Names** of the environment variables this server needs. The values are
+    #: in the Keychain under `secret_key()`; this list is what the UI asks for
+    #: and what `resolved_env()` looks up. Nothing secret is stored here, which
+    #: is what makes `as_dict()` safe to return from the API.
+    env_keys: list[str] = field(default_factory=list)
     #: Tool to call for records. Empty means "work it out from the server".
     sync_tool: str = ""
     #: Field in each record to use as a title, if the server returns objects.
@@ -72,24 +137,73 @@ class MCPServerSpec:
 
     @classmethod
     def from_dict(cls, raw: dict) -> MCPServerSpec:
+        # A spec written before secrets moved to the Keychain carries `env`
+        # inline. Read it here rather than anywhere else, so exactly one
+        # function in the app has to know the old shape existed.
+        legacy = dict(raw.get("env") or {})
+        keys = list(raw.get("env_keys") or []) or sorted(legacy)
         return cls(
             id=raw["id"], name=raw.get("name") or raw["id"],
-            command=raw["command"], args=list(raw.get("args") or []),
-            env=dict(raw.get("env") or {}),
+            transport=(raw.get("transport") or "stdio").strip().lower(),
+            command=raw.get("command") or "",
+            args=list(raw.get("args") or []),
+            url=raw.get("url") or "",
+            auth=(raw.get("auth") or "oauth").strip().lower(),
+            token_key=raw.get("token_key") or "",
+            env_keys=keys,
             sync_tool=raw.get("sync_tool") or "",
             title_field=raw.get("title_field") or "",
             allowed_tools=list(raw.get("allowed_tools") or []),
         )
 
     def as_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "name": self.name, "command": self.command,
-                "args": self.args, "env": self.env, "sync_tool": self.sync_tool,
+        """The spec as stored and as served. Carries no secret, by construction."""
+        return {"id": self.id, "name": self.name, "transport": self.transport,
+                "command": self.command, "args": self.args, "url": self.url,
+                "auth": self.auth, "token_key": self.token_key,
+                "env_keys": self.env_keys, "sync_tool": self.sync_tool,
                 "title_field": self.title_field,
                 "allowed_tools": self.allowed_tools}
+
+    @property
+    def is_remote(self) -> bool:
+        return self.transport == "http"
+
+    @property
+    def uses_oauth(self) -> bool:
+        return self.is_remote and self.auth == "oauth"
+
+    def bearer(self) -> str:
+        """The pasted key for a `auth="token"` server, from the Keychain."""
+        if self.auth != "token":
+            return ""
+        key = self.token_key or (self.env_keys[0] if self.env_keys else "")
+        if not key:
+            return ""
+        return get_settings().get_secret(secret_key(self.id, key)) or ""
 
     def permits(self, tool: str) -> bool:
         """May this connector use that tool? Empty allow-list means anything."""
         return not self.allowed_tools or tool in self.allowed_tools
+
+    def resolved_env(self) -> dict[str, str]:
+        """This server's environment, read from the Keychain at spawn time.
+
+        A name with no stored value is left out rather than passed as an empty
+        string: a server told its token is `""` reports an auth error, and a
+        server told nothing reports that it needs one.
+        """
+        out: dict[str, str] = {}
+        for var in self.env_keys:
+            value = get_settings().get_secret(secret_key(self.id, var))
+            if value:
+                out[var] = value
+        return out
+
+    def missing_env(self) -> list[str]:
+        """Names this server needs that have no value stored yet."""
+        have = self.resolved_env()
+        return [v for v in self.env_keys if v not in have]
 
 
 # ── the spec store ──────────────────────────────────────────────────────────
@@ -111,13 +225,68 @@ def _save(specs: dict[str, dict]) -> None:
     path.write_text(json.dumps(specs, indent=2))
 
 
+def _migrated(raw: dict) -> dict:
+    """Move a legacy inline `env` into the Keychain, once, on first read.
+
+    The old shape kept tokens in `mcp_servers.json` in plain text, and the same
+    file is returned by `GET /api/connectors` — so leaving one in place is both
+    a credential on disk and a credential on the wire. Rewriting on read means
+    an existing install is repaired by opening Connectors, with nothing for the
+    user to do and nothing for them to lose.
+    """
+    env = dict(raw.get("env") or {})
+    if not env:
+        return raw
+    settings = get_settings()
+    for var, value in env.items():
+        if value:
+            settings.set_secret(secret_key(raw["id"], var), value)
+    cleaned = dict(raw)
+    cleaned.pop("env", None)
+    cleaned["env_keys"] = sorted(env)
+    log.info("moved %d stored value(s) for MCP connector %s into the Keychain",
+             len(env), raw["id"])
+    return cleaned
+
+
 def list_servers() -> list[MCPServerSpec]:
-    return [MCPServerSpec.from_dict(v) for v in _load().values()]
+    specs = _load()
+    migrated = {k: _migrated(v) for k, v in specs.items()}
+    if migrated != specs:
+        _save(migrated)
+    return [MCPServerSpec.from_dict(v) for v in migrated.values()]
 
 
 def get_server(server_id: str) -> MCPServerSpec | None:
-    raw = _load().get(server_id)
-    return MCPServerSpec.from_dict(raw) if raw else None
+    specs = _load()
+    raw = specs.get(server_id)
+    if not raw:
+        return None
+    cleaned = _migrated(raw)
+    if cleaned != raw:
+        specs[server_id] = cleaned
+        _save(specs)
+    return MCPServerSpec.from_dict(cleaned)
+
+
+def set_server_env(server_id: str, env: dict[str, str]) -> None:
+    """Store this server's environment values, and remember their names.
+
+    Values go to the Keychain; only the names reach the spec file. A blank
+    value clears the stored one rather than saving an empty string.
+    """
+    settings = get_settings()
+    for var, value in (env or {}).items():
+        settings.set_secret(secret_key(server_id, var), (value or "").strip() or None)
+    specs = _load()
+    raw = specs.get(server_id)
+    if raw is None:
+        return
+    names = sorted(set(raw.get("env_keys") or []) | set(env or {}))
+    raw["env_keys"] = names
+    raw.pop("env", None)
+    specs[server_id] = raw
+    _save(specs)
 
 
 def _forget_tools() -> None:
@@ -143,9 +312,23 @@ def upsert_server(spec: MCPServerSpec) -> MCPServerSpec:
 
 
 def delete_server(server_id: str) -> bool:
+    """Forget a server, and every credential it was given.
+
+    Leaving the Keychain entries behind would mean re-adding a connector
+    silently reusing a token the user believed they had removed.
+    """
     specs = _load()
     if server_id not in specs:
         return False
+    spec = MCPServerSpec.from_dict(specs[server_id])
+    settings = get_settings()
+    for var in spec.env_keys:
+        with suppressed("clearing a removed connector's stored value"):
+            settings.set_secret(secret_key(server_id, var), None)
+    with suppressed("clearing a removed connector's sign-in"):
+        from .mcp_auth import forget_tokens
+
+        forget_tokens(server_id)
     del specs[server_id]
     _save(specs)
     _forget_tools()
@@ -166,10 +349,29 @@ class ToolKinds:
     bulk: list[str] = field(default_factory=list)
     query: list[str] = field(default_factory=list)
     write: list[str] = field(default_factory=list)
+    #: The server's tool objects as published, kept so a caller that needs a
+    #: description or an argument schema does not have to ask a second time.
+    #: A confirmation card and a model proposing an action both need them.
+    tools: list[Any] = field(default_factory=list)
 
     @property
     def can_sync(self) -> bool:
         return bool(self.bulk)
+
+    @property
+    def readable(self) -> list[str]:
+        """Everything an agent may call without asking. Reads, in both shapes."""
+        return [*self.bulk, *self.query]
+
+    def kind_of(self, tool: str) -> str:
+        """`"bulk"` | `"query"` | `"write"` | `""` — what this server calls it."""
+        if tool in self.write:
+            return "write"
+        if tool in self.bulk:
+            return "bulk"
+        if tool in self.query:
+            return "query"
+        return ""
 
     def why_not(self, label: str) -> str:
         """The sentence shown where the user is looking when a sync is not on."""
@@ -183,22 +385,51 @@ def _required(schema: dict | None) -> set[str]:
     return set((schema or {}).get("required") or [])
 
 
-def _is_write(name: str, annotations: Any) -> bool:
-    """Writes are identified from the server's own declaration first.
+def _is_write(name: str, annotations: Any, schema: dict | None = None) -> bool:
+    """Is this tool allowed to run without the user being asked first?
 
-    MCP lets a tool state `readOnlyHint`. Trusting the name alone would classify
-    `update_cache` as a write and `send` as a read, and getting it wrong in that
-    direction means a sync mutating the user's account.
+    **A tool is a write unless it proves otherwise.** This used to run the other
+    way — a tool was a read unless its name contained one of fourteen stems —
+    and that is a denylist guarding the one path in the app that changes
+    somebody else's account. `merge_pull_request`, `execute_sql`,
+    `revoke_token`, `approve`, `invite`, `publish` and `rename` all match none
+    of those stems, so all of them were handed to a model as reads and callable
+    mid-turn, on text a stranger wrote into the user's mailbox.
+
+    The order of evidence, strongest first:
+
+    1. The server's own `readOnlyHint` / `destructiveHint`. A declaration beats
+       any guess we could make about a name we did not choose.
+    2. A recognised read stem (`list_`, `search_`, `get_`…). A vendor naming a
+       mutation `search_` is possible; a denylist missing a verb nobody thought
+       of is routine.
+    3. Otherwise: a write. It collects an approval card.
+
+    The cost is that an unannotated, oddly-named read needs one tap. That is the
+    direction `/CLAUDE.md` already requires of everything outbound.
     """
     hint = getattr(annotations, "read_only_hint", None)
     if hint is True:
         return False
     if getattr(annotations, "destructive_hint", None) is True:
         return True
+
     lowered = name.lower()
-    return any(w in lowered for w in
-               ("create", "update", "delete", "send", "post", "write", "add",
-                "remove", "archive", "move", "set_", "edit", "reply"))
+    # A leading verb is the reliable part of a tool name — `get_issue` reads,
+    # `issue_delete` does not read merely because it starts with a noun.
+    head = lowered.split("__")[-1]
+    if any(head.startswith(stem) for stem in _READ_STEMS):
+        return False
+    # A listing named for its contents rather than its verb (`entries`,
+    # `recent_items`) is still a listing — but only when every word in it names
+    # contents, and only when it takes no arguments to act on. Deliberately
+    # *not* "no arguments means read": `reset`, `clear_all` and `disconnect`
+    # take none either, and each is a destructive call nobody saw coming.
+    segments = [seg for seg in re.split(r"[^a-z0-9]+", head) if seg]
+    if segments and all(seg in _LISTING_WORDS for seg in segments):
+        if schema is None or not (_required(schema) - _PAGING_ARGS):
+            return False
+    return True
 
 
 def classify_tools(tools: list[Any]) -> ToolKinds:
@@ -210,22 +441,21 @@ def classify_tools(tools: list[Any]) -> ToolKinds:
     server naming its lister `entries` is common, and a server naming a search
     `list_matching` is not rare either.
     """
-    kinds = ToolKinds()
+    kinds = ToolKinds(tools=list(tools))
     for tool in tools:
         name = getattr(tool, "name", "")
         if not name:
             continue
-        if _is_write(name, getattr(tool, "annotations", None)):
+        raw = getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None)
+        schema = raw if isinstance(raw, dict) else None
+        if _is_write(name, getattr(tool, "annotations", None), schema):
             kinds.write.append(name)
             continue
-        schema = getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None)
-        required = _required(schema if isinstance(schema, dict) else None)
+        required = _required(schema)
         callable_bare = not (required - _PAGING_ARGS)
-        if callable_bare and any(h in name.lower() for h in _BULK_HINTS):
-            kinds.bulk.append(name)
-        elif callable_bare and not required:
-            # No required arguments at all and no recognised name: still a
-            # listing, because there is nothing else a zero-argument read does.
+        if callable_bare:
+            # Reaches here only having already been judged a read, so a
+            # zero-argument one is a listing: there is nothing else it could be.
             kinds.bulk.append(name)
         else:
             kinds.query.append(name)
@@ -235,48 +465,320 @@ def classify_tools(tools: list[Any]) -> ToolKinds:
 # ── talking to a server ─────────────────────────────────────────────────────
 
 
-async def _converse(spec: MCPServerSpec, action):
-    """Open a session, hand it to `action`, and always close the process."""
-    from mcp import ClientSession, StdioServerParameters
+#: Where a GUI-launched app has to look for `npx`, `uvx` and friends.
+#: A `.app` opened from the Dock inherits `/usr/bin:/bin:/usr/sbin:/sbin` and
+#: nothing else, so a perfectly well installed Node is invisible to it — the
+#: same stripped-PATH problem `models/claude_code.py` already solves, arriving
+#: through a different door. Reusing that helper rather than a second list.
+_EXTRA_BIN_DIRS = [
+    "/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/sbin",
+    str(Path.home() / ".local" / "bin"),
+    str(Path.home() / ".bun" / "bin"),
+    str(Path.home() / ".cargo" / "bin"),
+    str(Path.home() / ".volta" / "bin"),
+    str(Path.home() / ".nvm" / "versions" / "node"),
+]
+
+
+def launch_path() -> str:
+    """PATH to look for a server's command on, and to hand the child."""
+    from ..models.cli_login import augmented_path
+
+    return augmented_path(_EXTRA_BIN_DIRS)
+
+
+def resolve_command(command: str) -> str | None:
+    """The absolute path to `command`, or None if this Mac does not have it.
+
+    Resolved before spawning rather than left to the child's own lookup, so
+    "Node is not installed" and "Node is installed somewhere the Dock cannot
+    see" stop being the same error message.
+    """
+    import shutil
+
+    if not command:
+        return None
+    if "/" in command:
+        return command if Path(command).exists() else None
+    found = shutil.which(command, path=launch_path())
+    if found:
+        return found
+    for directory in _EXTRA_BIN_DIRS:
+        candidate = Path(directory) / command
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+async def _stdio_session(spec: MCPServerSpec):
+    """A local subprocess, launched on a PATH the Dock cannot strip."""
+    from mcp import StdioServerParameters
     from mcp.client.stdio import stdio_client
 
-    params = StdioServerParameters(
-        command=spec.command, args=list(spec.args), env=dict(spec.env) or None)
-    async with stdio_client(params) as (read, write):
+    resolved = resolve_command(spec.command)
+    if resolved is None:
+        raise FileNotFoundError(
+            f"{spec.command}: command not found")
+    env = spec.resolved_env()
+    # The SDK merges this over its own safe-to-inherit set, so naming PATH here
+    # widens the child's lookup without discarding the rest of the environment.
+    env.setdefault("PATH", launch_path())
+    return stdio_client(StdioServerParameters(
+        command=resolved, args=list(spec.args), env=env))
+
+
+async def _http_session(spec: MCPServerSpec, *, interactive: bool = False):
+    """The vendor's own endpoint, over HTTPS, with the user's own credential.
+
+    No third party sits in this path: it is the same trust boundary the user
+    accepted when they made an account with that vendor. Where the vendor runs
+    an OAuth server, authentication is OAuth 2.1 with Dynamic Client
+    Registration, so **Lodestone registers no OAuth client** — the property the
+    stdio path was chosen for, kept, without running somebody else's code as
+    the user. Where the vendor takes a key instead, it is the key the user
+    already has, sent as a bearer and stored in the Keychain.
+    """
+    from mcp.client.streamable_http import (
+        create_mcp_http_client,
+        streamable_http_client,
+    )
+
+    headers: dict[str, str] = {}
+    auth = None
+    if spec.uses_oauth:
+        from .mcp_auth import auth_provider
+
+        auth = auth_provider(spec, interactive=interactive)
+    else:
+        token = spec.bearer()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+    # The transport takes a configured client rather than credentials, so the
+    # auth lives on the client we hand it. `create_mcp_http_client` is the
+    # SDK's own constructor and carries its timeouts — building a bare
+    # `AsyncClient` here would quietly drop the 300s read window a streaming
+    # server needs.
+    return streamable_http_client(
+        spec.url,
+        http_client=create_mcp_http_client(headers=headers or None, auth=auth))
+
+
+async def _converse(spec: MCPServerSpec, action, *, interactive: bool = False):
+    """Open a session, hand it to `action`, and always close what we opened.
+
+    `interactive` travels all the way down to the OAuth provider, because the
+    decision it controls — may this open a browser? — belongs to the caller at
+    the top (a Connect button, or a background probe) and to nothing in
+    between.
+    """
+    from mcp import ClientSession
+
+    opener = (await _http_session(spec, interactive=interactive)
+              if spec.is_remote else await _stdio_session(spec))
+    async with opener as streams:
+        # stdio yields (read, write); the HTTP transport adds a session-id
+        # getter as a third member. Taking the first two keeps one call site.
+        read, write = streams[0], streams[1]
         async with ClientSession(read, write) as session:
             await session.initialize()
             return await action(session)
 
 
-def converse(spec: MCPServerSpec, action):
-    """`_converse` from synchronous code.
+def converse(spec: MCPServerSpec, action, timeout: float | None = None, *,
+             interactive: bool = False):
+    """`_converse` from synchronous code, with a ceiling on the whole exchange.
 
     Connectors run in a worker thread (see `api/concurrency.py`), so there is no
     running loop here to clash with — `anyio.run` owns one for the call and
     tears it down with the subprocess.
+
+    The bound covers spawn, handshake, call **and** teardown, because a server
+    that hangs while starting never reaches a call and so is invisible to
+    `call_tool`'s `read_timeout_seconds`. Without it, one wedged server holds a
+    slot in the six-wide probe lane (`api/concurrency.py`) for the life of the
+    process, and six of them freeze sign-in as well. `mcp_tools._talk()` had
+    this right one layer up; it lives here now so every caller inherits it.
     """
     import anyio
 
-    return anyio.run(_converse, spec, action)
+    ceiling = LIST_TIMEOUT_SECONDS if timeout is None else timeout
+
+    async def guarded():
+        with anyio.fail_after(ceiling):
+            return await _converse(spec, action, interactive=interactive)
+
+    return anyio.run(guarded)
 
 
-def probe(spec: MCPServerSpec) -> tuple[ToolKinds | None, str]:
+@dataclass(frozen=True)
+class RawTool:
+    """A tool as the server described it, when the SDK refuses to model it.
+
+    Shaped to be indistinguishable from the SDK's own object at every place we
+    touch one — `name`, `description`, `input_schema`, `annotations` — because
+    the whole layer reads tools with `getattr` and must not learn there are two
+    kinds.
+    """
+
+    name: str
+    description: str = ""
+    input_schema: dict = field(default_factory=dict)
+    annotations: Any = None
+
+
+def _tolerant_tools(payload: dict) -> list[RawTool]:
+    """Tools from a raw `tools/list` reply, with the schema taken as given.
+
+    A tool's `inputSchema` is JSON Schema written by somebody else. We pass it
+    straight to a model provider and otherwise only read `required` out of it,
+    so a schema that omits a field the SDK's model insists on is still
+    perfectly usable to us.
+    """
+    out: list[RawTool] = []
+    for item in payload.get("tools") or []:
+        name = (item or {}).get("name") or ""
+        if not name:
+            continue
+        schema = item.get("inputSchema") or item.get("input_schema") or {}
+        if isinstance(schema, dict) and "type" not in schema:
+            # The one repair worth making: every provider requires a top-level
+            # type, and "object" is the only thing an MCP argument set can be.
+            schema = {**schema, "type": "object"}
+        out.append(RawTool(
+            name=name,
+            description=(item.get("description") or "").strip(),
+            input_schema=schema if isinstance(schema, dict) else {},
+            annotations=_Annotations(item.get("annotations") or {}),
+        ))
+    return out
+
+
+class _Annotations:
+    """`readOnlyHint` / `destructiveHint` from a raw reply, read the SDK's way."""
+
+    def __init__(self, raw: dict) -> None:
+        self.read_only_hint = raw.get("readOnlyHint")
+        self.destructive_hint = raw.get("destructiveHint")
+
+
+class _Block:
+    """One content block from a raw reply, read the way the SDK's is."""
+
+    def __init__(self, raw: dict) -> None:
+        self.type = raw.get("type") or "text"
+        self.text = raw.get("text")
+
+
+class RawResult:
+    """A tool result taken as published, when the SDK's model refuses it.
+
+    Carries exactly the three things this layer reads — `is_error`,
+    `structured_content`, `content[].text` — under the SDK's own attribute
+    names, so `_records()` cannot tell the difference.
+    """
+
+    def __init__(self, raw: dict) -> None:
+        self.is_error = bool(raw.get("isError"))
+        self.structured_content = raw.get("structuredContent")
+        self.content = [_Block(b) for b in (raw.get("content") or [])
+                        if isinstance(b, dict)]
+
+
+async def call_tool_in(session, tool: str, arguments: dict,
+                       read_deadline: float) -> Any:
+    """Run one tool, tolerating a server the SDK's model will not validate.
+
+    `session.call_tool()` validates the *result* against the tool's declared
+    output schema, and to do that it re-lists the tools — so a server whose
+    schema the SDK rejects fails here too, **after the tool has already run**.
+    That is the worst possible shape for a write: the mail is sent, the issue
+    is created, and the caller is told it failed.
+
+    So the fallback is not an optimisation. It is what stops a successful
+    write being reported as an error and retried.
+    """
+    from pydantic import ValidationError
+
+    try:
+        return await session.call_tool(tool, dict(arguments or {}),
+                                       read_timeout_seconds=read_deadline)
+    except ValidationError as exc:
+        log.debug("tool result failed strict validation, reading it as "
+                  "published: %s", exc)
+
+    raw = await session._dispatcher.send_raw_request(
+        "tools/call", {"name": tool, "arguments": dict(arguments or {})})
+    return RawResult(raw)
+
+
+async def list_tools_in(session) -> list[Any]:
+    """The tools a live session reports. One place, so every caller agrees.
+
+    Falls back to the raw reply when the SDK's model rejects it. This is not
+    hypothetical: the MCP Python SDK requires `inputSchema.type`, and servers
+    built against older SDKs — including the reference filesystem server —
+    publish a schema without one. Strict validation turns every one of those
+    into "did not respond as expected", which is a working connector reported
+    as broken over a field we do not even read.
+
+    Only the shape is relaxed. Nothing here trusts the server more than before:
+    the tools still go through `classify_tools()`, and a write is still a write.
+    """
+    from pydantic import ValidationError
+
+    try:
+        listed = await session.list_tools()
+        return list(listed.tools)
+    except ValidationError as exc:
+        log.debug("server's tool list failed strict validation, "
+                  "reading it as published: %s", exc)
+
+    raw = await session._dispatcher.send_raw_request("tools/list", {})
+    return _tolerant_tools(raw)
+
+
+def probe(spec: MCPServerSpec, *, want_tools: bool = False,
+          interactive: bool = False) -> tuple[ToolKinds | None, str]:
     """What can this server do, or why can we not tell?
 
     Returns `(None, reason)` rather than raising, because the caller is a UI
-    that must say what happened in the place the user is looking.
+    that must say what happened in the place the user is looking. `want_tools`
+    is accepted for readability at the call site — the tool objects are always
+    carried now, since we have them in hand and asking twice costs a process.
     """
     from .mcp_errors import explain
 
-    async def _list(session):
-        with_timeout = await session.list_tools()
-        return list(with_timeout.tools)
-
     try:
-        return classify_tools(converse(spec, _list)), ""
+        timeout = (CONSENT_TIMEOUT_SECONDS if interactive and spec.uses_oauth
+                   else None)
+        return classify_tools(converse(spec, list_tools_in, timeout,
+                                       interactive=interactive)), ""
     except Exception as exc:
         log.debug("MCP probe failed for %s: %s", spec.id, exc)
+        if spec.is_remote:
+            reason = _remote_reason(spec)
+            if reason:
+                return None, reason
         return None, explain(exc, spec.name)
+
+
+def _remote_reason(spec: MCPServerSpec) -> str:
+    """Why a remote server refused us, when the protocol error will not say.
+
+    An HTTP 401 reaches the caller as "Server returned an error response", so
+    without this a revoked token and a server outage read the same — and the
+    first has an obvious next step while the second does not.
+    """
+    from .mcp_auth import challenge
+
+    if not challenge(spec.url):
+        return ""
+    if spec.auth == "token":
+        return (f"{spec.name} did not accept that key. Check it in Connectors "
+                "and paste a current one.")
+    return (f"{spec.name} needs you to sign in. Open it in Connectors and "
+            f"choose Connect — the sign-in happens on {spec.name}'s own site.")
 
 
 def _records(result: Any) -> list[Any]:
@@ -388,37 +890,92 @@ class MCPConnector(Connector):
         self.name = f"mcp:{spec.id}"
         self.label = spec.name
 
+    def status(self) -> tuple[bool, str, bool]:
+        """(ready, reason, can_sync) from a single probe.
+
+        Three facts the Connectors row needs and one process start to get them.
+        `can_sync` is separate from `ready` on purpose: a server that can only
+        answer questions is a **working** connector — that is what the agent
+        tool path exists for — but offering it a Sync button would be offering
+        a control that cannot work.
+        """
+        ready, reason = self._reachable()
+        if not ready:
+            return False, reason, False
+        kinds, probe_reason = probe(self.spec)
+        if kinds is None:
+            return False, probe_reason, False
+        if not kinds.readable and not kinds.write:
+            return False, kinds.why_not(self.label), False
+        return True, "", bool(kinds.can_sync or self.spec.sync_tool)
+
+    def _reachable(self) -> tuple[bool, str]:
+        """The cheap, local disqualifications — no process, no network."""
+        if self.spec.is_remote:
+            if not self.spec.url:
+                return False, "this connector has no address to reach"
+        elif not self.spec.command:
+            return False, "this connector has no command to run"
+        elif resolve_command(self.spec.command) is None:
+            return False, (
+                f"{self.label} could not be started — {self.spec.command} is "
+                "missing on this Mac. Install it, then try connecting again.")
+        missing = self.spec.missing_env()
+        if missing:
+            return False, (f"{self.label} still needs "
+                           f"{', '.join(missing)} before it can connect.")
+        return True, ""
+
     def is_configured(self) -> tuple[bool, str]:
         """A server that will not start must never read as Connected.
 
-        This actually launches it, because the only honest test of "can this
-        run" is running it — a binary that was uninstalled, a credential that
-        expired, and a server that crashes on boot all look identical from the
-        spec alone.
+        This actually reaches it, because the only honest test of "does this
+        work" is using it — a binary that was uninstalled, a credential that
+        expired, a token the vendor revoked and a server that crashes on boot
+        all look identical from the spec alone.
+
+        The cheap, local disqualifications are checked first so the common
+        failures do not cost a process start or a network round trip.
         """
-        if not self.spec.command:
-            return False, "this connector has no command to run"
-        kinds, reason = probe(self.spec)
-        if kinds is None:
-            return False, reason
-        if not kinds.can_sync and not self.spec.sync_tool:
-            return False, kinds.why_not(self.label)
-        return True, ""
+        ready, reason, _ = self.status()
+        return ready, reason
 
     # ── actions (writes) ────────────────────────────────────────────────
 
-    def available_actions(self) -> list[dict[str, str]]:
+    def available_actions(self) -> list[dict[str, Any]]:
         """Write tools this connector is permitted to offer, for confirmation.
 
         Returned rather than executed: nothing here changes anything at the
         vendor. The list is what a confirmation card is built from, which is the
-        only way a user can be shown what they are agreeing to.
+        only way a user can be shown what they are agreeing to — and now what
+        an agent is shown too, so it can propose one.
+
+        Each row carries the vendor's own description and argument schema. A
+        model asked to propose `create_issue` with no schema is guessing at
+        field names, and a user approving one with no description is approving
+        a verb.
         """
-        kinds, _ = probe(self.spec)
+        kinds, _ = probe(self.spec, want_tools=True)
         if kinds is None:
             return []
-        return [{"tool": name, "connector": self.name, "label": self.label}
-                for name in kinds.write if self.spec.permits(name)]
+        by_name = {getattr(t, "name", ""): t for t in (kinds.tools or [])}
+        rows: list[dict[str, Any]] = []
+        for name in kinds.write:
+            if not self.spec.permits(name):
+                continue
+            tool = by_name.get(name)
+            raw = (getattr(tool, "input_schema", None)
+                   or getattr(tool, "inputSchema", None)) if tool else None
+            rows.append({
+                "tool": name,
+                "connector": self.name,
+                "server_id": self.spec.id,
+                "label": self.label,
+                "description": (getattr(tool, "description", "") or "").strip(),
+                "parameters": raw if isinstance(raw, dict)
+                              else {"type": "object", "properties": {}},
+            })
+        return rows
 
     def perform(self, tool: str, arguments: dict[str, Any] | None = None, *,
                 confirmed: bool = False) -> dict[str, Any]:
@@ -440,22 +997,28 @@ class MCPConnector(Connector):
             return {"ok": False,
                     "error": f"{self.label} is not allowed to use `{tool}`."}
 
-        kinds, reason = probe(self.spec)
-        if kinds is None:
-            return {"ok": False, "error": reason}
-        if tool not in kinds.write and tool not in kinds.bulk and tool not in kinds.query:
-            return {"ok": False,
-                    "error": f"{self.label} has no `{tool}` to run."}
+        async def _verify_and_call(session):
+            """Check the tool exists and run it, inside one conversation.
 
-        async def _call(session):
-            return await session.call_tool(
-                tool, dict(arguments or {}),
-                read_timeout_seconds=CALL_TIMEOUT_SECONDS)
+            This used to probe and then call, which started the server twice
+            and left a window between the two. Re-listing inside the session we
+            already have costs one message and no extra process — the shape
+            `mcp_tools.call_tool()` already uses for the same reason.
+            """
+            live = classify_tools(await list_tools_in(session))
+            if not live.kind_of(tool):
+                return ("missing", None)
+            return ("ok", await call_tool_in(
+                session, tool, arguments or {}, CALL_TIMEOUT_SECONDS))
 
         try:
-            answer = converse(self.spec, _call)
+            outcome, answer = converse(self.spec, _verify_and_call,
+                                       timeout=CALL_TIMEOUT_SECONDS)
         except Exception as exc:
             return {"ok": False, "error": explain(exc, self.label)}
+        if outcome == "missing":
+            return {"ok": False,
+                    "error": f"{self.label} has no `{tool}` to run."}
         if getattr(answer, "is_error", False):
             return {"ok": False,
                     "error": f"{self.label} could not complete that action."}
@@ -472,15 +1035,27 @@ class MCPConnector(Connector):
         max_items = limit or 200
 
         try:
-            kinds, reason = probe(self.spec)
-            if kinds is None:
-                result.errors.append(reason)
+            async def _classify_and_read(session):
+                """Work out what to call and call it, in one conversation."""
+                kinds = classify_tools(await list_tools_in(session))
+                permitted = [t for t in kinds.bulk if self.spec.permits(t)]
+                chosen = self.spec.sync_tool or (permitted[0] if permitted else "")
+                if not chosen:
+                    return (kinds, "", None)
+                if not self.spec.permits(chosen):
+                    return (kinds, chosen, "forbidden")
+                return (kinds, chosen, await call_tool_in(
+                    session, chosen, {}, CALL_TIMEOUT_SECONDS))
+
+            try:
+                kinds, tool, answer = converse(
+                    self.spec, _classify_and_read, timeout=CALL_TIMEOUT_SECONDS)
+            except Exception as exc:
+                result.errors.append(explain(exc, self.label))
                 result.detail = "could not start"
                 return self._finish(result)
 
-            permitted = [t for t in kinds.bulk if self.spec.permits(t)]
-            tool = self.spec.sync_tool or (permitted[0] if permitted else "")
-            if tool and not self.spec.permits(tool):
+            if answer == "forbidden":
                 result.errors.append(
                     f"{self.label} is not allowed to use its `{tool}` tool. "
                     "Change what it may read in Connectors.")
@@ -494,12 +1069,6 @@ class MCPConnector(Connector):
                 result.detail = kinds.why_not(self.label)
                 result.errors.append(result.detail)
                 return self._finish(result)
-
-            async def _call(session):
-                return await session.call_tool(
-                    tool, {}, read_timeout_seconds=CALL_TIMEOUT_SECONDS)
-
-            answer = converse(self.spec, _call)
             if getattr(answer, "is_error", False):
                 result.errors.append(
                     f"{self.label} reported a problem reading its records.")
