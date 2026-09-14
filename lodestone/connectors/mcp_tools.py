@@ -160,8 +160,16 @@ def _talk(spec: MCPServerSpec, action, timeout: float | None = None):
 
 
 async def _list(session):
-    listed = await session.list_tools()
-    return list(listed.tools)
+    """One listing helper for the whole layer.
+
+    Delegates rather than calling `session.list_tools()` again, so this path
+    inherits the tolerance for servers whose schema the SDK's model rejects —
+    a second copy here is how the agent saw zero tools from a server the
+    Connectors page had just reported as working.
+    """
+    from .mcp_source import list_tools_in
+
+    return await list_tools_in(session)
 
 
 def _list_every(specs: list[MCPServerSpec]) -> dict[str, list]:
@@ -260,6 +268,21 @@ def list_tools() -> list[MCPToolRef]:
     return refs
 
 
+def write_tools() -> list[MCPToolRef]:
+    """The tools a model may **propose** but never call.
+
+    `list_tools()` already discovers these — a confirmation card has to be built
+    from something — and `call_tool()` refuses them. What was missing is anyone
+    asking for them: an agent cannot propose an action whose name it was never
+    told, which is why connector writes existed end to end and no agent could
+    originate one.
+
+    Reads and writes come from the same cached pass, so asking for this costs
+    nothing on top of the tool list the loop already built.
+    """
+    return [ref for ref in list_tools() if ref.writes]
+
+
 def invalidate() -> None:
     """Forget the cached tool list.
 
@@ -343,9 +366,10 @@ def call_tool(qualified_name: str, arguments: dict) -> str:
         live = classify_tools(await _list(session))
         if ref.tool in live.write:
             return None
-        return await session.call_tool(
-            ref.tool, dict(arguments or {}),
-            read_timeout_seconds=TURN_TIMEOUT_SECONDS)
+        from .mcp_source import call_tool_in
+
+        return await call_tool_in(session, ref.tool, arguments or {},
+                                  TURN_TIMEOUT_SECONDS)
 
     try:
         answer = _talk(spec, _call)

@@ -136,8 +136,22 @@ class Scheduler:
                 summary["_cancelled"] = True
                 break
             try:
-                res = get_connector(f"mcp:{server_id}").sync(
-                    interactive=interactive, cancel=self._cancel)
+                from .connectors.mcp_source import MCPConnector
+
+                conn = get_connector(f"mcp:{server_id}")
+                # A connector whose tools only answer questions has nothing to
+                # pull in ahead of time. Syncing it anyway records the same
+                # "cannot list its records" error every half hour, which turns
+                # a working connector into a permanent red mark.
+                #
+                # The concrete type, not the base: `status()` belongs to the
+                # MCP connector, and a duck-typed call would silently skip any
+                # future connector that happened to grow the name.
+                if isinstance(conn, MCPConnector):
+                    ready, _reason, can_sync = conn.status()
+                    if not ready or not can_sync:
+                        continue
+                res = conn.sync(interactive=interactive, cancel=self._cancel)
                 summary[f"mcp:{server_id}"] = {"added": res.added,
                                                "errors": res.errors[:1]}
             except Exception as exc:

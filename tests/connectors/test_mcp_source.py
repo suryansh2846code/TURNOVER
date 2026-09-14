@@ -78,13 +78,23 @@ def test_a_search_only_server_is_not_synced():
     with an invented query would fabricate a brain rather than fill one. What
     it must not do is report success with zero records, which is exactly how a
     user concludes the app is broken.
+
+    **Changed in Phase 6, deliberately.** This used to assert the connector was
+    *not configured*. That was right when a search-only server was useless to
+    us; Phase 5 made its tools callable inside a turn, so the same server is now
+    a working connector and reporting it as unconnected became the dishonest
+    answer — most of the remote catalog (Notion among them) exposes search and
+    no listing. What must stay true is the original guarantee: it is never
+    synced, and never claims to have been. That is now expressed as
+    `can_sync=False`, which is also what removes its Sync button.
     """
     conn = MCPConnector(spec_for("search"))
 
-    ready, reason = conn.is_configured()
+    ready, reason, can_sync = conn.status()
 
-    assert not ready
-    assert "cannot list" in reason and "on demand" in reason
+    assert ready, "a server whose tools an agent can call is connected"
+    assert not reason
+    assert not can_sync, "there is nothing here to pull in ahead of time"
 
 
 def test_a_search_only_sync_explains_itself():

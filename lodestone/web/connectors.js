@@ -117,19 +117,26 @@ function _cnRowHtml(c, staleAfterMin) {
   const state = !c.ready ? "off" : stale ? "stale" : "ok";
   // What the row says about itself: connected sources report their freshness,
   // unconnected ones say what they would give you if you connected them.
+  // A connector with no listing tool is connected and useful — your agents can
+  // ask it things — it just has nothing to pull in ahead of time. Saying
+  // "not synced yet" about one would promise a sync that is never coming.
+  const onDemand = c.mcp && c.ready && c.can_sync === false;
   const status = !c.ready ? (meta.desc || c.reason || "Not connected")
+    : onDemand ? "Connected · answers your agents on demand"
     : !last ? "Connected · not synced yet"
     : stale ? `Connected · last synced ${last}` : `Connected · synced ${last}`;
   const badge = !c.ready ? ""
     : `<span class="cn-badge ${stale ? "is-stale" : ""}">${stale ? "Stale" : "Connected"}</span>`;
 
-  const sync = c.ready ? `<button class="tiny ghost" data-sync="${esc(c.name)}">Sync</button>` : "";
+  const sync = c.ready && !onDemand
+    ? `<button class="tiny ghost" data-sync="${esc(c.name)}">Sync</button>` : "";
   const setup = c.custom
     ? `<button class="tiny ghost" data-editapp="${esc(c.name)}">Edit</button>`
     : (c.ready ? "" : `<button class="tiny" data-setup="${esc(c.name)}">Connect</button>`);
   const del = c.custom
     ? `<button class="tiny ghost cn-x" data-delapp="${esc(c.name)}" title="Remove" aria-label="Remove ${esc(c.label)}">✕</button>`
-    : c.mcp ? `<button class="tiny ghost cn-x" data-delmcp="${esc(c.name)}" title="Remove" aria-label="Remove ${esc(c.label)}">✕</button>` : "";
+    : c.mcp ? `<button class="tiny ghost" data-cntools="${esc(c.name)}" data-cnlabel="${esc(c.label)}" title="What this connector can do">Permissions</button>
+               <button class="tiny ghost cn-x" data-delmcp="${esc(c.name)}" title="Remove" aria-label="Remove ${esc(c.label)}">✕</button>` : "";
 
   return `<div class="cn-row" data-conn="${esc(c.name)}">
     <span class="cn-logo" data-state="${state}">${connectorIcon(c.name)}</span>
@@ -155,6 +162,8 @@ function bindConnectorRowActions() {
     await api(`/api/custom-apps/${id}`, { method: "DELETE" });
     toast("custom app removed"); loadBrain();
   });
+  document.querySelectorAll("[data-cntools]").forEach((b) => b.onclick = () =>
+    connectorTools(b.dataset.cntools, b.dataset.cnlabel));
   document.querySelectorAll("[data-delmcp]").forEach((b) => b.onclick = async () => {
     const id = b.dataset.delmcp.split(":")[1];
     // Say what removing does and does not do. Silently keeping the memories
@@ -419,8 +428,20 @@ async function loadConnectorCatalog() {
       <span class="tiny ghost" style="opacity:.5;cursor:default">unavailable</span>
     </div>`;
 
+  // The catalog is what we have vetted, and will never be all of it. Offering
+  // the escape hatch here rather than hiding it in settings is the difference
+  // between "these nine" and "anything you have".
+  const own = `
+    <div class="cx-row">
+      <span>
+        <span class="conn-name">Something else</span>
+        <span class="conn-sub">Point Lodestone at a server you already have.</span>
+      </span>
+      <button class="tiny ghost" id="cxOwn">Add your own</button>
+    </div>`;
+
   box.innerHTML =
-    `<div class="cx-head">Available</div>${data.available.map(card).join("")}` +
+    `<div class="cx-head">Available</div>${data.available.map(card).join("")}${own}` +
     (data.blocked.length
       ? `<div class="cx-head" style="margin-top:14px">Not possible</div>
          ${data.blocked.map(blocked).join("")}` : "");
@@ -428,10 +449,36 @@ async function loadConnectorCatalog() {
   box.querySelectorAll("[data-cxadd]").forEach((b) => {
     if (!b.disabled) b.onclick = () => connectorPermissions(b.dataset.cxadd);
   });
+  $("#cxOwn").onclick = customServerForm;
 }
 
-// Consent to something nobody has been shown is not consent, so the tools a
-// connector exposes are read from the server and displayed before it is added.
+// Consent to something nobody has been shown is not consent, so what a
+// connector can do is read from the server and displayed before it is added.
+//
+// Three shapes, because the sources genuinely differ:
+//   · the vendor signs you in  → a Connect button, then their own page
+//   · the vendor wants a key   → a masked field
+//   · a local server           → whatever it needs positionally, e.g. a folder
+// A connector that needs nothing is probed up front and its tools listed.
+
+function fieldRow(f, prefix) {
+  const masked = f.kind === "secret";
+  const hint = f.kind === "path" ? ' placeholder="~/Documents"' : "";
+  return `
+    <label class="t" style="display:block;margin:10px 0 3px">${esc(f.label)}</label>
+    <div class="t" style="opacity:.7;margin-bottom:4px">${esc(f.help)}</div>
+    <input id="${prefix}_${esc(f.name)}" spellcheck="false"${hint}
+      type="${masked ? "password" : "text"}"
+      style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)" />`;
+}
+
+function toolList(items, empty) {
+  return items.length
+    ? `<ul style="margin:4px 0 0 16px;padding:0">${
+        items.map((t) => `<li><code>${esc(t)}</code></li>`).join("")}</ul>`
+    : `<div class="t" style="opacity:.7;margin-top:4px">${esc(empty)}</div>`;
+}
+
 async function connectorPermissions(entryId) {
   openBrainModal("Add a connector",
     `<div id="cxPerm" class="t">Checking what this connector can do…</div>`);
@@ -452,40 +499,50 @@ async function connectorPermissions(entryId) {
     return;
   }
 
-  const list = (items, empty) => items.length
-    ? `<ul style="margin:4px 0 0 16px;padding:0">${
-        items.map((t) => `<li><code>${esc(t)}</code></li>`).join("")}</ul>`
-    : `<div class="t" style="opacity:.7;margin-top:4px">${empty}</div>`;
+  const env = (info.needs_env || []).map((f) => fieldRow(f, "cxenv")).join("");
+  const args = (info.needs_args || []).map((f) => fieldRow(f, "cxarg")).join("");
 
-  const env = (info.needs_env || []).map((f) => `
-    <label class="t" style="display:block;margin:8px 0 3px">${esc(f.name)}</label>
-    <div class="t" style="opacity:.7;margin-bottom:4px">${esc(f.help)}</div>
-    <input id="cxenv_${esc(f.name)}" spellcheck="false" type="password"
-      style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)" />`
-  ).join("");
+  // Nothing is known about a server behind someone else's sign-in until the
+  // user has signed in. Promising a tool list we do not have would be a guess;
+  // saying what happens next is not.
+  const preview = info.needs_auth
+    ? `<p class="t">You'll be sent to <b>${esc(info.name)}</b> to sign in.
+         Lodestone never sees your password, and the permissions you grant are
+         shown on their page.</p>
+       <p class="t" style="margin-top:8px;opacity:.8">Once connected, anything
+         that <b>changes</b> something in ${esc(info.name)} always asks you first.</p>`
+    : (info.reads.length || info.writes.length)
+      ? `<p class="t"><b>${esc(info.name)}</b> would be able to:</p>
+         <div style="margin-top:8px"><b class="t">Read</b>${toolList(info.reads, "nothing")}</div>
+         <div style="margin-top:8px"><b class="t">Change</b>${
+           toolList(info.writes, "nothing — this connector is read-only")}</div>
+         ${info.writes.length ? `<p class="t" style="margin-top:8px;opacity:.8">
+           Anything that changes something always asks you first.</p>` : ""}
+         ${info.can_sync ? "" : `<p class="t" style="margin-top:8px">
+           This one answers questions but cannot list its records, so it is
+           searched on demand rather than synced.</p>`}`
+      : `<p class="t">${esc(info.notes || "")}</p>
+         <p class="t" style="margin-top:8px;opacity:.8">You'll see exactly what
+           it can read and change as soon as it's connected.</p>`;
 
   $("#cxPerm").innerHTML =
-    `<p class="t"><b>${esc(info.name)}</b> would be able to:</p>
-     <div style="margin-top:8px"><b class="t">Read</b>${list(info.reads, "nothing")}</div>
-     <div style="margin-top:8px"><b class="t">Change</b>${
-       list(info.writes, "nothing — this connector is read-only")}</div>
-     ${info.writes.length ? `<p class="t" style="margin-top:8px;opacity:.8">
-       Anything that changes something always asks you first.</p>` : ""}
-     ${info.can_sync ? "" : `<p class="t" style="margin-top:8px">
-       This one answers questions but cannot list its records, so it is searched
-       on demand rather than synced.</p>`}
-     ${env ? `<hr style="border:none;border-top:1px solid var(--line);margin:12px 0">${env}` : ""}
-     <div id="cxErr" class="t" style="color:var(--bad);margin-top:8px" hidden></div>
+    preview +
+    ((env || args) ? `<hr style="border:none;border-top:1px solid var(--line);margin:12px 0">${args}${env}` : "") +
+    `<div id="cxErr" class="t" style="color:var(--bad);margin-top:8px" hidden></div>
      <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
        <button id="cxBack" class="tiny ghost">Back</button>
-       <button id="cxGo" class="tiny">Add connector</button></div>`;
+       <button id="cxGo" class="tiny">${info.needs_auth ? "Connect" : "Add connector"}</button></div>`;
 
   $("#cxBack").onclick = connectorBrowser;
   $("#cxGo").onclick = async () => {
-    const body = { env: {} };
+    const body = { env: {}, args: {} };
     (info.needs_env || []).forEach((f) => {
       const v = $(`#cxenv_${f.name}`);
       if (v && v.value.trim()) body.env[f.name] = v.value.trim();
+    });
+    (info.needs_args || []).forEach((f) => {
+      const v = $(`#cxarg_${f.name}`);
+      if (v && v.value.trim()) body.args[f.name] = v.value.trim();
     });
     const go = $("#cxGo"), err = $("#cxErr");
     go.disabled = true; go.textContent = "Checking…"; err.hidden = true;
@@ -497,17 +554,189 @@ async function connectorPermissions(entryId) {
         // Say why here, where they are looking — a failed add that closes the
         // dialog and shows nothing is the shape of "the app is broken".
         err.textContent = r.error; err.hidden = false;
-        go.disabled = false; go.textContent = "Add connector";
+        go.disabled = false; go.textContent = info.needs_auth ? "Connect" : "Add connector";
         return;
       }
+      if (r.signing_in) { awaitSignIn(r.server_id, r.label); return; }
       $("#brainModal").hidden = true;
       toast(`${r.label} connected — syncing…`);
       await syncConn(r.name);
       loadBrain();
     } catch (e) {
       err.textContent = String(e); err.hidden = false;
+      go.disabled = false; go.textContent = info.needs_auth ? "Connect" : "Add connector";
+    }
+  };
+}
+
+// ── waiting on the vendor's own sign-in ──────────────────────────────────
+// The browser is somewhere else now, so this has to survive the user tabbing
+// away and coming back — the status lives on the server, not in this closure.
+// And anything they start, they can stop: Cancel really ends the flow.
+
+async function awaitSignIn(serverId, label) {
+  openBrainModal(`Connect ${label}`,
+    `<p class="t">A browser window is opening. Sign in to <b>${esc(label)}</b>
+       and approve the permissions you want to give it.</p>
+     <p class="t" id="cxAuthState" style="margin-top:10px;opacity:.75">Waiting for you to finish…</p>
+     <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+       <button id="cxAuthCancel" class="tiny ghost">Cancel</button></div>`);
+
+  let stopped = false;
+  $("#cxAuthCancel").onclick = async () => {
+    stopped = true;
+    await api(`/api/connectors/mcp/${encodeURIComponent(serverId)}/auth`,
+              { method: "DELETE" }).catch(() => {});
+    await api(`/api/connectors/mcp/${encodeURIComponent(serverId)}`,
+              { method: "DELETE" }).catch(() => {});
+    $("#brainModal").hidden = true;
+    toast(`${label} was not connected`);
+    loadBrain();
+  };
+
+  for (let i = 0; i < 150 && !stopped; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    if (stopped) return;
+    let s;
+    try {
+      s = await api(`/api/connectors/mcp/${encodeURIComponent(serverId)}/auth`);
+    } catch { continue; }
+    if (s.status === "connected") {
+      $("#brainModal").hidden = true;
+      toast(`${label} connected`);
+      loadBrain();
+      return;
+    }
+    if (s.status === "failed" || s.status === "cancelled") {
+      const state = $("#cxAuthState");
+      if (state) { state.textContent = s.reason || "That didn't complete."; state.style.color = "var(--bad)"; }
+      return;
+    }
+  }
+  const state = $("#cxAuthState");
+  if (state && !stopped) state.textContent = "Still waiting — you can close this and try again.";
+}
+
+// ── a server we do not list ──────────────────────────────────────────────
+// The catalog covers what we have vetted, which will never be all of it.
+
+function customServerForm() {
+  const input = (id, label, help, ph) => `
+    <label class="t" style="display:block;margin:10px 0 3px">${label}</label>
+    ${help ? `<div class="t" style="opacity:.7;margin-bottom:4px">${help}</div>` : ""}
+    <input id="${id}" spellcheck="false" placeholder="${ph || ""}"
+      style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)" />`;
+
+  openBrainModal("Add your own connector",
+    `<p class="t">Point Lodestone at a server you already have. It is started
+       and checked before it is saved, so a broken one is never added.</p>
+     ${input("csName", "Name", "What you want to call it here.", "My tracker")}
+     <label class="t" style="display:block;margin:10px 0 3px">Kind</label>
+     <select id="csKind" style="width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)">
+       <option value="http">A web address (the service runs it)</option>
+       <option value="stdio">A program on this Mac</option>
+     </select>
+     <div id="csHttp">${input("csUrl", "Address", "", "https://mcp.example.com/mcp")}</div>
+     <div id="csStdio" hidden>
+       ${input("csCmd", "Command", "The program to run.", "npx")}
+       ${input("csArgs", "Arguments", "Separated by spaces.", "-y some-mcp-server@1.0.0")}
+     </div>
+     <div id="csErr" class="t" style="color:var(--bad);margin-top:8px" hidden></div>
+     <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+       <button id="csBack" class="tiny ghost">Back</button>
+       <button id="csGo" class="tiny">Add connector</button></div>`);
+
+  const sync = () => {
+    const http = $("#csKind").value === "http";
+    $("#csHttp").hidden = !http; $("#csStdio").hidden = http;
+  };
+  $("#csKind").onchange = sync; sync();
+  $("#csBack").onclick = connectorBrowser;
+  $("#csGo").onclick = async () => {
+    const name = ($("#csName").value || "").trim();
+    const kind = $("#csKind").value;
+    const err = $("#csErr"), go = $("#csGo");
+    if (!name) { err.textContent = "Give it a name."; err.hidden = false; return; }
+    const body = {
+      id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+      name, transport: kind,
+      url: kind === "http" ? ($("#csUrl").value || "").trim() : "",
+      command: kind === "stdio" ? ($("#csCmd").value || "").trim() : "",
+      args: kind === "stdio"
+        ? ($("#csArgs").value || "").trim().split(/\s+/).filter(Boolean) : [],
+    };
+    go.disabled = true; go.textContent = "Checking…"; err.hidden = true;
+    try {
+      const r = await api("/api/connectors/mcp", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body) });
+      if (!r.ok) {
+        err.textContent = r.error; err.hidden = false;
+        go.disabled = false; go.textContent = "Add connector"; return;
+      }
+      if (r.signing_in) { awaitSignIn(r.server_id, r.label); return; }
+      $("#brainModal").hidden = true;
+      toast(`${r.label} connected`);
+      loadBrain();
+    } catch (e) {
+      err.textContent = String(e); err.hidden = false;
       go.disabled = false; go.textContent = "Add connector";
     }
+  };
+}
+
+// ── what a connector is allowed to use ───────────────────────────────────
+// Least privilege the user cannot set is a claim, not a control. This is the
+// half that was missing: the tools were shown before adding and could never
+// be changed afterwards.
+
+async function connectorTools(name, label) {
+  const serverId = name.split(":")[1];
+  openBrainModal(`What ${label} can do`,
+    `<div id="cxTools" class="t">Asking ${esc(label)}…</div>`);
+  let info;
+  try {
+    info = await api(`/api/connectors/mcp/${encodeURIComponent(serverId)}/tools`);
+  } catch (e) {
+    $("#cxTools").textContent = "Could not reach this connector. " + String(e);
+    return;
+  }
+  if (!info.ok) { $("#cxTools").textContent = info.error || "Could not reach it."; return; }
+
+  const allowed = new Set(info.allowed_tools || []);
+  const everything = allowed.size === 0;
+  const row = (t) => `
+    <label class="cx-tool" style="display:flex;gap:9px;align-items:flex-start;padding:6px 0">
+      <input type="checkbox" data-tool="${esc(t.name)}"
+        ${everything || allowed.has(t.name) ? "checked" : ""} style="margin-top:3px" />
+      <span>
+        <code>${esc(t.name)}</code>
+        ${t.writes ? `<span class="conn-sub" style="color:var(--bad)">changes things — always asks you</span>`
+                   : `<span class="conn-sub">${esc(t.description || "reads only")}</span>`}
+      </span>
+    </label>`;
+
+  $("#cxTools").innerHTML =
+    `<p class="t">Turn off anything you'd rather ${esc(label)} could not touch.
+       Unchecked tools are not offered to your agents at all.</p>
+     <div style="margin-top:10px">${info.tools.map(row).join("")}</div>
+     <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+       <button id="ctCancel" class="tiny ghost">Cancel</button>
+       <button id="ctSave" class="tiny">Save</button></div>`;
+
+  $("#ctCancel").onclick = () => $("#brainModal").hidden = true;
+  $("#ctSave").onclick = async () => {
+    const boxes = [...document.querySelectorAll("#cxTools [data-tool]")];
+    const on = boxes.filter((b) => b.checked).map((b) => b.dataset.tool);
+    // All of them checked means "no restriction", which is stored as an empty
+    // list — otherwise a tool added by a server update would arrive disabled.
+    const body = { allowed_tools: on.length === boxes.length ? [] : on };
+    await api(`/api/connectors/mcp/${encodeURIComponent(serverId)}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body) });
+    $("#brainModal").hidden = true;
+    toast(`${label} updated`);
+    loadBrain();
   };
 }
 
