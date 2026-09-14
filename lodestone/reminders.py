@@ -126,6 +126,30 @@ class ReminderStore:
             (limit,)).fetchall()
         return [dict(r) for r in rows]
 
+    def update(self, rid: str, message: str | None = None,
+               fire_at: str | None = None) -> dict | None:
+        """Reword a reminder or move it. Returns None if there is no such one.
+
+        A reminder that has already fired is left alone: editing it would
+        resurrect a notification the user has already seen and dealt with.
+        """
+        sets, vals = [], []
+        if message and message.strip():
+            sets.append("message=?"); vals.append(message.strip())
+        if fire_at:
+            sets.append("fire_at=?"); vals.append(fire_at)
+        if not sets:
+            row = self._c.execute("SELECT * FROM reminders WHERE id=?", (rid,)).fetchone()
+            return dict(row) if row else None
+        vals.append(rid)
+        cur = self._c.execute(
+            f"UPDATE reminders SET {', '.join(sets)} WHERE id=? AND fired=0", vals)
+        self._c.commit()
+        if not cur.rowcount:
+            return None
+        return dict(self._c.execute(
+            "SELECT * FROM reminders WHERE id=?", (rid,)).fetchone())
+
     def delete(self, rid: str) -> bool:
         cur = self._c.execute("DELETE FROM reminders WHERE id=?", (rid,))
         self._c.commit()

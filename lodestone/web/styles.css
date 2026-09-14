@@ -1024,6 +1024,49 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   .cn-row { flex-wrap: wrap; }
 }
 
+/* ── inbox page ────────────────────────────────────────────────────────── */
+.ib-sec { margin-bottom: 34px; }
+.ib-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; margin-bottom: 12px; }
+.ib-title { font-size: 16px; font-weight: 600; letter-spacing: -.01em; margin: 0 0 3px; }
+.ib-sub { font-size: 13px; color: var(--muted); margin: 0; max-width: 62ch; }
+.ib-head .tiny { flex: none; }
+
+/* Same card-of-rows shape as the model and connector pages, so the three
+   full-window pages read as one product rather than three. */
+#routineList, #reminderList, .approvals:not([hidden]) {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; overflow: hidden; }
+.ib-row { display: flex; align-items: center; gap: 13px; padding: 13px 16px; }
+.ib-row + .ib-row { border-top: 1px solid var(--line); }
+.ib-row.is-off .ib-name, .ib-row.is-off .ib-meta { opacity: .6; }
+/* A dot, not a word: the row already says in prose what it is, and the state
+   is the one thing worth seeing without reading. */
+.ib-state { width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--ok); box-shadow: 0 0 7px var(--ok); }
+.ib-state[data-on="0"] { background: var(--faint); box-shadow: none; }
+.ib-state[data-on="queued"] { background: var(--north); box-shadow: 0 0 7px var(--north); }
+.ib-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ib-name { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 600; }
+.ib-meta { font-size: 12.5px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ib-badge { font-family: var(--mono); font-size: 9px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); border: 1px solid var(--line2);
+  border-radius: 999px; padding: 1px 7px; font-weight: 500; }
+.ib-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+.ib-x { color: var(--faint); }
+.ib-x:hover { color: var(--danger); }
+.ib-empty { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 18px 16px; color: var(--muted); font-size: 13.5px; }
+/* The approvals list renders its own cards; when there is nothing pending it
+   is hidden and this line takes its place. */
+.approvals[hidden] + .ib-empty { display: block; }
+.approvals:not([hidden]) + .ib-empty { display: none; }
+@media (max-width: 700px) {
+  .ib-head { flex-direction: column; gap: 8px; }
+  .ib-row { flex-wrap: wrap; }
+}
+
 /* full-screen brain screen */
 .brainscreen { position: fixed; inset: 0; z-index: 70; background: #05070d; overflow: hidden; }
 .brainscreen[hidden] { display: none; }

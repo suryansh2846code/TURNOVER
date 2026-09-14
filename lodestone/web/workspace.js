@@ -103,21 +103,100 @@ async function loadTasks() {
   });
 }
 
+let REMINDERS = [];
+let _editingReminder = null;     // null = creating
+
 async function loadReminders() {
   try {
     const { reminders } = await api("/api/reminders");
-    $("#reminderWrap").hidden = reminders.length === 0;
-    $("#reminderList").innerHTML = reminders.map((r) => {
-      const when = new Date(r.fire_at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-      return `<div class="task"><div class="body"><div class="ttl">${esc(r.label || r.message)}</div>
-        <div class="due today">${esc(when)}${r.agent_id ? " · " + esc(r.agent_id) : ""}</div></div>
-        <span class="del" data-del-rem="${r.id}">✕</span></div>`;
-    }).join("");
+    REMINDERS = reminders;
+    $("#reminderList").innerHTML = reminders.length ? reminders.map((r) => {
+      const when = new Date(r.fire_at).toLocaleString(undefined,
+        { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      // Two different things share this list. A reminder is text with a time and
+      // can be reworded; a queued ACTION is an email or an event an agent is
+      // about to send, and a half-edited one is worse than one you cancel and
+      // ask for again — so it offers cancel, not edit.
+      const isAction = r.kind === "action";
+      const edit = isAction ? ""
+        : `<button class="tiny ghost" data-edit-rem="${r.id}">Edit</button>`;
+      return `<div class="ib-row">
+        <span class="ib-state" data-on="${isAction ? "queued" : "1"}" aria-hidden="true"></span>
+        <span class="ib-text">
+          <span class="ib-name">${esc(r.label || r.message)}${isAction ? `<span class="ib-badge">Queued action</span>` : ""}</span>
+          <span class="ib-meta">${esc(when)}${r.agent_id ? " · " + esc(r.agent_id) : ""}</span>
+        </span>
+        <span class="ib-actions">${edit}
+          <button class="tiny ghost ib-x" data-del-rem="${r.id}" aria-label="${isAction ? "Cancel" : "Delete"}">✕</button>
+        </span></div>`;
+    }).join("") : `<div class="ib-empty">Nothing coming up.</div>`;
     document.querySelectorAll("[data-del-rem]").forEach((b) => b.onclick = async () => {
       await api(`/api/reminders/${b.dataset.delRem}`, { method: "DELETE" });
-      toast("Reminder removed"); loadReminders();
+      toast("Removed"); loadReminders();
     });
+    document.querySelectorAll("[data-edit-rem]").forEach((b) => b.onclick = () =>
+      reminderForm(REMINDERS.find((x) => x.id === b.dataset.editRem)));
   } catch (_) {}
+}
+
+//: `<input type="datetime-local">` speaks local wall time with no zone, which
+//: is exactly what a person means by "9am" — so convert by hand rather than
+//: through toISOString(), which would shift it to UTC and move the reminder.
+function _toLocalInput(iso) {
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function reminderForm(existing) {
+  _editingReminder = existing || null;
+  const when = existing ? new Date(existing.fire_at) : new Date(Date.now() + 60 * 60 * 1000);
+  $("#remMessage").value = existing ? (existing.label || existing.message || "") : "";
+  $("#remWhen").value = _toLocalInput(when);
+  $("#remTitle").textContent = existing ? "Edit reminder" : "New reminder";
+  $("#remSave").textContent = existing ? "Save" : "Create";
+  $("#remHint").textContent = "";
+  $("#reminderModal").hidden = false;
+}
+{
+  const nb = $("#newReminderBtn"); if (nb) nb.onclick = () => reminderForm(null);
+  const cl = $("#remClose"); if (cl) cl.onclick = () => { $("#reminderModal").hidden = true; };
+  const bg = $("#reminderModal");
+  if (bg) bg.onclick = (e) => { if (e.target.id === "reminderModal") bg.hidden = true; };
+  const save = $("#remSave");
+  if (save) save.onclick = async () => {
+    const message = $("#remMessage").value.trim();
+    const local = $("#remWhen").value;
+    if (!message) { $("#remHint").textContent = "Say what it should remind you about."; return; }
+    if (!local) { $("#remHint").textContent = "Pick a date and time."; return; }
+    // The local value carries no zone. Stamping it with the browser's offset is
+    // what keeps "9am" meaning 9am here rather than 9am UTC.
+    const fire_at = new Date(local).toString() === "Invalid Date" ? null : _isoWithOffset(new Date(local));
+    if (!fire_at) { $("#remHint").textContent = "That date does not look right."; return; }
+    const editing = _editingReminder;
+    try {
+      if (editing) {
+        await api(`/api/reminders/${editing.id}`, { method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message, fire_at }) });
+      } else {
+        await api("/api/reminders", { method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message, fire_at }) });
+      }
+    } catch (e) { $("#remHint").textContent = "Could not save that reminder."; return; }
+    $("#reminderModal").hidden = true;
+    _editingReminder = null;
+    toast(editing ? "Reminder updated" : "Reminder set");
+    loadReminders();
+  };
+}
+function _isoWithOffset(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? "+" : "-";
+  const a = Math.abs(off);
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    + `T${p(d.getHours())}:${p(d.getMinutes())}:00${sign}${p(Math.floor(a / 60))}:${p(a % 60)}`;
 }
 
 async function addTask() {
@@ -184,38 +263,78 @@ $("#ingestBtn").onclick = async () => {
 async function loadRoutines() {
   try {
     const { routines } = await api("/api/routines");
+    ROUTINES = routines;
     $("#routineList").innerHTML = routines.length ? routines.map((r) => {
-      const trig = r.trigger === "new_email" ? "on new email" : `every ${r.interval_min}m`;
-      return `<div class="task"><div class="body">
-        <div class="ttl">${esc(r.name)} ${r.enabled ? "" : "<span class='t'>(off)</span>"}</div>
-        <div class="due">${trig} · ${esc(r.agent_id)}</div></div>
-        <span><span class="check" data-toggle-r="${r.id}" data-on="${r.enabled}" title="${r.enabled ? "disable" : "enable"}">${r.enabled ? "‖" : "▶"}</span>
-        <span class="del" data-del-r="${r.id}">✕</span></span></div>`;
-    }).join("") : `<div class="tasks-empty">No automations yet.</div>`;
+      const trig = r.trigger === "new_email" ? "When new email arrives"
+        : `Every ${r.interval_min} min`;
+      // An automation the user never watches run is one they cannot trust, so
+      // the row says when it last ran and whether that run went anywhere.
+      const ran = r.last_run
+        ? `Last run ${new Date(r.last_run).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+        : "Not run yet";
+      return `<div class="ib-row${r.enabled ? "" : " is-off"}">
+        <span class="ib-state" data-on="${r.enabled ? 1 : 0}" aria-hidden="true"></span>
+        <span class="ib-text">
+          <span class="ib-name">${esc(r.name)}${r.enabled ? "" : `<span class="ib-badge">Paused</span>`}</span>
+          <span class="ib-meta">${esc(trig)} · ${esc(r.agent_id)} · ${esc(ran)}</span>
+        </span>
+        <span class="ib-actions">
+          <button class="tiny ghost" data-toggle-r="${r.id}" data-on="${r.enabled}">${r.enabled ? "Pause" : "Resume"}</button>
+          <button class="tiny ghost" data-edit-r="${r.id}">Edit</button>
+          <button class="tiny ghost ib-x" data-del-r="${r.id}" aria-label="Delete ${esc(r.name)}">✕</button>
+        </span></div>`;
+    }).join("") : `<div class="ib-empty">No automations yet. One is an instruction plus when to run it.</div>`;
+    document.querySelectorAll("[data-edit-r]").forEach((b) => b.onclick = () =>
+      routineForm(ROUTINES.find((x) => x.id === b.dataset.editR)));
     document.querySelectorAll("[data-toggle-r]").forEach((b) => b.onclick = async () => {
       await api(`/api/routines/${b.dataset.toggleR}/toggle?on=${b.dataset.on !== "1"}`, { method: "POST" });
       loadRoutines();
     });
     document.querySelectorAll("[data-del-r]").forEach((b) => b.onclick = async () => {
+      const r = ROUTINES.find((x) => x.id === b.dataset.delR);
+      // Deleting an automation stops future work; it does not undo past work.
+      if (!confirm(`Delete "${r ? r.name : "this automation"}"? It stops running from now on — anything it already did stays.`)) return;
       await api(`/api/routines/${b.dataset.delR}`, { method: "DELETE" }); toast("Automation removed"); loadRoutines();
     });
   } catch (_) {}
 }
-$("#newRoutineBtn").onclick = async () => {
+let ROUTINES = [];
+let _editingRoutine = null;      // null = creating
+
+// One form for both, because "new" and "edit" differ only in what it opens
+// holding and where it saves. Two forms drift, and the one you edit less is
+// the one that ends up missing a field.
+async function routineForm(existing) {
+  _editingRoutine = existing || null;
   const { agents } = await api("/api/agents");
-  $("#rmAgent").innerHTML = agents.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join("");
-  $("#rmName").value = ""; $("#rmInstruction").value = ""; $("#rmInterval").value = "60";
+  $("#rmAgent").innerHTML = agents.map((a) =>
+    `<option value="${esc(a.id)}"${existing && a.id === existing.agent_id ? " selected" : ""}>${esc(a.name)}</option>`).join("");
+  $("#rmName").value = existing ? existing.name : "";
+  $("#rmInstruction").value = existing ? existing.instruction : "";
+  $("#rmInterval").value = existing ? String(existing.interval_min) : "60";
+  $("#rmTrigger").value = existing ? existing.trigger : "new_email";
+  $("#rmIntervalWrap").hidden = $("#rmTrigger").value !== "schedule";
+  const save = $("#rmCreate"); if (save) save.textContent = existing ? "Save" : "Create";
+  const title = $("#rmTitle"); if (title) title.textContent = existing ? "Edit automation" : "New automation";
   $("#routineModal").hidden = false;
-};
+}
+$("#newRoutineBtn").onclick = () => routineForm(null);
 $("#rmTrigger").onchange = () => { $("#rmIntervalWrap").hidden = $("#rmTrigger").value !== "schedule"; };
 $("#rmClose").onclick = () => $("#routineModal").hidden = true;
 $("#rmCreate").onclick = async () => {
   const name = $("#rmName").value.trim(), instruction = $("#rmInstruction").value.trim();
   if (!name || !instruction) { toast("Name & instruction required"); return; }
-  await api("/api/routines", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, agent_id: $("#rmAgent").value, trigger: $("#rmTrigger").value,
-      instruction, interval_min: parseInt($("#rmInterval").value) || 60 }) });
-  $("#routineModal").hidden = true; toast("Automation created"); loadRoutines();
+  const body = JSON.stringify({ name, agent_id: $("#rmAgent").value, trigger: $("#rmTrigger").value,
+    instruction, interval_min: parseInt($("#rmInterval").value) || 60 });
+  const editing = _editingRoutine;
+  try {
+    if (editing) await api(`/api/routines/${editing.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body });
+    else await api("/api/routines", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+  } catch (e) { toast("Could not save that automation"); return; }
+  $("#routineModal").hidden = true;
+  _editingRoutine = null;
+  toast(editing ? "Automation updated" : "Automation created");
+  loadRoutines();
 };
 
 // ── create custom agent ─────────────────────────────────────────────────
