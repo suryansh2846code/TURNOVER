@@ -16,7 +16,7 @@ from .mcp_tools import SENTINEL as MCP_TOOLS
 #: nothing from it. Connector writes are never included — they go through
 #: propose → confirm (`permissions.NEVER_UNATTENDED`).
 _BASE_TOOLS = ["search_brain", "remember", "list_entities", "web_search",
-               "ask_agent", "update_plan", MCP_TOOLS]
+               "ask_agent", "ask_agents", "update_plan", MCP_TOOLS]
 
 PRESETS: dict[str, Agent] = {
     "inbox": Agent(

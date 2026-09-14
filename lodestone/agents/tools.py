@@ -14,6 +14,11 @@ from . import mcp_tools
 from .effort import get_effort
 from .results import ToolResult
 
+#: Agents consulted at once by `ask_agents`. Each one is a whole turn with its
+#: own model calls, so this is deliberately tighter than the tool width: the
+#: point is one wait instead of several, not a fleet.
+MAX_PARALLEL_AGENTS = 3
+
 
 # ── brain tools (shared by every agent) ──────────────────────────────────
 def _search_brain(query: str, limit: int = 6) -> str:
@@ -144,17 +149,18 @@ def _update_plan(steps: list, done_through: int = 0) -> str:
     return update(list(steps or []), done_through=int(done_through or 0))
 
 
-def _ask_agent(agent_id: str, question: str) -> str:
-    """Put a question to another agent and return its answer.
+def _consult(target: str, question: str) -> ToolResult:
+    """One agent's answer to one question, or why it could not be asked.
 
     The sub-agent runs a full turn — its own recall, its own tools — on a budget
-    derived from the caller's. Guards live in `delegation.py`, not in this
-    prompt, because a model cannot be relied on to decline.
+    derived from the caller's, and **isolated**: `persist=False`, so the
+    question and answer never appear in that agent's own conversation. Guards
+    live in `delegation.py`, not in a prompt, because a model cannot be relied
+    on to decline.
     """
     from . import delegation
     from .runtime import run_turn
 
-    target = (agent_id or "").strip()
     why_not = delegation.refusal(target)
     if why_not:
         return ToolResult.failed(why_not)
@@ -162,16 +168,65 @@ def _ask_agent(agent_id: str, question: str) -> str:
     chain = delegation.current_chain()
     budget = (chain.effort or get_effort()).child()
     # The sub-agent stops when the parent does — same event, not a copy.
-    result = run_turn(target, question, effort=budget, cancel=chain.cancel)
+    result = run_turn(target, question, effort=budget, cancel=chain.cancel,
+                      persist=False)
     used = ", ".join(sorted({s.name for s in result.trace if s.kind == "tool_call"}))
     header = f"[{target} answered"
     header += f", using: {used}]" if used else "]"
-    return f"{header}\n{result.reply}"
+    return ToolResult(f"{header}\n{result.reply}")
+
+
+def _ask_agent(agent_id: str, question: str) -> ToolResult:
+    """Put a question to another agent and return its answer."""
+    return _consult((agent_id or "").strip(), question)
+
+
+def _ask_agents(questions: list) -> ToolResult:
+    """Ask several agents at once and return all their answers.
+
+    The runner already executes a round's calls in parallel with the context
+    copied per call; this gives the model the shape for it, so "ask Research and
+    Inbox, then reconcile" costs one wait rather than two. Guards are unchanged
+    and applied per target — the chain and its cycle check live in a ContextVar,
+    so each branch must run in its own copy or every one of them would start at
+    depth zero.
+    """
+    import contextvars
+    from concurrent.futures import ThreadPoolExecutor
+
+    asked: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for item in questions or []:
+        if isinstance(item, str):           # a bare agent id is not a question
+            continue
+        target = str((item or {}).get("agent_id") or "").strip()
+        question = str((item or {}).get("question") or "").strip()
+        if not target or not question or target in seen:
+            continue
+        seen.add(target)
+        asked.append((target, question))
+
+    if not asked:
+        return ToolResult.failed(
+            "Give a list of {agent_id, question} pairs — one focused question each.")
+    if len(asked) == 1:
+        return _consult(*asked[0])
+
+    width = min(len(asked), MAX_PARALLEL_AGENTS)
+    answers: list[str] = []
+    with ThreadPoolExecutor(max_workers=width,
+                            thread_name_prefix="lodestone-agent") as pool:
+        futures = [pool.submit(contextvars.copy_context().run, _consult, t, q)
+                   for t, q in asked]
+        answers = [f.result() for f in futures]
+    return ToolResult("\n\n".join(answers),
+                      ok=any(getattr(a, "ok", True) for a in answers))
 
 
 TOOL_IMPLS = {
     "update_plan": _update_plan,
     "ask_agent": _ask_agent,
+    "ask_agents": _ask_agents,
     "search_brain": _search_brain,
     "remember": _remember,
     "list_entities": _list_entities,
@@ -224,6 +279,35 @@ TOOL_DEFS: dict[str, Tool] = {
                              "description": "A single, self-contained question."},
             },
             "required": ["agent_id", "question"],
+        },
+    ),
+    "ask_agents": Tool(
+        name="ask_agents",
+        description=(
+            "Ask several Lodestone agents a question each, at the same time, "
+            "and get all their answers back together. Use this instead of "
+            "asking one at a time when the parts are independent — the answers "
+            "arrive in one wait rather than several. You stay responsible for "
+            "reconciling them into the final reply to the user."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "questions": {
+                    "type": "array",
+                    "description": "One entry per agent. Ask each a single, "
+                                   "self-contained question.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "agent_id": {"type": "string"},
+                            "question": {"type": "string"},
+                        },
+                        "required": ["agent_id", "question"],
+                    },
+                },
+            },
+            "required": ["questions"],
         },
     ),
     "search_brain": Tool(
@@ -371,7 +455,7 @@ def build_tools(names: list[str], *, self_id: str | None = None,
         description = t.description
         if n == "update_plan" and effort is not None and not effort.allow_planning:
             continue                     # planning costs a round; Low skips it
-        if n == "ask_agent":
+        if n in ("ask_agent", "ask_agents"):
             others = roster(exclude=self_id)
             if not others:
                 continue                 # nobody to ask; do not offer the tool

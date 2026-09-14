@@ -18,6 +18,9 @@ permissions.
   it.** The date note goes in with `grounding.prefixed` and comes out with
   `grounding.strip_arguments` — a model copies its own input, and a date inside
   `search_brain`'s query is read by recall as a filter.
+- **An agent's conversation is its own.** A delegated turn runs `persist=False`
+  — no history in, nothing written out, no learning — because the "user" of that
+  turn is another agent. The brain stays shared; the chat does not.
 - A routine pre-authorises the routine, not the stranger who wrote the email it
   read. Outbound actions need a recipient on the explicit allow-list; everything
   else queues for one tap. Interactive chat is deliberately not gated.

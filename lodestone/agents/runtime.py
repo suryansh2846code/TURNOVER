@@ -266,7 +266,17 @@ def run_turn(agent_id: str, user_text: str, *,
              effort: str | Effort | None = None,
              images: list | None = None,
              cancel: threading.Event | None = None,
+             persist: bool = True,
              on_event: Callable[[dict], None] | None = None) -> TurnResult:
+    """Run one turn for `agent_id` and return what it produced.
+
+    `persist=False` makes the turn isolated: it reads the shared brain, but it
+    neither reads nor writes the agent's own conversation. That is what a
+    delegated question needs. Without it, asking Inbox something that it passes
+    to Research put a message into the user's Research chat that they never
+    typed — and then folded it into that agent's running summary, so one
+    delegated question permanently distorted a conversation happening elsewhere.
+    """
     agent = get_agent(agent_id)
     profile = effort if isinstance(effort, Effort) else get_effort(effort)
     # Streaming is a callback rather than a second implementation of the loop.
@@ -378,12 +388,16 @@ def run_turn(agent_id: str, user_text: str, *,
                 content="The user currently has NO open tasks. Do not claim otherwise.",
             ))
 
-    messages += build_history(mem, agent, profile, provider)
+    # An isolated turn is one self-contained question, not a conversation: no
+    # history in, and (below) nothing written out.
+    if persist:
+        messages += build_history(mem, agent, profile, provider)
     # model sees the date adjacent to the question; stored memory stays clean
     messages.append(Message(
         role="user", content=grounding.prefixed(date_line, user_text),
         images=images))
-    mem.append(agent.id, "user", user_text)
+    if persist:
+        mem.append(agent.id, "user", user_text)
     runner = ToolRunner(effort=profile, cancel=cancel)
     budget = max(MIN_STEPS, profile.max_steps)
     chain_token = delegation.enter(agent.id, profile, cancel)
@@ -530,8 +544,10 @@ def run_turn(agent_id: str, user_text: str, *,
     reply = reply or "(the model returned nothing)"
     steps_used = len([s for s in trace if s.kind == "tool_call"])
 
-    mem.append(agent.id, "assistant", reply,
-               tool_json=json.dumps([s.name for s in trace if s.kind == "tool_call"]))
+    if persist:
+        mem.append(agent.id, "assistant", reply,
+                   tool_json=json.dumps([s.name for s in trace
+                                         if s.kind == "tool_call"]))
 
     if was_stopped:
         # Both of the calls below are model calls, and a stopped turn has no
@@ -543,6 +559,18 @@ def run_turn(agent_id: str, user_text: str, *,
             provider=provider.name, model=provider.model,
             runtime_identity=identity, effort=profile.name,
             steps_used=steps_used, plan=plan_snapshot, stopped=True,
+            tokens_in=spent[0], tokens_out=spent[1],
+        )
+
+    if not persist:
+        # The "user" of an isolated turn is another agent, so nothing it said is
+        # a fact the user disclosed. Learning from it would teach the brain the
+        # app's own words.
+        return TurnResult(
+            agent_id=agent.id, reply=reply, trace=trace,
+            provider=provider.name, model=provider.model,
+            runtime_identity=identity, effort=profile.name,
+            steps_used=steps_used, plan=plan_snapshot,
             tokens_in=spent[0], tokens_out=spent[1],
         )
 
