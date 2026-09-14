@@ -32,9 +32,19 @@ def test_every_catalog_entry_is_version_pinned():
                          ids=[e.id for e in mcp_catalog.CATALOG])
 def test_no_entry_pipes_a_script_into_a_shell(entry):
     """The rule that made the vendor-CLI installs auditable: fetch the artifact,
-    never `curl … | bash`."""
+    never `curl … | bash`.
+
+    A remote entry satisfies this by construction — it launches nothing at all,
+    which is the strongest version of the same guarantee and the reason most of
+    the catalog moved to that shape.
+    """
     blob = " ".join((entry.command, *entry.args)).lower()
     assert "|" not in blob and "curl" not in blob and "sh -c" not in blob
+
+    if entry.is_remote:
+        assert not entry.command and not entry.args, (
+            f"{entry.id} is remote and should run nothing locally")
+        return
     assert entry.command in ("npx", "uvx", "node", "python", sys.executable), (
         f"{entry.id} launches via an unexpected program: {entry.command}")
 
@@ -61,10 +71,20 @@ def test_adding_an_unknown_entry_is_refused():
 
 
 def test_a_missing_credential_is_named_before_anything_runs():
+    """The field is named the way the user saw it on the form.
+
+    This used to assert the variable name (`GITHUB_PERSONAL_ACCESS_TOKEN`) was
+    in the sentence. A variable name is an internal, and `/CLAUDE.md` is
+    explicit that one must never reach user-facing text — so the message names
+    the label that sat above the box they left empty. What is being frozen here
+    is unchanged: the gap is named, and nothing is saved.
+    """
     spec, reason = mcp_catalog.add_from_catalog("github", env={})
 
     assert spec is None
-    assert "GITHUB_PERSONAL_ACCESS_TOKEN" in reason
+    label = mcp_catalog.BY_ID["github"].needs_env[0].label
+    assert label.lower() in reason.lower()
+    assert "GITHUB_TOKEN" not in reason, "a variable name is not for a person"
     assert list_servers() == []
 
 

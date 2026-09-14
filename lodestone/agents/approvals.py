@@ -65,10 +65,49 @@ def describe(action_type: str, params: dict) -> str:
     if action_type == "mcp_action":
         # The tool name is the vendor's, so it is shown as a name rather than
         # explained — inventing a description of somebody else's verb would be
-        # guessing at what the user is about to approve.
-        where = params.get("connector") or params.get("server_id") or "a connector"
-        return f"Run “{params.get('tool') or 'an action'}” on {where}"
+        # guessing at what the user is about to approve. What *can* be shown
+        # honestly is the connector's real name and the arguments as proposed,
+        # because "Run write_file on filesystem" is not enough to judge: which
+        # file, and with what in it, is the entire decision.
+        where = params.get("connector") or _connector_label(params) or "a connector"
+        line = f"Run “{params.get('tool') or 'an action'}” on {where}"
+        detail = _argument_summary(params.get("arguments"))
+        return f"{line} — {detail}" if detail else line
     return action_type.replace("_", " ")
+
+
+def _connector_label(params: dict) -> str:
+    """The connector's own name, so a card never shows an internal id."""
+    server_id = (params or {}).get("server_id") or ""
+    if not server_id:
+        return ""
+    with suppressed("naming the connector an action belongs to"):
+        from ..connectors.mcp_source import get_server
+
+        spec = get_server(server_id)
+        if spec is not None:
+            return spec.name
+    return server_id
+
+
+def _argument_summary(arguments: object, limit: int = 90) -> str:
+    """The proposed arguments, short enough to read on a card.
+
+    Values are truncated rather than dropped: a user approving a write needs to
+    see *what* is being written, and a card showing only field names is asking
+    them to trust the agent's summary of its own request.
+    """
+    if not isinstance(arguments, dict) or not arguments:
+        return ""
+    parts: list[str] = []
+    for key, value in list(arguments.items())[:4]:
+        text = value if isinstance(value, str) else json.dumps(value, default=str)
+        text = " ".join(str(text).split())
+        if len(text) > 40:
+            text = text[:39] + "…"
+        parts.append(f"{key}: {text}")
+    joined = ", ".join(parts)
+    return joined[:limit - 1] + "…" if len(joined) > limit else joined
 
 
 def queue(action_type: str, params: dict, *, reason: str = "",

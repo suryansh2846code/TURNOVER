@@ -64,6 +64,12 @@ def test_section_2_entire_brain_loop(gate_env):
     turn1 = run_turn("personal", msg1)
     assert turn1.reply != ""
 
+    # Learning from a turn is deliberately off the critical path — the reply
+    # arrives, then the brain catches up. The loop under test is unchanged; it
+    # just no longer blocks the answer, so wait before reading the brain.
+    from lodestone.agents import background
+    assert background.wait_for_idle(timeout=30), "background learning did not finish"
+
     # Step 2: Auto-learn ingests into memory and graph
     mems = b.store.list()
     assert len(mems) >= 1

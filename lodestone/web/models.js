@@ -814,7 +814,7 @@ async function loadProviders() {
 function enrichModel() {
   const p = (localStorage.getItem("lodestone_enrich_provider") || "").trim();
   if (p) return { provider: p, model: (localStorage.getItem("lodestone_enrich_model") || "").trim() || null };
-  return { provider: $("#provider").value, model: $("#modelName").value.trim() || null };
+  return { provider: chosenProvider(), model: $("#modelName").value.trim() || null };
 }
 
 async function loadEnrichCap() {
@@ -860,6 +860,16 @@ function showSettingsPanel(name) {
   });
   const main = $(".ms-main"); if (main) main.scrollTop = 0;
 }
+async function openInboxScreen() {
+  const m = $("#modelScreen"); if (!m) return;
+  m.hidden = false;
+  showSettingsPanel("inbox");
+  // Each of the three sections loads itself; one failing must not blank the
+  // other two, which is what a single await chain would do.
+  try { await loadApprovals(); } catch (_) {}
+  try { await loadRoutines(); } catch (_) {}
+  try { await loadReminders(); } catch (_) {}
+}
 async function openConnectorsScreen() {
   const m = $("#modelScreen"); if (!m) return;
   m.hidden = false;
@@ -890,6 +900,7 @@ document.querySelectorAll(".ms-nav-item").forEach((b) => {
     const to = b.dataset.msnav;
     if (to === "model") return openModelScreen();
     if (to === "connectors") return openConnectorsScreen();
+    if (to === "inbox") return openInboxScreen();
     closeModelScreen();
     if (to === "brain") openBrainScreen();
   };

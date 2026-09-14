@@ -78,6 +78,37 @@ class RoutineStore:
         return [dict(r) for r in self._c.execute(
             "SELECT * FROM routines WHERE enabled=1").fetchall()]
 
+    #: What an edit is allowed to touch. `enabled` has its own toggle and the
+    #: run history is the routine's record of itself — neither is the user's to
+    #: retype, and allowing them here would let a typo erase what it did.
+    EDITABLE = ("name", "agent_id", "trigger", "interval_min", "instruction")
+
+    def update(self, rid, **fields) -> dict | None:
+        """Change a routine in place. Unknown or absent fields are ignored.
+
+        Returns the updated routine, or None if there was none to update — the
+        caller turns that into a 404 rather than reporting a silent success.
+        """
+        sets, vals = [], []
+        for k in self.EDITABLE:
+            if fields.get(k) is None:
+                continue
+            v = fields[k]
+            if k == "interval_min":
+                v = max(1, int(v))        # a zero-minute routine is a busy loop
+            elif isinstance(v, str):
+                v = v.strip()
+                if not v:
+                    continue              # blanking a name is not an edit
+            sets.append(f"{k}=?")
+            vals.append(v)
+        if not sets:
+            return self.get(rid)
+        vals.append(rid)
+        cur = self._c.execute(f"UPDATE routines SET {', '.join(sets)} WHERE id=?", vals)
+        self._c.commit()
+        return self.get(rid) if cur.rowcount else None
+
     def toggle(self, rid, on: bool) -> None:
         self._c.execute("UPDATE routines SET enabled=? WHERE id=?",
                         (1 if on else 0, rid)); self._c.commit()

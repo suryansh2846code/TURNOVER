@@ -19,6 +19,7 @@
       <button id="newAgentBtn" hidden></button>
 
       <div class="side-nav">
+        <button class="snav" data-nav="inbox"><span class="snav-ic"></span><span class="snav-tx">Inbox</span></button>
         <button class="snav" data-nav="brain"><span class="snav-ic"></span><span class="snav-tx">Brain</span></button>
         <button class="snav" data-nav="library"><span class="snav-ic"></span><span class="snav-tx">Agent Library</span></button>
         <button class="snav" data-nav="sources"><span class="snav-ic"></span><span class="snav-tx">Connectors</span></button>
@@ -169,12 +170,7 @@
             <button id="taskAdd" class="tiny">Add</button>
           </div>
           <div id="taskList" class="tasks"></div>
-          <div id="reminderWrap" hidden>
-            <div class="ctx-label">Reminders</div>
-            <div id="reminderList" class="tasks"></div>
-          </div>
-          <div class="ctx-label">Automations <button id="newRoutineBtn" class="tiny ghost">+ New</button></div>
-          <div id="routineList" class="tasks"></div>
+          <p class="tool-intro" style="margin-top:12px">Automations and reminders live in <b>Inbox</b>.</p>
         </div>
 
         <!-- Tools / skills -->
@@ -185,6 +181,24 @@
 
       </div>
     </aside>
+  </div>
+
+  <!-- ── Modal: reminder ─────────────────────────────────────────────── -->
+  <div id="reminderModal" class="modal-bg" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="remTitle">
+      <div class="modal-head"><b id="remTitle">New reminder</b>
+        <button id="remClose" class="ghost tiny" aria-label="Close">✕</button></div>
+      <div class="modal-body" style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+        <label class="ctx-label" style="margin:0">What should it say?</label>
+        <input id="remMessage" class="ctx-input" autocomplete="off" placeholder="Call Dev about the launch" />
+        <label class="ctx-label" style="margin:0">When?</label>
+        <input id="remWhen" class="ctx-input" type="datetime-local" />
+      </div>
+      <div class="modal-foot">
+        <span id="remHint" class="model-hint" style="margin:0"></span>
+        <button id="remSave" class="tiny">Create</button>
+      </div>
+    </div>
   </div>
 
   <!-- ── Modal: Agent Model Binding Popover/Dialog ──────────────────────── -->
@@ -308,15 +322,58 @@
          a different kind of screen (a canvas) and is linked out to. -->
     <aside class="ms-nav">
       <button id="msClose" class="ms-back"><span class="ms-back-ic" aria-hidden="true">←</span>Back</button>
+      <div class="ms-nav-label">Workspace</div>
+      <nav class="ms-nav-list">
+        <button class="ms-nav-item" data-msnav="inbox"><span class="ms-nav-ic" aria-hidden="true"></span><span>Inbox</span></button>
+        <button class="ms-nav-item" data-msnav="brain"><span class="ms-nav-ic" aria-hidden="true"></span><span>Brain</span></button>
+      </nav>
       <div class="ms-nav-label">Settings</div>
       <nav class="ms-nav-list">
-        <button class="ms-nav-item" data-msnav="brain"><span class="ms-nav-ic" aria-hidden="true"></span><span>Brain</span></button>
         <button class="ms-nav-item" data-msnav="connectors"><span class="ms-nav-ic" aria-hidden="true"></span><span>Connectors</span></button>
         <button class="ms-nav-item is-active" data-msnav="model" aria-current="page"><span class="ms-nav-ic" aria-hidden="true"></span><span>Model</span></button>
       </nav>
     </aside>
 
     <div class="ms-main">
+
+    <!-- ── panel: inbox ────────────────────────────────────────────────
+         What the agents are doing on their own: work that runs unattended,
+         things due, and anything an agent stopped to ask about. The ids are
+         the ones the existing loaders already write into — the markup moved,
+         the renderers did not have to. -->
+    <div class="ms-body sp" data-sp="inbox" hidden>
+      <h1 class="ms-h1">Inbox</h1>
+      <p class="ms-sub" style="margin-bottom:26px">What your agents are running on their own, what is coming up, and anything waiting on you.</p>
+
+      <section class="ib-sec">
+        <div class="ib-head">
+          <div><h2 class="ib-title">Waiting on you</h2>
+            <p class="ib-sub">An agent stopped here and asked before doing something outward-facing.</p></div>
+        </div>
+        <div id="approvals" class="approvals" hidden></div>
+        <div id="ibApprovalsEmpty" class="ib-empty">Nothing is waiting on you.</div>
+      </section>
+
+      <section class="ib-sec">
+        <div class="ib-head">
+          <div><h2 class="ib-title">Automations</h2>
+            <p class="ib-sub">Work that runs without you asking. Each one runs as an agent, with that agent's tools.</p></div>
+          <button id="newRoutineBtn" class="tiny">+ New automation</button>
+        </div>
+        <div id="routineList" class="tasks"></div>
+      </section>
+
+      <section class="ib-sec">
+        <div class="ib-head">
+          <div><h2 class="ib-title">Upcoming</h2>
+            <p class="ib-sub">Reminders you set, and actions an agent has queued but not sent yet.</p></div>
+          <button id="newReminderBtn" class="tiny">+ New reminder</button>
+        </div>
+        <div id="reminderWrap">
+          <div id="reminderList" class="tasks"></div>
+        </div>
+      </section>
+    </div>
 
     <!-- ── panel: connectors ───────────────────────────────────────────── -->
     <div class="ms-body sp" data-sp="connectors" hidden>
@@ -332,7 +389,6 @@
       </div>
       <div class="cn-filters" id="cnFilters" role="tablist" aria-label="Filter sources"></div>
 
-      <div id="approvals" class="approvals" hidden></div>
       <div id="syncStatus" class="sync-status"></div>
       <div id="googleCard" class="google-card" hidden></div>
       <div id="connectors" class="connectors"></div>

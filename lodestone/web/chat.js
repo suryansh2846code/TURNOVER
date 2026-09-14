@@ -110,6 +110,22 @@ function parseActions(text) {
     else if (a.type === "create_event") a.params.description = inner.trim();
     else if (a.type === "set_reminder") a.params.message = inner.trim();
     else if (a.type === "create_routine") a.params.instruction = inner.trim();
+    else if (a.type === "mcp_action") {
+      // A connector tool takes an object, and attributes are flat strings — so
+      // the arguments are the body, as JSON. Mirrors `actions.parse_actions`.
+      a.params.server_id = a.params.server || a.params.server_id || "";
+      delete a.params.server;
+      try {
+        let body = inner.trim();
+        if (body.startsWith("```")) body = body.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
+        a.params.arguments = body ? JSON.parse(body) : {};
+      } catch {
+        // Malformed JSON is dropped, never guessed at — the same rule the
+        // server applies, so the card and the execution agree about what
+        // exists. Returning here leaves the tag stripped and no card shown.
+        return "";
+      }
+    }
     if (a.type) actions.push(a);
     return "";   // strip the tag from the visible text
   });
@@ -139,6 +155,19 @@ function actionCard(a) {
     rows = `<div class="ac-row"><b>Name</b> ${esc(p.name || "Automation")}</div>
        <div class="ac-row"><b>Runs</b> ${trig} · ${esc(p.agent || p.agent_id || "personal")}</div>
        <div class="ac-body">${esc(p.instruction || "")}</div>`;
+  } else if (a.type === "mcp_action") {
+    // Previously this fell through to the calendar branch, so a connector
+    // action would have been presented as "Create calendar event" — a card
+    // describing something other than what the button runs.
+    title = `Run this in ${esc(p.connector || p.server_id || "a connector")}`;
+    verb = "run";
+    const args = p.arguments && typeof p.arguments === "object" ? p.arguments : {};
+    const shown = Object.keys(args).map((k) => {
+      const v = typeof args[k] === "string" ? args[k] : JSON.stringify(args[k]);
+      return `<div class="ac-row"><b>${esc(k)}</b> ${esc(String(v).slice(0, 400))}</div>`;
+    }).join("");
+    rows = `<div class="ac-row"><b>Action</b> <code>${esc(p.tool || "")}</code></div>`
+      + (shown || `<div class="ac-row"><b>Arguments</b> none</div>`);
   } else {
     title = "Create calendar event"; verb = "create";
     rows = `<div class="ac-row"><b>Title</b> ${esc(p.title || "")}</div>
@@ -320,11 +349,30 @@ function addMsg(role, text, images) {
 }
 function addTrace(steps) {
   if (!steps.length) return;
-  const el = document.createElement("div"); el.className = "trace";
-  el.innerHTML = steps.filter((s) => s.kind === "tool_call").map((s) => {
+  const calls = steps.filter((s) => s.kind === "tool_call");
+  if (!calls.length) return;
+  // Folded away by default. What an agent actually ran is worth being able to
+  // check — it is the difference between trusting the answer and taking it on
+  // faith — but it is not the answer, and a screenful of raw tool arguments
+  // between two replies buries the thing the user came for.
+  //
+  // <details> rather than a button and a class: it is open/closed state the
+  // browser already owns, it is keyboard-operable for free, and it cannot get
+  // out of step with a re-render the way a toggle flag can.
+  const el = document.createElement("details");
+  el.className = "trace";
+  // Name the tools in the summary, so the fold still says what happened.
+  const names = [...new Set(calls.map((c) => c.name))];
+  const shown = names.slice(0, 3).join(", ") + (names.length > 3 ? `, +${names.length - 3} more` : "");
+  el.innerHTML = `<summary class="trace-sum">
+      <span class="trace-chev" aria-hidden="true"></span>
+      <span>Show thinking</span>
+      <span class="trace-n">${calls.length} step${calls.length === 1 ? "" : "s"} · ${esc(shown)}</span>
+    </summary>
+    <div class="trace-body">` + calls.map((s) => {
     const res = (steps.find((r) => r.kind === "tool_result" && r.name === s.name) || {}).result || "";
-    return `<div class="step"><span class="tname">${s.name}</span>(${esc(JSON.stringify(s.arguments))})<span class="res">${esc(res.slice(0, 160))}</span></div>`;
-  }).join("");
+    return `<div class="step"><span class="tname">${esc(s.name)}</span>(${esc(JSON.stringify(s.arguments))})<span class="res">${esc(res.slice(0, 160))}</span></div>`;
+  }).join("") + `</div>`;
   $("#messages").appendChild(el); $("#messages").scrollTop = 1e9;
 }
 
@@ -349,8 +397,17 @@ async function stopTurn() {
 function setBusy(on) {
   busy = on;
   $("#input").disabled = on;
-  $("#send").textContent = on ? "Stop" : "Send";
-  $("#send").classList.toggle("stopbtn", on);
+  const b = $("#send");
+  // Swap the ICON. This wrote textContent, which did two things at once: it
+  // crammed the word "Stop" into a 34px circle, and — because textContent
+  // replaces the element's children — it destroyed the arrow SVG that
+  // applyIcons had put there, so the send button was the word "Send" for the
+  // rest of the session. The label the assistive tech reads is set alongside,
+  // since a glyph on its own says nothing to a screen reader.
+  b.innerHTML = IC[on ? "stop" : "arrowUp"] || "";
+  b.title = on ? "Stop" : "Send";
+  b.setAttribute("aria-label", on ? "Stop generating" : "Send message");
+  b.classList.toggle("stopbtn", on);
   if (!on) { $("#input").focus(); autoGrow(); }
 }
 
@@ -453,9 +510,29 @@ async function send(text) {
 // naming each tool as it runs. Falls back to the plain endpoint if streaming is
 // unavailable for any reason — a user whose stream broke wants an answer, not a
 // second kind of error.
+// Which provider this turn runs on.
+//
+// This read `$("#provider").value`, a hidden <select> that is EMPTY until
+// loadProviders() fills it — and loadProviders fetches the model catalog,
+// measured cold at ~10s. For those ten seconds the composer showed the
+// provider read from localStorage while the request carried nothing, the
+// server fell back to settings.model_provider (`mock` on a fresh install),
+// and the offline model answered in a real model's clothes. Two messages in a
+// row came back as a truncated echo of the recall block.
+//
+// localStorage is the store the picker actually writes to (setActiveModel),
+// and it is readable synchronously on the first paint. The select is a slow
+// copy of it, kept only as a fallback for anything that still writes there.
+function chosenProvider() {
+  const saved = (localStorage.getItem("lodestone_provider") || "").trim();
+  if (saved) return saved;
+  const sel = $("#provider");
+  return (sel && sel.value) || undefined;
+}
+
 async function streamTurn(text, think) {
   const body = JSON.stringify({
-    message: text, provider: $("#provider").value || undefined,
+    message: text, provider: chosenProvider(),
     model: localStorage.getItem("lodestone_model") || undefined,
     effort: localStorage.getItem("lodestone_effort") || undefined,
     turn_id: turnId || undefined,

@@ -36,7 +36,8 @@ class Agent:
         from .prompt import build
 
         return build(name=self.name, role=self.role,
-                     system_prompt=self.system_prompt, actions=self.actions)
+                     system_prompt=self.system_prompt, actions=self.actions,
+                     tools=self.tools)
 
 
 # ── per-agent conversation memory (persistent) ────────────────────────────

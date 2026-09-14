@@ -112,10 +112,17 @@ def test_the_acronym_never_reaches_the_user():
 
 # ── the permission step ────────────────────────────────────────────────────
 
+# The setup form's fields carry a `label` and a `kind` as well as a name: the
+# name is an environment variable and a person should never have to read one,
+# and `kind` is what decides whether the field is masked. Both arrived with the
+# connector rework — see `docs/development/mcp-contract.md`.
 PERMS = {
     "id": "slack", "name": "Slack", "available": True, "reason": "",
-    "first_party": True, "notes": "", "can_sync": True,
-    "needs_env": [{"name": "SLACK_BOT_TOKEN", "help": "A Slack bot token."}],
+    "first_party": True, "notes": "", "can_sync": True, "needs_auth": False,
+    "remote": False, "auth": "token",
+    "needs_env": [{"name": "SLACK_BOT_TOKEN", "label": "Bot token",
+                   "help": "A Slack bot token.", "kind": "secret"}],
+    "needs_args": [],
     "reads": ["list_channels", "read_messages"],
     "writes": ["post_message"],
 }
@@ -260,3 +267,72 @@ def test_a_summary_is_escaped():
 
     assert "<img" not in out["approvalsHtml"]
     assert "&lt;img" in out["approvalsHtml"]
+
+
+# ── connectors the vendor signs you in to ──────────────────────────────────
+# The remote half of the rework. There is nothing to list before consent
+# exists, so the screen has to say what happens next instead of showing an
+# empty tool list that reads as "this connector does nothing".
+
+OAUTH_PERMS = {
+    "id": "linear", "name": "Linear", "available": True, "reason": "",
+    "first_party": True, "notes": "Issues, projects and cycles.",
+    "can_sync": False, "needs_auth": True, "remote": True, "auth": "oauth",
+    "needs_env": [], "needs_args": [], "reads": [], "writes": [],
+}
+
+
+def test_a_vendor_signin_says_where_you_are_going():
+    out = run({"mode": "permissions", "entry": "linear",
+               "api": {"/api/connectors/catalog/linear/permissions": OAUTH_PERMS}})
+
+    assert out["ok"], out["error"]
+    assert "Linear" in out["permHtml"]
+    assert "sign in" in out["permHtml"].lower()
+    # The button says what it does. "Add connector" would be a lie: the next
+    # thing that happens is a browser, not a connector.
+    assert "Connect" in out["permHtml"]
+
+
+def test_a_vendor_signin_promises_writes_will_ask_first():
+    """The tools are unknown before consent, so the promise has to be made
+    without them — a connector that can change things must say so somewhere."""
+    out = run({"mode": "permissions", "entry": "linear",
+               "api": {"/api/connectors/catalog/linear/permissions": OAUTH_PERMS}})
+
+    assert "asks you first" in out["permHtml"]
+
+
+def test_a_vendor_signin_never_claims_to_know_the_tools_yet():
+    out = run({"mode": "permissions", "entry": "linear",
+               "api": {"/api/connectors/catalog/linear/permissions": OAUTH_PERMS}})
+
+    # An empty "Read: nothing" list would be a false statement about a
+    # connector that reads plenty — we simply have not asked it yet.
+    assert "nothing" not in out["permHtml"].lower()
+
+
+SETTING_PERMS = {
+    "id": "filesystem", "name": "A folder on this Mac", "available": True,
+    "reason": "", "first_party": True, "notes": "Reads a folder you choose.",
+    "can_sync": True, "needs_auth": False, "remote": False, "auth": "none",
+    "needs_env": [],
+    "needs_args": [{"name": "root", "label": "Folder",
+                    "help": "The folder this connector may read.",
+                    "kind": "path"}],
+    "reads": [], "writes": [],
+}
+
+
+def test_a_positional_setting_is_asked_for():
+    """The catalog could describe environment variables and nothing else, so the
+    filesystem server — which needs a folder as an argument — was offered with
+    no way to say which folder and exited on launch every time."""
+    out = run({"mode": "permissions", "entry": "filesystem",
+               "api": {"/api/connectors/catalog/filesystem/permissions": SETTING_PERMS}})
+
+    assert out["ok"], out["error"]
+    assert "Folder" in out["permHtml"]
+    assert "The folder this connector may read." in out["permHtml"]
+    # A path is not a secret: masking it would hide what the user just typed.
+    assert 'type="text"' in out["permHtml"]

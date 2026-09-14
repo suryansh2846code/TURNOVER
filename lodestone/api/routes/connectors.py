@@ -51,10 +51,14 @@ def connectors():
     from ...connectors.mcp_source import MCPConnector, list_servers
     for spec in list_servers():
         inst = MCPConnector(spec)
-        ready, reason = inst.is_configured()
+        ready, reason, can_sync = inst.status()
         out.append({"name": inst.name, "label": inst.label, "ready": ready,
                     "reason": reason, "always_available": False,
                     "secret_field": None, "custom": False, "mcp": True,
+                    # A connector that answers questions but cannot list its
+                    # records is working. The row has to say so without
+                    # offering a Sync button that could only ever fail.
+                    "can_sync": can_sync,
                     "config": spec.as_dict(), "state": state.get(inst.name)})
     return {"connectors": out}
 
@@ -71,14 +75,16 @@ def connector_catalog() -> dict[str, Any]:
     truth is that no app can offer it. "Never show a control that cannot work"
     means saying so where the control would have been.
     """
-    from ...connectors.mcp_catalog import BLOCKED, CATALOG
+    from ...connectors.mcp_catalog import BLOCKED, CATALOG, _needed
     from ...connectors.mcp_source import list_servers
 
     added = {spec.id for spec in list_servers()}
     return {
         "available": [{"id": e.id, "name": e.name, "notes": e.notes,
                        "first_party": e.first_party, "added": e.id in added,
-                       "needs_env": [{"name": n, "help": h} for n, h in e.needs_env]}
+                       "remote": e.is_remote, "auth": e.auth,
+                       "needs_env": _needed(e.needs_env),
+                       "needs_args": _needed(e.needs_args)}
                       for e in CATALOG],
         "blocked": [{"id": b.id, "name": b.name, "reason": b.reason}
                     for b in BLOCKED],
@@ -86,7 +92,45 @@ def connector_catalog() -> dict[str, Any]:
 
 
 class CatalogAddIn(BaseModel):
+    """What the user answered on the connector's setup form.
+
+    `env` holds credentials (they go straight to the Keychain and are never
+    echoed back); `args` holds plain settings a local server needs positionally,
+    such as the folder it may read.
+    """
+
     env: dict[str, str] = {}
+    args: dict[str, str] = {}
+
+
+class MCPServerIn(BaseModel):
+    """A server the user is adding by hand.
+
+    The catalog covers the vetted sources; this is the escape hatch for a
+    server we have not listed, which is most of them. Verified exactly the same
+    way — probed before it is saved — because "the user typed it" is not
+    evidence that it runs.
+    """
+
+    id: str
+    name: str = ""
+    transport: str = "stdio"
+    command: str = ""
+    args: list[str] = []
+    url: str = ""
+    auth: str = "oauth"
+    env: dict[str, str] = {}
+
+
+class MCPPermissionsIn(BaseModel):
+    """Which of a server's tools this connector may use at all.
+
+    An empty list means "everything it exposes", which is the default and what
+    every existing connector has. Narrowing is the point: least privilege that
+    the user cannot actually set is a claim, not a control.
+    """
+
+    allowed_tools: list[str] = []
 
 
 @router.post("/api/connectors/catalog/{entry_id}")
@@ -99,10 +143,13 @@ def connector_catalog_add(entry_id: str, body: CatalogAddIn) -> dict[str, Any]:
     """
     from ...connectors.mcp_catalog import add_from_catalog
 
-    spec, reason = add_from_catalog(entry_id, body.env)
+    spec, reason = add_from_catalog(entry_id, body.env, body.args)
     if spec is None:
         return {"ok": False, "error": reason}
-    return {"ok": True, "name": f"mcp:{spec.id}", "label": spec.name}
+    # A connector behind the vendor's sign-in is saved before it works, so the
+    # form has to know whether to wait on a browser or go straight to syncing.
+    return {"ok": True, "name": f"mcp:{spec.id}", "label": spec.name,
+            "server_id": spec.id, "signing_in": spec.uses_oauth}
 
 
 @router.get("/api/connectors/catalog/{entry_id}/permissions")
@@ -122,6 +169,146 @@ def connector_mcp_delete(server_id: str) -> dict[str, Any]:
     from ...connectors.mcp_source import delete_server
 
     return {"ok": delete_server(server_id)}
+
+
+@router.post("/api/connectors/mcp")
+@probes_a_provider
+def connector_mcp_add(body: MCPServerIn) -> dict[str, Any]:
+    """Add a server the catalog does not list, verified before it is saved."""
+    from ...connectors.mcp_source import (
+        MCPServerSpec,
+        get_server,
+        probe,
+        set_server_env,
+        upsert_server,
+    )
+
+    server_id = (body.id or "").strip().lower().replace(" ", "-")
+    if not server_id:
+        return {"ok": False, "error": "Give this connector a short name."}
+    if get_server(server_id) is not None:
+        return {"ok": False,
+                "error": f"A connector called “{server_id}” already exists."}
+    if body.transport == "http":
+        if not body.url.lower().startswith("https://"):
+            return {"ok": False,
+                    "error": "A remote connector needs an https:// address."}
+    elif not body.command.strip():
+        return {"ok": False, "error": "Say which program runs this connector."}
+
+    spec = MCPServerSpec(
+        id=server_id, name=(body.name or server_id).strip(),
+        transport=body.transport, command=body.command.strip(),
+        args=[a for a in body.args if a], url=body.url.strip(),
+        auth=body.auth, token_key=(sorted(body.env)[0] if body.env else ""),
+        env_keys=sorted(body.env))
+
+    if spec.uses_oauth:
+        upsert_server(spec)
+        set_server_env(spec.id, body.env)
+        from ...connectors.mcp_auth import begin
+
+        begin(spec)
+        return {"ok": True, "name": f"mcp:{spec.id}", "label": spec.name,
+                "server_id": spec.id, "signing_in": True}
+
+    from ...connectors.mcp_catalog import _clear_env, _stage_env
+
+    _stage_env(spec, body.env)
+    kinds, reason = probe(spec)
+    if kinds is None:
+        _clear_env(spec, body.env)
+        return {"ok": False, "error": reason}
+    upsert_server(spec)
+    return {"ok": True, "name": f"mcp:{spec.id}", "label": spec.name,
+            "server_id": spec.id, "signing_in": False}
+
+
+@router.get("/api/connectors/mcp/{server_id}/tools")
+@probes_a_provider
+def connector_mcp_tools(server_id: str) -> dict[str, Any]:
+    """Everything this connector exposes, and which of them it may use.
+
+    Asks the server rather than the cache, because this is the screen where the
+    user decides what to switch off — a stale list here would show them a
+    choice about a tool that no longer exists and hide one that does.
+    """
+    from ...connectors.mcp_source import get_server, probe
+
+    spec = get_server(server_id)
+    if spec is None:
+        raise HTTPException(404, "That connector is not set up.")
+    kinds, reason = probe(spec)
+    if kinds is None:
+        return {"ok": False, "error": reason, "tools": [],
+                "allowed_tools": spec.allowed_tools}
+    writes = set(kinds.write)
+    rows = []
+    for tool in kinds.tools:
+        name = getattr(tool, "name", "")
+        if not name:
+            continue
+        rows.append({
+            "name": name,
+            "writes": name in writes,
+            "description": (getattr(tool, "description", "") or "").strip()[:150],
+        })
+    return {"ok": True, "tools": rows, "allowed_tools": spec.allowed_tools}
+
+
+@router.patch("/api/connectors/mcp/{server_id}")
+def connector_mcp_permissions(server_id: str, body: MCPPermissionsIn
+                              ) -> dict[str, Any]:
+    """Narrow what this connector may use.
+
+    `invalidate()` on save, so a tool the user just switched off stops being
+    offered to the model on the next turn rather than at the end of a five
+    minute cache — the same lie as a Connected badge with no credential.
+    """
+    from ...connectors.mcp_source import get_server, upsert_server
+
+    spec = get_server(server_id)
+    if spec is None:
+        raise HTTPException(404, "That connector is not set up.")
+    spec.allowed_tools = [t for t in body.allowed_tools if t]
+    upsert_server(spec)
+    return {"ok": True, "allowed_tools": spec.allowed_tools}
+
+
+@router.post("/api/connectors/mcp/{server_id}/auth")
+def connector_mcp_auth_start(server_id: str) -> dict[str, Any]:
+    """Open the vendor's own sign-in for a remote connector.
+
+    Returns immediately rather than waiting: the browser trip is the user's,
+    and a handler that blocked on it would hold a worker thread for as long as
+    they took to find their password.
+    """
+    from ...connectors.mcp_auth import begin
+    from ...connectors.mcp_source import get_server
+
+    spec = get_server(server_id)
+    if spec is None:
+        raise HTTPException(404, "That connector is not set up.")
+    if not spec.uses_oauth:
+        return {"started": False,
+                "detail": f"{spec.name} does not sign in this way."}
+    return begin(spec)
+
+
+@router.get("/api/connectors/mcp/{server_id}/auth")
+def connector_mcp_auth_status(server_id: str) -> dict[str, Any]:
+    """How a sign-in is going. Survives a refresh; never carries a token."""
+    from ...connectors.mcp_auth import status
+
+    return status(server_id)
+
+
+@router.delete("/api/connectors/mcp/{server_id}/auth")
+def connector_mcp_auth_cancel(server_id: str) -> dict[str, Any]:
+    """Stop a sign-in. Anything the user starts, they can stop."""
+    from ...connectors.mcp_auth import cancel
+
+    return {"cancelled": cancel(server_id)}
 
 
 # ── custom apps (connect any REST app, no code) ───────────────────────────

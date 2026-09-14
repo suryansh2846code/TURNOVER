@@ -118,11 +118,65 @@ _SCHEDULING = (
     "need a reminder. Use set_reminder only for a plain notification."
 )
 
+def _connector_actions(tools: list[str] | None) -> str:
+    """The write tools the user's own connectors expose, as a block.
+
+    An agent cannot propose what it was never shown. The whole approval path
+    for connector writes — the action handler, the queue, the permission gate,
+    the endpoint — existed and was unreachable, because nothing ever told a
+    model the tag was available or what could go in it.
+
+    Built fresh per turn rather than stored on the agent: connectors are added
+    and removed, and a list written into an agent last week would name tools
+    that no longer exist and miss every one added since. Empty when there is
+    nothing to propose — a paragraph describing an ability the user has not set
+    up is an invitation to hallucinate one.
+
+    Gated on the same opt-in that governs connector *reads*: an agent the user
+    narrowed to the brain and the web should not be offered somebody else's
+    account to write to, even behind a confirmation. The tools list is where
+    that decision is expressed, and it has to mean both directions.
+
+    Independent of `actions`: proposing a change in somebody else's app is a
+    different capability from sending mail, and a template may have one without
+    the other.
+    """
+    from ..log import suppressed
+    from .mcp_tools import SENTINEL
+
+    if SENTINEL not in (tools or []):
+        return ""
+
+    rows: list[str] = []
+    with suppressed("listing what the user's connectors can change"):
+        from ..connectors.mcp_tools import write_tools
+
+        for ref in write_tools()[:20]:
+            described = (ref.description or "").strip().split("\n")[0][:110]
+            rows.append(f'- server="{ref.server_id}" tool="{ref.tool}"'
+                        f' — {ref.server_label}'
+                        + (f": {described}" if described else ""))
+    if not rows:
+        return ""
+    return (
+        "CONNECTOR ACTIONS: the user has connectors that can CHANGE things. "
+        "You may not call these directly — propose one and the user gets a "
+        "Confirm button, exactly like sending an email. The tag is:\n"
+        '<action type="mcp_action" server="<server>" tool="<tool>">'
+        '{"argument": "value"}</action>\n'
+        "The tag's inner text MUST be a single valid JSON object of that tool's "
+        "arguments — no prose, no code fence. Use the connector's own argument "
+        "names. Never claim you did it; say what you drafted, then the tag.\n"
+        "Available now:\n" + "\n".join(rows)
+    )
+
+
 _CLOSING = "Be concise and act like a capable teammate."
 
 
 def build(*, name: str, role: str, system_prompt: str,
-          actions: list[str] | None = None) -> str:
+          actions: list[str] | None = None,
+          tools: list[str] | None = None) -> str:
     """The system message for one agent, carrying only what applies to it."""
     parts = [_identity(name, role, system_prompt), _BRAIN, _RECALL, _HONESTY,
              _CORRECTIONS]
@@ -134,6 +188,10 @@ def build(*, name: str, role: str, system_prompt: str,
         if "send_email" in allowed or "create_event" in allowed:
             lines.append(_SCHEDULING)
         parts.append("\n".join(lines))
+
+    connectors = _connector_actions(tools)
+    if connectors:
+        parts.append(connectors)
 
     parts.append(_CLOSING)
     return "\n\n".join(parts)

@@ -123,6 +123,7 @@ const DRAWER_TITLES = { tasks: "Tasks", tools: "Tools & skills" };  // model and
 function openDrawer(name) {
   if (name === "model") return openModelScreen();        // no longer a drawer
   if (name === "sources") return openConnectorsScreen();  // nor is this one
+  if (name === "inbox") return openInboxScreen();
   const bg = $("#drawerBg"); if (!bg) return;
   $("#drawerTitle").textContent = DRAWER_TITLES[name] || name;
   document.querySelectorAll(".dpanel").forEach((p) => p.hidden = p.dataset.d !== name);

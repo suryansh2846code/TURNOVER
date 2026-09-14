@@ -35,9 +35,44 @@ def parse_actions(text: str) -> list[dict]:
             a["params"]["message"] = inner.strip()
         elif t == "create_routine":
             a["params"]["instruction"] = inner.strip()
+        elif t == "mcp_action":
+            # A vendor's tool takes an object, and an action tag's attributes
+            # are flat strings — so the arguments are the body, as JSON.
+            a["params"]["server_id"] = (a["params"].pop("server", "")
+                                        or a["params"].get("server_id", ""))
+            parsed = _arguments(inner)
+            if parsed is None:
+                # Malformed JSON is dropped, never guessed at. Half-parsing a
+                # model's arguments and running the result is how an action
+                # does something nobody proposed.
+                continue
+            a["params"]["arguments"] = parsed
         if t:
             out.append(a)
     return out
+
+
+def _arguments(inner: str) -> dict | None:
+    """The JSON object inside an `mcp_action` tag, or None if it is not one.
+
+    Tolerates a fenced block, because models wrap JSON in ``` roughly half the
+    time and a refused action teaches the user nothing about why.
+    """
+    import json
+
+    text = (inner or "").strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1] if "\n" in text else ""
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3]
+    text = text.strip()
+    if not text:
+        return {}
+    try:
+        value = json.loads(text)
+    except (ValueError, TypeError):
+        return None
+    return value if isinstance(value, dict) else None
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
