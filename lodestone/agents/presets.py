@@ -15,8 +15,15 @@ from .mcp_tools import SENTINEL as MCP_TOOLS
 #: server the user adds tomorrow, and an install with no connectors gains
 #: nothing from it. Connector writes are never included — they go through
 #: propose → confirm (`permissions.NEVER_UNATTENDED`).
-_BASE_TOOLS = ["search_brain", "remember", "list_entities", "web_search",
-               "ask_agent", "ask_agents", "update_plan", MCP_TOOLS]
+#: `forget_fact` is deliberately absent. These agents read email, issues and
+#: messages other people wrote, and "forget everything about X" is a sentence an
+#: injection would write — so an agent gets it only when the user puts it in
+#: that agent's own tool list. `correct_fact` is safe by construction: it
+#: supersedes, so the old version is kept and nothing is destroyed.
+_BASE_TOOLS = ["search_brain", "who_is", "whats_true_about_me", "timeline",
+               "why_do_you_think_that", "correct_fact", "remember",
+               "list_entities", "web_search", "ask_agent", "ask_agents",
+               "update_plan", MCP_TOOLS]
 
 PRESETS: dict[str, Agent] = {
     "inbox": Agent(
