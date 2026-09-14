@@ -56,6 +56,11 @@ class TurnResult:
     plan: list[dict] = field(default_factory=list)
     #: The user pressed Stop. The reply is whatever had been written by then.
     stopped: bool = False
+    #: What this turn cost, summed over every model call it made — including the
+    #: ones a sub-agent made on its behalf. Effort has always been described as
+    #: spending the user's money; this is the first version that can say how much.
+    tokens_in: int = 0
+    tokens_out: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -68,6 +73,8 @@ class TurnResult:
             "steps_used": self.steps_used,
             "plan": self.plan,
             "stopped": self.stopped,
+            "tokens_in": self.tokens_in,
+            "tokens_out": self.tokens_out,
             "trace": [
                 {"kind": s.kind, "name": s.name, "arguments": s.arguments,
                  "result": s.result, "repeated": s.repeated}
@@ -384,6 +391,7 @@ def run_turn(agent_id: str, user_text: str, *,
     stalls = 0
     reply = ""
     was_stopped = False
+    spent = [0, 0]      # input, output tokens across every call this turn
 
     def _failed(exc: Exception) -> TurnResult:
         hint = ""
@@ -414,6 +422,8 @@ def run_turn(agent_id: str, user_text: str, *,
                                                   temperature=0.15), emit, cancel)
             except Exception as exc:
                 return _failed(exc)
+            spent[0] += getattr(result, "input_tokens", 0) or 0
+            spent[1] += getattr(result, "output_tokens", 0) or 0
             # Stopped while the answer was arriving — keep what was written.
             if cancellation.stopped(cancel):
                 reply = result.text or reply
@@ -533,6 +543,7 @@ def run_turn(agent_id: str, user_text: str, *,
             provider=provider.name, model=provider.model,
             runtime_identity=identity, effort=profile.name,
             steps_used=steps_used, plan=plan_snapshot, stopped=True,
+            tokens_in=spent[0], tokens_out=spent[1],
         )
 
     # Auto-learn: quietly capture durable facts the user revealed this turn, so
@@ -556,5 +567,5 @@ def run_turn(agent_id: str, user_text: str, *,
         agent_id=agent.id, reply=reply, trace=trace,
         provider=provider.name, model=provider.model,
         runtime_identity=identity, effort=profile.name, steps_used=steps_used,
-        plan=plan_snapshot,
+        plan=plan_snapshot, tokens_in=spent[0], tokens_out=spent[1],
     )

@@ -618,21 +618,68 @@ def get_provider(name: str | None = None, model: str | None = None) -> LLMProvid
     return p
 
 
-def _wrap_usage(p: LLMProvider) -> None:
-    """Wrap chat() so every model call records token usage centrally (choke point
-    for enrichment, chat, digest, welcome…). Estimates from length when the
-    provider doesn't report usage (Claude CLI, subscription, mock)."""
-    orig = p.chat
+#: Stamped on a `ChatResult` once its tokens have been counted. The agent loop
+#: streams, and a provider with no real streaming answers a `stream()` by
+#: calling its own `chat()` — so the same result arrives at both wrappers below.
+#: Marking the object is what makes counting it exactly once need no shared
+#: state, which matters because `get_provider` is cached and one instance is
+#: handed to every concurrent turn.
+_COUNTED = "_lodestone_usage_counted"
 
-    def chat(messages, **kw):
-        r = orig(messages, **kw)
+
+def _wrap_usage(p: LLMProvider) -> None:
+    """Count every model call, whichever way it was made.
+
+    This used to wrap `chat()` alone and call itself the choke point. It was not:
+    the agent loop calls `stream()`, and every provider that really streams —
+    Anthropic with a key, anything OpenAI-compatible, the Claude and Grok CLIs,
+    Cursor — overrides `stream()` and never touches `chat()`. So the single
+    biggest spender in the app, the agent turn, recorded nothing, while the
+    subscription paths that fall back to `chat()` recorded normally. The meter
+    was wrong, and wrong differently for two users of the same app.
+
+    Estimates from length when the provider does not report usage (the CLIs, the
+    subscription gateway, the mock).
+    """
+    orig_chat = p.chat
+    orig_stream = p.stream
+
+    def _count(messages, result) -> None:
+        if result is None or getattr(result, _COUNTED, False):
+            return
+        with suppressed("marking a ChatResult as counted"):
+            setattr(result, _COUNTED, True)
         with suppressed("from ..usage import record …"):
             from ..usage import record
-            tin, tout = getattr(r, "input_tokens", 0), getattr(r, "output_tokens", 0)
+            tin = getattr(result, "input_tokens", 0)
+            tout = getattr(result, "output_tokens", 0)
             if tin == 0 and tout == 0:
                 tin = sum(len(getattr(m, "content", "") or "") for m in messages) // 4
-                tout = len(getattr(r, "text", "") or "") // 4
+                tout = len(getattr(result, "text", "") or "") // 4
             record(p.name, getattr(p, "model", None), tin, tout)
+
+    def chat(messages, **kw):
+        r = orig_chat(messages, **kw)
+        _count(messages, r)
         return r
 
+    def stream(messages, **kw):
+        """Pass the events straight through, counting the one that carries the
+        result. A turn the user stops never reaches `done`, so the tokens it
+        did spend are counted from the partial on the way out."""
+        result = None
+        spent = []
+        try:
+            for event in orig_stream(messages, **kw):
+                if getattr(event, "kind", "") == "text" and getattr(event, "text", ""):
+                    spent.append(event.text)
+                elif getattr(event, "kind", "") == "done":
+                    result = getattr(event, "result", None)
+                yield event
+        finally:
+            if result is None and spent:
+                result = ChatResult(text="".join(spent))
+            _count(messages, result)
+
     p.chat = chat
+    p.stream = stream
