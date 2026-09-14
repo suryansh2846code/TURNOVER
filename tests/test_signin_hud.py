@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from web_sources import app_source
 
 from lodestone import hud
 from lodestone.api.app import app
@@ -54,7 +55,7 @@ def test_the_api_does_not_try_to_open_the_window():
 
 
 def test_the_frontend_raises_the_card_and_stands_down():
-    src = (ROOT / "lodestone/web/app.js").read_text()
+    src = app_source()
     assert "open_signin_hud" in src, "the page never asks the webview for a window"
     assert "raiseFloatingSigninCard" in src
     # and it must degrade when there is no webview bridge (browser mode)
@@ -180,7 +181,7 @@ def test_the_card_offers_a_way_to_cancel():
 
 
 def test_the_models_card_cancel_abandons_the_flow():
-    src = (ROOT / "lodestone/web/app.js").read_text()
+    src = app_source()
     assert "/auth/cancel" in src, "in-app Cancel only hid the spinner"
 
 
@@ -188,7 +189,7 @@ def test_the_poll_does_not_hammer_the_expensive_endpoint():
     """/refresh re-runs discovery and takes seconds per provider; calling it
     every tick queued requests faster than the server could finish them and
     froze the whole app."""
-    src = (ROOT / "lodestone/web/app.js").read_text()
+    src = app_source()
     hudfn = src[src.index("function showWaitingHud"):]
     hudfn = hudfn[:hudfn.index("\nfunction ")]
     loop = hudfn[hudfn.index("pollTimer = setInterval"):]
@@ -201,7 +202,7 @@ def test_the_poll_does_not_hammer_the_expensive_endpoint():
 def test_waiting_row_replaces_the_sign_in_button():
     """While a sign-in is in flight the Models card shows what to do and a way
     out, instead of a Sign-in button that would start a second flow."""
-    src = (ROOT / "lodestone/web/app.js").read_text()
+    src = app_source()
     handler = src[src.index("signinBtn.onclick = async () => {"):]
     handler = handler[:handler.index("\n  }")]
     assert "Finish signing in in your browser" in handler
@@ -212,7 +213,7 @@ def test_waiting_row_replaces_the_sign_in_button():
 
 def test_the_in_app_hud_is_skipped_when_the_native_card_is_up():
     """Two cards saying the same thing is noise."""
-    src = (ROOT / "lodestone/web/app.js").read_text()
+    src = app_source()
     assert "floating ? null : showWaitingHud(" in src
 
 

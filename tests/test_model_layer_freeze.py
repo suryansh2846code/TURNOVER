@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 import pytest
+from web_sources import app_source
 
 from lodestone.models.auth_flows import ApiKeyOnlyFlow, AuthStart, AuthStatus, get_flow
 from lodestone.models.capabilities import CAPABILITIES_REGISTRY, get_capabilities
@@ -92,7 +93,7 @@ def test_no_retired_id_is_offered_by_discovery():
 
 def test_no_retired_id_is_used_as_a_ui_placeholder():
     """The model-name hints in the UI are copy users paste — they must be real."""
-    src = (MODELS_DIR.parent / "web/app.js").read_text()
+    src = app_source()
     hints = re.search(r"const MODEL_HINTS[^=]*=\s*\{(.*?)\};", src, re.S)
     if not hints:
         return

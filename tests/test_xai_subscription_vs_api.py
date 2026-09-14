@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from web_sources import app_source
 
 from lodestone.models.base import Message
 from lodestone.models.xai import XAIProvider
@@ -121,9 +122,8 @@ def test_providers_with_a_real_sign_in_still_start_one(pid):
 
 def test_frontend_derives_sign_in_cards_from_capabilities():
     """`app.js` must not reintroduce per-provider id checks."""
-    from pathlib import Path
 
-    src = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
+    src = app_source()
     assert 'providerId !== "gemini"' not in src
     assert 'caps.api_key_only' in src or "apiKeyOnly" in src
 

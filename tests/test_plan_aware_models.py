@@ -7,9 +7,9 @@ connection -> the provider's answer -> static tables (fallback only).
 """
 import json
 import re
-from pathlib import Path
 
 import pytest
+from web_sources import app_source
 
 from lodestone.models import discovery, entitlements
 from lodestone.models.discovery import DiscoveredModel, clear_model_cache, get_discovered_models
@@ -129,7 +129,7 @@ def test_default_model_is_offered_and_not_retired(pid):
 def test_frontend_fallback_catalog_matches_the_python_catalog():
     """app.js::FALLBACK_CATALOG is generated from MODEL_CATALOG — if this fails,
     regenerate it rather than hand-editing."""
-    src = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
+    src = app_source()
     block = re.search(r"const FALLBACK_CATALOG = \[(.*?)\n\];", src, re.S)
     assert block, "FALLBACK_CATALOG not found"
     js = json.loads("[" + block.group(1) + "]")
