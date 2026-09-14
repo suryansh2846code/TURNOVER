@@ -15,6 +15,13 @@ knowledge-graph brain** on your own machine. Then spin up specialized **agents**
 - 🔒 **Local-first** — everything in `~/Library/Lodestone`, no cloud copy, no telemetry.
 - ⚡ **Runs day one** — offline `mock` model + `hash` embeddings mean zero keys required to try it.
 
+> 📖 **Changing the code?** Start with
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — who owns what, which
+> direction dependencies may run, the contracts between layers, and the
+> invariants that are load-bearing even when the tests are green. The rules an
+> agent must follow are in [`CLAUDE.md`](CLAUDE.md) and a short note in each
+> code directory.
+>
 > 📖 **The story:** [`docs/JOURNEY.md`](docs/JOURNEY.md) — how it was built, start to now. **Decisions:** [`docs/DECISIONS.md`](docs/DECISIONS.md). **Known gaps:** [`docs/AUDIT.md`](docs/AUDIT.md). **Connectors plan:** [`docs/CONNECTORS.md`](docs/CONNECTORS.md).
 >
 > 📖 **The agents:** [`docs/AGENTS.md`](docs/AGENTS.md) — how a turn runs,

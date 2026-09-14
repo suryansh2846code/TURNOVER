@@ -12,8 +12,11 @@
  * the behaviour rather than a line of stub.
  */
 import fs from "node:fs";
+import path from "node:path";
 
-const APP_JS = process.argv[2];
+import { appSource } from "./_app_source.mjs";
+
+const APP_JS = process.argv[2];   // a path inside lodestone/web/
 const scenario = JSON.parse(fs.readFileSync(0, "utf8"));
 
 const clickable = [];
@@ -68,7 +71,10 @@ globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} }
 globalThis.sessionStorage = { getItem: () => null, setItem() {} };
 globalThis.fetch = async () => ({ ok: true, json: async () => ({}) });
 
-const src = fs.readFileSync(APP_JS, "utf8");
+// The whole workspace, in the order index.html loads it — one file today,
+// several once app.js is split. `new Function` compiles a script, so every
+// piece has to arrive in one shared scope; see tests/js/_app_source.mjs.
+const src = appSource(path.dirname(APP_JS));
 new Function(
   src +
   "\nglobalThis.__renderTools = renderToolList;" +

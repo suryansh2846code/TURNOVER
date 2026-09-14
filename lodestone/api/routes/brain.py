@@ -324,6 +324,26 @@ def get_memory(memory_id: str):
     return {"memory": mem}
 
 
+@router.delete("/api/brain/memories/{memory_id}")
+def delete_memory(memory_id: str):
+    """Remove one memory the user picked out of a brain search.
+
+    A hard delete, not a retraction. `store.delete(soft=True)` keeps the row and
+    marks it `retracted`, which is right for a *superseded* fact — the brain's
+    append-only history depends on it. It is wrong for this button: the user is
+    pointing at one result and saying it should not be there, nothing supersedes
+    it, and `store.count()` counts every row whatever its status — so a soft
+    delete would leave the memory count unchanged and read as "nothing happened".
+
+    Append-only is a rule about **canonical claims** in `brain.db`. This is the
+    raw index, which `/api/brain/reset` and the enrichment pruner already treat
+    as disposable.
+    """
+    if not get_brain().forget(memory_id, soft=False):
+        raise HTTPException(404, "memory not found")
+    return {"ok": True, "deleted": memory_id}
+
+
 @router.get("/api/brain/memories/{memory_id}/explain")
 def explain_memory(memory_id: str, q: str = ""):
     exp = get_brain().explain_memory(memory_id, query=q)

@@ -17,6 +17,19 @@ Python and 5.9k of frontend.
 clean · `mypy lodestone` clean over 111 files. **A2 and A3 are now closed** — see
 their entries. **A8 is new and is the most serious item in this file.**
 
+**Re-reviewed 2026-09-14 after the complexity-reduction pass.** CI on `main`:
+**1440 passed, 20 skipped in ~2min** · ruff clean · mypy clean over 114 files ·
+coverage **76%**, now printed on every run.
+
+**A4, A5 and A11 are closed.** A11 was a real bug a user could hit — the
+brain-search delete button had never worked. **A12 is new**, and is the most
+serious item in this file: the background sync loop runs unattended on every
+machine at 30% coverage, where a failure is silent by construction.
+
+Still open and unchanged: A1 (the committed Google client), A6 (recall
+throughput), A7 (`suppressed()` call sites), A9 (the review queue has no
+consumer), A10 (the extractors disagree).
+
 ---
 
 ## A1 — A live Google OAuth client secret is committed
@@ -128,7 +141,24 @@ comment and believes a check exists that never runs.
 
 ---
 
-## A4 — `app.js` is the largest maintainability liability left
+## A4 — ~~`app.js` is the largest maintainability liability left~~ · **CLOSED**
+
+> **Closed 2026-09-14.** The frontend is eleven plain scripts, each with one
+> responsibility; `app.js` is the shell at 237 lines, and the largest module is
+> `providers.js` at 886. `index.html` declares the load order and is the only
+> place it is written down — the browser and the test harnesses both read it
+> from there.
+>
+> The blocker was never the code. The nine `tests/js` harnesses evaluate the
+> frontend with `new Function`, which compiles a script and cannot process
+> `import` — so the loader had to change first and land as a proven no-op before
+> a single line moved. Method, and the five checks to run before any further
+> move: [`development/frontend-testing.md`](development/frontend-testing.md).
+>
+> The original finding is kept below; the reasoning in it is still why the file
+> grew that large in the first place.
+
+### Original finding
 
 3,007 lines · 92 top-level functions · 57 `innerHTML` writes · no build step, no
 module boundaries, no type checking.
@@ -156,7 +186,19 @@ sound and should hold.
 
 ---
 
-## A5 — No type checker, and lint scoped to `F,E9`
+## A5 — ~~No type checker, and lint scoped to `F,E9`~~ · **CLOSED**
+
+> **Closed.** `pyproject.toml` selects seventeen rule groups, and `mypy` runs in
+> CI over 114 files — strict on the modules that are contracts, with a
+> grandfathered list that only ever gets shorter. Coverage prints on every run
+> too (76%), deliberately without a threshold: the per-module table is the
+> point, not the percentage.
+>
+> ```bash
+> ruff check lodestone tests && mypy lodestone
+> ```
+
+### Original finding
 
 `pyproject.toml` selects only `F` and `E9`, with an honest comment about why
 (~480 findings would ship a red pipeline that everyone learns to ignore). The
@@ -412,7 +454,20 @@ claim a guard it cannot run.
 
 ---
 
-## A11 — The brain-search delete button calls an endpoint that does not exist
+## A11 — ~~The brain-search delete button calls an endpoint that does not exist~~ · **CLOSED**
+
+> **Closed 2026-09-13.** `DELETE /api/brain/memories/{memory_id}` exists and the
+> button calls it. A hard delete rather than a retraction: `store.count()` counts
+> every row whatever its status, so a soft delete would have left the memory
+> count unchanged and read as "nothing happened".
+>
+> The regression test is deliberately wider than the bug.
+> `test_frontend_calls_real_endpoints.py` extracts every `(method, path)` pair
+> the frontend asks for and checks each against the live route table — the class
+> of defect, not the instance, and it catches a right path with the wrong verb
+> as well as a wrong path.
+
+### Original finding
 
 **Severity: low** · **Owner: API (route) + Frontend (path)** · **Cost: trivial**
 
@@ -487,3 +542,37 @@ Added 2026-09-13 (QA), each checked directly rather than assumed:
 the last review) with 62 `innerHTML` writes and 93 top-level functions. The
 `tests/js/` harnesses have grown 3 → 8, but they still execute roughly six of
 those 93 functions.
+
+---
+
+## A12 — `scheduler.py` runs unattended on every machine at 30% coverage
+
+The background sync loop is the least-protected code in the repository, and it
+is code no user ever watches run.
+
+```bash
+pytest -q --cov --cov-report=term-missing | grep scheduler
+# lodestone/scheduler.py   184   129   30%   41-45, 54, 72-75, 79-88, 91-188, ...
+```
+
+`_sync_all` — 99 lines, the function that drives every connector, decides what
+is stale, and is meant to be cooperatively cancellable — is almost entirely
+uncovered. So is the loop that calls it.
+
+This matters more than it looks. A failure here is silent by construction: the
+loop swallows what it must to survive a bad connector, it runs on a timer with
+nobody watching, and the symptom a user reports is "my brain stopped updating",
+days later, with nothing in the UI to say so.
+
+**To close:** a fake connector and a driven clock, then test the things that
+only this module does — cancellation actually stopping mid-pass, one failing
+connector not taking the others down, the watermark advancing only on success,
+and two scheduler instances never running at once after a reload.
+
+**Severity: medium** (silent, unattended, user-visible only long after the fact)
+· **Owner: Connectors + API** · **Cost: medium**
+
+> Found while measuring coverage during the complexity-reduction pass, not while
+> working on the scheduler. Recorded rather than fixed because it is a testing
+> gap, not a complexity one — it was outside that task's scope, and deserves to
+> be someone's actual task rather than a footnote in another.

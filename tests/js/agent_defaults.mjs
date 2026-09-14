@@ -9,8 +9,11 @@
  * argv: <app.js>   stdin: {catalog, effort}
  */
 import fs from "node:fs";
+import path from "node:path";
 
-const [APP_JS] = process.argv.slice(2);
+import { appSource } from "./_app_source.mjs";
+
+const APP_JS = process.argv[2];   // a path inside lodestone/web/
 const { catalog, effort } = JSON.parse(fs.readFileSync(0, "utf8"));
 
 const registry = new Map();
@@ -53,7 +56,7 @@ globalThis.fetch = async (path, opts = {}) => {
 };
 
 new Function(
-  fs.readFileSync(APP_JS, "utf8") +
+  appSource(path.dirname(APP_JS)) +
   "\nglobalThis.__setCatalog = (c) => { MODEL_CATALOG = c; };" +
   "\nglobalThis.__loadDefaults = loadAgentDefaults;"
 )();

@@ -18,6 +18,7 @@ test measures the real thing in a headless browser and skips where there
 isn't one.
 """
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -72,9 +73,10 @@ def _measure() -> dict:
         pytest.skip("no headless-capable browser on this machine")
 
     html = (WEB / "index.html").read_text()
-    # app.js would fetch a server that is not running; the shell is pure CSS.
-    html = html.replace('<script src="/static/app.js"></script>', "")
-    html = html.replace('<script src="app.js"></script>', "")
+    # The app's scripts would fetch a server that is not running, and there are
+    # ten of them now rather than one — strip every local <script src>, since
+    # the shell under test is pure CSS.
+    html = re.sub(r'<script\b[^>]*\bsrc=[^>]*>\s*</script>', "", html)
     # Absolute stylesheet href so the page can live in a temp dir.
     html = html.replace('href="/static/styles.css"', f'href="{(WEB / "styles.css").as_uri()}"')
     html = html.replace('href="styles.css"', f'href="{(WEB / "styles.css").as_uri()}"')

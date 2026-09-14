@@ -490,6 +490,19 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <!-- Order is the dependency graph: core.js defines $, api, esc, md, toast and
+       the icon set, which app.js uses from its first lines. Plain scripts in one
+       shared scope — not modules; see docs/development/frontend-testing.md. -->
+  <script src="/static/core.js"></script>
+  <script src="/static/providers.js"></script>
+  <script src="/static/models.js"></script>
+  <script src="/static/chat.js"></script>
+  <script src="/static/brain.js"></script>
+  <script src="/static/connectors.js"></script>
+  <script src="/static/workspace.js"></script>
+  <script src="/static/brain-screen.js"></script>
+  <script src="/static/usage.js"></script>
+  <script src="/static/tools.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

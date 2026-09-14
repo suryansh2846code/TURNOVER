@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from web_sources import app_source
 
 from lodestone.api.app import app
 from lodestone.models.base import Message, parse_cli_json
@@ -173,7 +174,7 @@ def test_status_polls_the_cli_and_connects_on_success():
          patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')):
         assert TestClient(app).get("/api/providers/cursor/auth/status").json()["status"] == "idle"
 
-    mod._login_proc, mod._login_baseline = _Running(), {"authenticated": False, "email": None}
+    mod._session.proc, mod._session.baseline = _Running(), {"authenticated": False, "email": None}
     mod.reset_auth_cache()
     with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')):
@@ -209,9 +210,8 @@ def test_signin_handler_branches_on_the_backend_answer():
     browser" and toast "Opening Cursor in browser…" regardless of the response.
     For a CLI-only provider that is a spinner waiting for something that never
     happens."""
-    from pathlib import Path
 
-    src = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
+    src = app_source()
     handler = src[src.index("const signinBtn = boxEl.querySelector"):]
     handler = handler[:handler.index("// Connect via API key")] if "// Connect via API key" in handler else handler
 
@@ -225,9 +225,8 @@ def test_signin_handler_branches_on_the_backend_answer():
 
 
 def test_cli_instructions_surface_the_command():
-    from pathlib import Path
 
-    src = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
+    src = app_source()
     fn = src[src.index("function showCliInstructions"):]
     fn = fn[:fn.index("\nfunction ")]
     assert "ts-cli-install" in fn, "no one-click install path"
@@ -287,9 +286,8 @@ def test_refresh_finishes_a_sign_in_the_poll_gave_up_on():
 def test_the_waiting_hud_polls_every_provider():
     """It gated /auth/status on a hardcoded ["openai","xai","claude"] list, so
     Cursor's sign-in was never polled at all."""
-    from pathlib import Path
 
-    src = (Path(__file__).parent.parent / "lodestone/web/app.js").read_text()
+    src = app_source()
     hud = src[src.index("function showWaitingHud"):]
     hud = hud[:hud.index("\nfunction ")]
     assert '["openai", "xai", "claude"].includes' not in hud
@@ -303,14 +301,14 @@ def _flow_status(proc, baseline, cli_json):
     from lodestone.models import cursor as mod
     from lodestone.models.auth_flows import get_flow
 
-    mod._login_proc, mod._login_baseline = proc, baseline
+    mod._session.proc, mod._session.baseline = proc, baseline
     mod.reset_auth_cache()
     try:
         with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
              patch("subprocess.run", return_value=_proc(cli_json)):
             return get_flow("cursor").status().status
     finally:
-        mod._login_proc, mod._login_baseline = None, None
+        mod._session.proc, mod._session.baseline = None, None
         mod.reset_auth_cache()
 
 
@@ -343,7 +341,7 @@ def test_no_sign_in_running_just_reports_the_current_state():
 def test_cancelling_clears_the_in_flight_state():
     from lodestone.models import cursor as mod
 
-    mod._login_proc, mod._login_baseline = _Running(), BASE
+    mod._session.proc, mod._session.baseline = _Running(), BASE
     with patch.object(_Running, "terminate", create=True):
         mod.cancel_cli_login()
     assert mod.login_progress()["in_flight"] is False

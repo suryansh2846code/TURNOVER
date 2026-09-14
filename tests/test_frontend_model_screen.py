@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from web_sources import app_source
 
 ROOT = Path(__file__).parent.parent
 WEB = ROOT / "lodestone/web"
@@ -118,12 +119,10 @@ def test_each_provider_group_is_one_card_of_rows():
 
 def test_the_provider_boxes_are_not_spaced_apart():
     """An inline margin between boxes would put gaps inside the single card."""
-    app_js = (WEB / "app.js").read_text()
-    assert 'id="pbox_${pid}" style="margin-bottom' not in app_js
+    assert 'id="pbox_${pid}" style="margin-bottom' not in app_source()
 
 
 def test_nothing_calls_it_a_drawer_any_more():
-    app_js = (WEB / "app.js").read_text()
-    assert "Models drawer" not in app_js, (
+    assert "Models drawer" not in app_source(), (
         "user-facing copy still calls the model screen a drawer"
     )

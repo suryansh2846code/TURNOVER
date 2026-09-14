@@ -20,6 +20,7 @@ from pathlib import Path
 
 from ..log import get_logger
 from .base import ChatResult, LLMProvider, Message, parse_cli_json
+from .cli_login import augmented_path
 from .errors import ErrorKind, ProviderError, classify_cli
 
 log = get_logger(__name__)
@@ -38,12 +39,7 @@ _EXTRA_BIN_DIRS = [
 
 
 def _augmented_path() -> str:
-    """PATH extended with well-known bin dirs missing from a GUI-launched app."""
-    parts = os.environ.get("PATH", "").split(os.pathsep)
-    for d in _EXTRA_BIN_DIRS:
-        if d and d not in parts and os.path.isdir(d):
-            parts.append(d)
-    return os.pathsep.join(parts)
+    return augmented_path(_EXTRA_BIN_DIRS)
 
 
 def find_claude() -> str | None:

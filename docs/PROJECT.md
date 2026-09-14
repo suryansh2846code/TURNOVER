@@ -139,6 +139,12 @@ let you *browse and click*. We added a read-only filesystem browser + modal.
 
 ## 4. Architecture — the map
 
+> **The normative description is [`ARCHITECTURE.md`](ARCHITECTURE.md)** —
+> subsystem ownership, which direction dependencies may run, the contracts
+> between layers, and the invariants. What follows is the picture; when the two
+> disagree, that file is right and this one has gone stale.
+
+
 ```
         ┌──────────────── Workspace UI (browser) ─────────────────┐
         │  Agent tabs   |   Chat + live tool trace   |   Brain panel │
