@@ -180,7 +180,29 @@ Each step ends green. The split does not begin until step 3 is proven.
 | **1** | Add `tests/js/_app_source.mjs`. Nothing uses it yet. | 1 new | its output for a single-script `index.html` is byte-identical to `readFileSync(app.js)`, pinned by `tests/test_frontend_source_loader.py` | **done** |
 | **2** | Point all nine harnesses at it. **`app.js` is still one file**, so a pure no-op refactor of the loader. | 10 | suite unchanged — 1440 passed, 1458 collected, before and after. Proven real by deleting app.js's `<script>` tag: 26 passing harness tests become 18 failures and 7 errors. | **done** |
 | **3** | Prove the mechanism: move **one** small, self-contained cluster out — `core.js` (`$`, `api`, `esc`, `md`, `toast`, orbs, icons) — and add its `<script>` tag **first** in `index.html`. | 7 | suite green **without touching a harness**. Removing core.js's tag, or loading it after app.js, each turn 19 passing drawer tests into 11 failures and 7 errors. | **done** |
-| **4+** | One cluster per commit, largest value first: `providers.js` (863), `models.js` (792), `chat.js` (393)… | 3 each | suite green between each | next |
+| **4** | `providers.js` — the catalog state, the sign-in HUD, the CLI instructions, `renderProviderConnectBox`. | 3 | 70 frontend tests green, no harness touched. app.js 3,507 → 2,645. | **done** |
+| **5+** | One cluster per commit: the model picker (~790), chat (~390), connectors (~286), the brain screen (~145)… | 3 each | suite green between each | next |
+
+### Deciding which cluster goes next
+
+Not by size — **by which way the state points**. `providers.js` went before the
+model picker, reversing an earlier guess, because `PROVIDERS` and
+`MODEL_CATALOG` are declared in it and read by four things downstream. Taking
+the picker first would have left it reading state declared in a file loaded
+after it.
+
+Four static checks are worth running before any cut, because a mistake here is a
+blank screen rather than a failed assertion:
+
+1. **Which names cross the cut, and in which direction.** A backwards reference
+   is only safe if it is called at runtime, never evaluated at load.
+2. **Does anything in the region execute at load time?** If not, script order
+   cannot produce a temporal dead-zone read.
+3. **Any duplicate top-level declaration across files?** `let` is not
+   redeclarable in the shared script scope — that is a SyntaxError at load, not
+   a test failure.
+4. **Does the concatenation still parse as one unit?** That is what the browser
+   and every harness actually evaluate.
 
 Step 3 cost more than three files, for a reason worth knowing before step 4:
 **two Python tests were reading `app.js` when they meant "the app's
