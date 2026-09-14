@@ -10,7 +10,7 @@ from typing import Any
 
 from ..brain import get_brain
 from ..models.base import Tool
-from . import brain_tools, mcp_tools
+from . import brain_tools, mcp_tools, source_tools
 from .effort import get_effort
 from .results import ToolResult
 
@@ -239,6 +239,9 @@ TOOL_IMPLS = {
     "list_entities": _list_entities,
     "web_search": _web_search,
     "gmail_search": _gmail_search,
+    "calendar_lookup": source_tools.calendar_lookup,
+    "sync_source": source_tools.sync_source,
+    "search_source": source_tools.search_source,
     "add_task": _add_task,
     "list_tasks": _list_tasks,
     "complete_task": _complete_task,
@@ -443,6 +446,48 @@ TOOL_DEFS: dict[str, Tool] = {
         parameters={"type": "object", "properties": {
             "query": {"type": "string", "description": "Gmail search query"},
             "max_results": {"type": "integer", "default": 10}}},
+    ),
+    "calendar_lookup": Tool(
+        name="calendar_lookup",
+        description=(
+            "What is on the user's calendar over a period. Use it for 'what's "
+            "on today', 'am I free Thursday', 'what did I have last week' — "
+            "anything about their schedule. Takes a natural period: today, "
+            "tomorrow, this week, or a date."
+        ),
+        parameters={"type": "object", "properties": {
+            "when": {"type": "string", "default": "today",
+                     "description": "today · tomorrow · this week · 2026-09-15"}}},
+    ),
+    "sync_source": Tool(
+        name="sync_source",
+        description=(
+            "Pull anything new from one of the user's connected sources right "
+            "now. Use it when they say 'check my mail', or when an answer needs "
+            "to be current rather than as-of-the-last-sync."
+        ),
+        parameters={"type": "object", "properties": {
+            "source": {"type": "string",
+                       "description": "gmail · gcal · notion · github · …"}},
+            "required": ["source"]},
+    ),
+    "search_source": Tool(
+        name="search_source",
+        description=(
+            "Fetch from one of the user's sources and read what came back. "
+            "`about` is what you are looking for in plain words; `filter` is "
+            "optional and takes that source's own query syntax (for Gmail, "
+            "things like from:dana or newer_than:7d). Keep them separate — the "
+            "filter is for fetching, the words are for finding."
+        ),
+        parameters={"type": "object", "properties": {
+            "source": {"type": "string"},
+            "about": {"type": "string",
+                      "description": "In words. What are you looking for?"},
+            "filter": {"type": "string",
+                       "description": "Optional, the source's own query syntax"},
+            "max_results": {"type": "integer", "default": 10}},
+            "required": ["source", "about"]},
     ),
     "add_task": Tool(
         name="add_task",

@@ -23,7 +23,8 @@ from .mcp_tools import SENTINEL as MCP_TOOLS
 _BASE_TOOLS = ["search_brain", "who_is", "whats_true_about_me", "timeline",
                "why_do_you_think_that", "correct_fact", "remember",
                "list_entities", "web_search", "ask_agent", "ask_agents",
-               "update_plan", MCP_TOOLS]
+               "update_plan", "calendar_lookup", "sync_source", "search_source",
+               MCP_TOOLS]
 
 PRESETS: dict[str, Agent] = {
     "inbox": Agent(
