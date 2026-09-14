@@ -109,7 +109,7 @@ def _scripted(script, **kw):
 
 def run(*, include_slow: bool = True) -> Scorecard:
     """Run every capability check and return the scorecard."""
-    from . import delegation, runtime
+    from . import delegation, grounding, runtime
     from . import mcp_tools as mcp
     from . import tools as tools_mod
     from .effort import get_effort
@@ -174,6 +174,26 @@ def run(*, include_slow: bool = True) -> Scorecard:
         spent = runtime.run_turn("research", "dig", effort="high")
         check("budget_answer", "Spending the whole budget still yields an answer")(
             spent.reply == "here is what I found", spent.reply[:40])
+
+        # ── our own grounding note stays out of the arguments ────────────
+        # The date is stated in front of the question so a small model cannot
+        # miss it; a model then copies its input into the call it emits, and
+        # `search_brain`'s query reaches `parse_date_range`, which reads the
+        # date we supplied as a filter and answers from an empty brain.
+        note_args: dict = {}
+
+        def capture(**kw):
+            note_args.update(kw)
+            return "some context"
+
+        tools_mod.TOOL_IMPLS["search_brain"] = capture
+        echoed = grounding.prefixed("Tuesday, September 15, 2026", "who is she")
+        provider = _scripted([[("search_brain", {"query": echoed})], "found her"])
+        use(provider)
+        runtime.run_turn("research", "who is she")
+        check("date_note", "The date we tell the model never reaches a tool")(
+            bool(note_args) and "[Today is" not in note_args.get("query", ""),
+            note_args.get("query", "(never called)")[:60])
 
         # ── parallelism ──────────────────────────────────────────────────
         if include_slow:

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from ..brain import get_brain
@@ -13,7 +13,7 @@ from ..log import get_logger, suppressed
 from ..models import Message, get_provider
 from ..models.base import ChatResult
 from ..models.entitlements import resolve_usable_model
-from . import delegation, planning
+from . import delegation, grounding, planning
 from .agent import Agent, AgentMemory
 from .context import build_history
 from .effort import Effort, get_effort
@@ -357,7 +357,7 @@ def run_turn(agent_id: str, user_text: str, *,
     messages += build_history(mem, agent, profile, provider)
     # model sees the date adjacent to the question; stored memory stays clean
     messages.append(Message(
-        role="user", content=f"[Today is {date_line}.]\n{user_text}",
+        role="user", content=grounding.prefixed(date_line, user_text),
         images=images))
     mem.append(agent.id, "user", user_text)
     runner = ToolRunner(effort=profile)
@@ -394,6 +394,17 @@ def run_turn(agent_id: str, user_text: str, *,
             if not result.wants_tools:
                 reply = result.text
                 break
+
+            # The date we put in front of the question comes back inside the
+            # arguments, because a model copies its own input. Take it out
+            # here, once, before anything reads it: the same clean call then
+            # reaches the memo, the trace the user watches, and the tool —
+            # where `search_brain` would otherwise read a date in a query as a
+            # filter and answer from an empty brain. See `grounding.py`.
+            result.tool_calls = [
+                replace(call, arguments=grounding.strip_arguments(call.arguments))
+                for call in result.tool_calls
+            ]
 
             messages.append(Message(
                 role="assistant", content=result.text, tool_calls=result.tool_calls,
