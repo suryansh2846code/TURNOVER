@@ -23,6 +23,7 @@ from ..log import get_logger
 from ..models.base import ToolCall
 from . import cancellation
 from .effort import Effort
+from .results import ToolResult, worked
 from .tools import run_tool
 
 log = get_logger(__name__)
@@ -57,11 +58,16 @@ class ToolOutcome:
     repeated: bool = False
     """True when this exact call was already made this turn."""
 
+    @property
+    def ok(self) -> bool:
+        """Did the call work? Read from the result, never guessed from its text."""
+        return worked(self.output)
+
 
 #: What a tool reports when the user stopped the turn before it ran. A sentence
 #: rather than an empty string, because it is written into the transcript the
 #: next round would read — and "" reads as "this tool found nothing".
-STOPPED_OUTPUT = "Not run — the user stopped this turn."
+STOPPED_OUTPUT = ToolResult("Not run — the user stopped this turn.")
 
 
 @dataclass
@@ -96,7 +102,13 @@ class ToolRunner:
             key = call_key(call.name, call.arguments)
             if key in self._memo:
                 self.repeats_seen += 1
-                outcomes[i] = ToolOutcome(call, self._memo[key] + _REPEAT_NOTE, True)
+                # `str + str` would drop the verdict and hand the loop a result
+                # that claims to have worked — which is the bug this replaced.
+                prior = self._memo[key]
+                annotated = (prior.but(prior + _REPEAT_NOTE)
+                             if isinstance(prior, ToolResult)
+                             else ToolResult(prior + _REPEAT_NOTE))
+                outcomes[i] = ToolOutcome(call, annotated, True)
             elif key in this_round:
                 self.repeats_seen += 1
                 echoes.append((i, key))
@@ -132,7 +144,7 @@ class ToolRunner:
                         outcomes[i] = future.result()
 
         for i, key in echoes:
-            outcomes[i] = ToolOutcome(calls[i], self._memo.get(key, ""), True)
+            outcomes[i] = ToolOutcome(calls[i], self._memo.get(key, ToolResult("")), True)
 
         self.calls_made += len(calls)
         return [o for o in outcomes if o is not None]
@@ -140,7 +152,7 @@ class ToolRunner:
     def _execute(self, call: ToolCall, key: str) -> ToolOutcome:
         if cancellation.stopped(self.cancel):
             return ToolOutcome(call, STOPPED_OUTPUT)
-        output = run_tool(call.name, call.arguments)
+        output: ToolResult = run_tool(call.name, call.arguments)
         self._memo[key] = output
         return ToolOutcome(call, output)
 

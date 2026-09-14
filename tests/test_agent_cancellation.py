@@ -94,7 +94,10 @@ def test_a_turn_stopped_before_it_starts_costs_nothing(scripted):
 
     assert result.stopped is True
     assert provider.rounds_used == 0, "a pre-stopped turn still called the model"
-    assert result.trace == []
+    # Not `trace == []`: auto-recall records a step before the loop begins, and
+    # whether it finds anything depends on what is in the brain. What must be
+    # empty is the work — no tool ran.
+    assert [s for s in result.trace if s.kind == "tool_call"] == []
 
 
 def test_the_half_written_answer_is_kept(scripted):

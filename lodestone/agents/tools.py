@@ -12,6 +12,7 @@ from ..brain import get_brain
 from ..models.base import Tool
 from . import mcp_tools
 from .effort import get_effort
+from .results import ToolResult
 
 
 # ── brain tools (shared by every agent) ──────────────────────────────────
@@ -40,12 +41,13 @@ def _web_search(query: str, max_results: int = 5) -> str:
     try:
         from ddgs import DDGS
     except ImportError:
-        return "web_search unavailable (pip install ddgs)."
+        return ToolResult.failed("Web search is unavailable on this machine.")
     try:
         results = DDGS().text(query, max_results=max_results)
     except Exception as exc:
-        return f"web_search failed: {exc}"
+        return ToolResult.failed(f"The web search did not go through: {exc}")
     if not results:
+        # Nothing found is an answer, not a failure — repeating it would not help.
         return "No web results found."
     lines = []
     for r in results:
@@ -80,7 +82,9 @@ def _list_tasks(when: str | None = None) -> str:
 def _complete_task(task: str) -> str:
     from ..tasks import get_tasks
     done = get_tasks().complete(task)
-    return f"Completed: {done['title']}" if done else f"No task matched '{task}'."
+    if not done:
+        return ToolResult.failed(f"No task matched '{task}'.")
+    return f"Completed: {done['title']}"
 
 
 def _gmail_search(query: str = "newer_than:30d", max_results: int = 10) -> str:
@@ -88,10 +92,10 @@ def _gmail_search(query: str = "newer_than:30d", max_results: int = 10) -> str:
     conn = get_connector("gmail")
     ready, reason = conn.is_configured()
     if not ready:
-        return f"Gmail not connected: {reason}"
+        return ToolResult.failed(f"Gmail is not connected: {reason}")
     res = conn.sync(query=query, max_results=max_results, interactive=False)
     if res.errors:
-        return f"Gmail error: {res.errors[0]}"
+        return ToolResult.failed(f"Gmail could not be read: {res.errors[0]}")
     return _search_brain(query)  # freshly ingested, now recall it
 
 
@@ -123,9 +127,11 @@ def _complete_open_loop(loop: str) -> str:
             target = l
             break
     if not target:
-        return f"No open loop matched '{loop}'."
+        return ToolResult.failed(f"No open loop matched '{loop}'.")
     done = b.complete_open_loop(target["id"])
-    return f"Completed open loop: {done.get('description')}" if done else f"Could not complete '{loop}'."
+    if not done:
+        return ToolResult.failed(f"Could not complete '{loop}'.")
+    return f"Completed open loop: {done.get('description')}"
 
 
 def _update_plan(steps: list, done_through: int = 0) -> str:
@@ -151,7 +157,7 @@ def _ask_agent(agent_id: str, question: str) -> str:
     target = (agent_id or "").strip()
     why_not = delegation.refusal(target)
     if why_not:
-        return why_not
+        return ToolResult.failed(why_not)
 
     chain = delegation.current_chain()
     budget = (chain.effort or get_effort()).child()
@@ -442,7 +448,14 @@ def validate_tool_arguments(name: str, arguments: Any) -> tuple[bool, str, dict]
     return True, "", clean_args
 
 
-def run_tool(name: str, arguments: dict) -> str:
+def run_tool(name: str, arguments: dict) -> ToolResult:
+    """Execute a tool and report what happened.
+
+    Returns a `ToolResult`, which IS a string — the model reads the text exactly
+    as before — carrying whether the call worked. The loop reads that field
+    instead of matching the start of the output against a list of prefixes,
+    which got the three failures that actually happen wrong. See `results.py`.
+    """
     impl = TOOL_IMPLS.get(name)
     if not impl:
         # Not a built-in. It may be a connector's tool, which only exists on
@@ -451,15 +464,18 @@ def run_tool(name: str, arguments: dict) -> str:
         connector_tool = mcp_tools.lookup(name)
         impl = connector_tool.handler if connector_tool else None
     if not impl:
-        return f"Unknown tool: {name}"
+        return ToolResult.failed(f"Unknown tool: {name}")
 
     valid, err, clean_args = validate_tool_arguments(name, arguments)
     if not valid:
-        return f"Schema validation error: {err}"
+        return ToolResult.failed(f"Schema validation error: {err}")
 
     try:
-        return impl(**clean_args)
+        out = impl(**clean_args)
     except TypeError as exc:
-        return f"Bad arguments for {name}: {exc}"
+        return ToolResult.failed(f"Bad arguments for {name}: {exc}")
     except Exception as exc:
-        return f"Tool {name} failed: {exc}"
+        return ToolResult.failed(f"Tool {name} failed: {exc}")
+    # A tool that already said how it went keeps its verdict; one that just
+    # returned text worked, which is what a bare string has always meant.
+    return out if isinstance(out, ToolResult) else ToolResult(out)

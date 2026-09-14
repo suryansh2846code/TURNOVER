@@ -480,7 +480,7 @@ def run_turn(agent_id: str, user_text: str, *,
             # "That did not work" is worth saying once, explicitly. Left to
             # itself a model often re-issues the same broken call, and the
             # repeat memo then answers it from cache — so it never learns.
-            if any(planning.looks_like_failure(o.output) for o in outcomes):
+            if any(not o.ok for o in outcomes):
                 messages.append(Message(role="system", content=planning.RETRY_NUDGE))
 
             # A round that learned nothing is the failure mode a deeper loop

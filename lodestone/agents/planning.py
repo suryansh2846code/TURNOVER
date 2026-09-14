@@ -92,17 +92,10 @@ def update(steps: list[str], done_through: int = 0) -> str:
             + (f" ({len(remaining) - 1} more after that)" if len(remaining) > 1 else ""))
 
 
-#: Tool outputs that mean "that did not work", so the next round can be nudged
-#: toward a different approach instead of the same one again.
-FAILURE_MARKERS = ("Schema validation error:", "Unknown tool:", "Bad arguments for",
-                   "failed:", "Tool ")
-
-
-def looks_like_failure(output: str) -> bool:
-    text = (output or "").strip()
-    return any(text.startswith(m) for m in FAILURE_MARKERS)
-
-
+#: Whether a tool worked is now a field on its result (`results.ToolResult`),
+#: not a guess from the start of its text. The prefix list that used to live
+#: here read "web_search failed: …" as a success and "Tool budget …" as a
+#: failure, which is why it is gone rather than fixed.
 RETRY_NUDGE = (
     "The last tool call did not work. Do not repeat it unchanged — either fix "
     "the arguments, use a different tool, or tell the user plainly that this "
