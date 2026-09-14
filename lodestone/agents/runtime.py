@@ -14,7 +14,7 @@ from ..log import get_logger, suppressed
 from ..models import Message, get_provider
 from ..models.base import ChatResult
 from ..models.entitlements import resolve_usable_model
-from . import cancellation, delegation, grounding, planning
+from . import background, cancellation, delegation, grounding, planning
 from .agent import Agent, AgentMemory
 from .context import build_history
 from .effort import Effort, get_effort
@@ -135,6 +135,19 @@ def _auto_learn(user_text: str, provider) -> int:
         if brain.ingest(fact, source="agent", kind="fact", title="learned")["memories"]:
             stored += 1
     return stored
+
+
+def _learn_from_turn(user_text: str, reply: str, provider) -> None:
+    """Grow the brain from a finished turn. Runs after the user has their answer.
+
+    Two steps, in order: raw-memory capture, which is the searchable evidence,
+    then canonical curation, which is the durable versioned model of the user.
+    The second is allowed to fail without disturbing the first.
+    """
+    _auto_learn(user_text, provider)
+    with suppressed("from ..brain.canonical import get_canonical …"):
+        from ..brain.canonical import get_canonical
+        get_canonical().learn_from_conversation(user_text, reply, provider=provider)
 
 
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
@@ -578,19 +591,14 @@ def run_turn(agent_id: str, user_text: str, *,
     # simply talking to an agent grows the brain — no manual "add fact" step.
     # (1) raw-memory capture (searchable evidence), (2) canonical curation so
     # the durable, versioned model of the user keeps up with the conversation.
-    learned = _auto_learn(user_text, provider)
-    if learned:
-        trace.append(TraceStep(kind="tool_result", name="auto_learn",
-                               result=f"learned {learned} new fact(s)"))
-    with suppressed("from ..brain.canonical import get_canonical …"):
-        from ..brain.canonical import get_canonical
-        cres = get_canonical().learn_from_conversation(user_text, reply,
-                                                        provider=provider)
-        if cres.get("added") or cres.get("queued"):
-            trace.append(TraceStep(
-                kind="tool_result", name="brain_curate",
-                result=f"{cres.get('added',0)} canonical, "
-                       f"{cres.get('queued',0)} queued for review"))
+    #
+    # Both are model calls and neither changes the answer, so they no longer
+    # happen between the last word arriving and the turn returning. The user
+    # used to watch the text finish and then wait, with nothing on screen
+    # saying why. See `background.py`.
+    trace.append(TraceStep(kind="tool_result", name="auto_learn",
+                           result="learning from this turn in the background"))
+    background.after_turn(_learn_from_turn, user_text, reply, provider)
     return TurnResult(
         agent_id=agent.id, reply=reply, trace=trace,
         provider=provider.name, model=provider.model,

@@ -38,6 +38,12 @@ def test_end_to_end_agent_brain_loop(clean_env):
     assert turn1.reply is not None
     assert any(s.name == "auto_learn" for s in turn1.trace)
 
+    # Learning from a turn is deliberately off the critical path — the reply
+    # arrives, then the brain catches up. Wait for it before reading the brain;
+    # the loop being tested is the same one, just not blocking the answer.
+    from lodestone.agents import background
+    assert background.wait_for_idle(timeout=30), "background learning did not finish"
+
     # 2. Verify Brain ingested the fact and created entities in graph
     from lodestone.brain import get_brain
     b = get_brain()
