@@ -334,8 +334,17 @@ let controller = null;          // AbortController for the in-flight turn
 function setBusy(on) {
   busy = on;
   $("#input").disabled = on;
-  $("#send").textContent = on ? "Stop" : "Send";
-  $("#send").classList.toggle("stopbtn", on);
+  const b = $("#send");
+  // Swap the ICON. This wrote textContent, which did two things at once: it
+  // crammed the word "Stop" into a 34px circle, and — because textContent
+  // replaces the element's children — it destroyed the arrow SVG that
+  // applyIcons had put there, so the send button was the word "Send" for the
+  // rest of the session. The label the assistive tech reads is set alongside,
+  // since a glyph on its own says nothing to a screen reader.
+  b.innerHTML = IC[on ? "stop" : "arrowUp"] || "";
+  b.title = on ? "Stop" : "Send";
+  b.setAttribute("aria-label", on ? "Stop generating" : "Send message");
+  b.classList.toggle("stopbtn", on);
   if (!on) { $("#input").focus(); autoGrow(); }
 }
 

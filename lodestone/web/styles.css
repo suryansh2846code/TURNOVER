@@ -468,10 +468,24 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   filter: brightness(1.07);
   transform: scale(1.04);
 }
+/* Busy is a state worth seeing from the corner of your eye, so the stop
+   button breathes. The ring is a separate box-shadow rather than a scale
+   transform: scaling the button moves the click target under the pointer
+   while the user is reaching for it. */
 #send.stopbtn {
   background: var(--danger);
   color: #fff;
+  animation: send-pulse 1.8s ease-in-out infinite;
 }
+#send.stopbtn:hover { filter: brightness(1.08); }
+@keyframes send-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,107,107,.42); }
+  60%      { box-shadow: 0 0 0 7px rgba(255,107,107,0); }
+}
+/* The composer disables its input while a turn runs; the send button must
+   stay live, because it is the only way to stop the turn. */
+.composer:has(textarea:disabled) .cmp-send { opacity: 1; }
+.cmp-send svg { display: block; }
 
 /* ── Floating Popover & Flyouts for Model / Provider Picker ── */
 .cmp-model-picker-wrap {
