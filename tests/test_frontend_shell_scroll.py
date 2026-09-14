@@ -83,7 +83,7 @@ def _measure() -> dict:
 
     turns = "".join(
         '<div class="msg user">summarize my mail</div>'
-        '<div class="msg assistant"><span class="orb a-orb"></span><div class="a-body">'
+        '<div class="msg assistant"><div class="a-body">'
         "<p>A reply long enough that forty of them cannot fit in one window, which "
         "is the only condition under which this bug appears at all.</p></div></div>"
         for _ in range(TURNS)

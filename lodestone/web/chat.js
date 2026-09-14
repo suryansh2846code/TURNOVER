@@ -287,8 +287,10 @@ function addMsg(role, text, images) {
     const { clean, actions } = parseActions(text);
     const el = document.createElement("div");
     el.className = "msg assistant";
-    const oid = agentOrbId(agents.find((x) => x.id === current));
-    el.innerHTML = `<span class="orb a-orb" style="${orbStyle(oid)}"></span><div class="a-body">${md(clean)}</div>`;
+    // No avatar on each turn. Which agent is answering is already said by the
+    // chat header and the rail; repeating it beside every message spent a
+    // 34px column on it and pushed the prose off the column's left edge.
+    el.innerHTML = `<div class="a-body">${md(clean)}</div>`;
     box.appendChild(el);
     for (const a of actions) box.appendChild(actionCard(a));
     box.scrollTop = 1e9; return el;
