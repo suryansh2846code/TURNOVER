@@ -33,15 +33,15 @@ const el = (sel) => {
 };
 
 // The nav buttons app.js binds at load, one per data-nav value.
-const NAVS = ["brain", "sources", "tasks", "tools", "model"];
+const NAVS = ["brain", "inbox", "sources", "tasks", "tools", "model"];
 const navButtons = NAVS.map((nav) => Object.assign(makeEl("button"), { dataset: { nav } }));
 
 // Model and Connectors share one shell, so "did the screen open" is only half
 // the question — the other half is which panel it opened on. Both panels have
 // to exist for showSettingsPanel() to have anything to hide.
-const panels = ["connectors", "model"].map((sp) =>
+const panels = ["inbox", "connectors", "model"].map((sp) =>
   Object.assign(makeEl("div"), { dataset: { sp }, hidden: true }));
-const railItems = ["brain", "connectors", "model"].map((msnav) =>
+const railItems = ["inbox", "brain", "connectors", "model"].map((msnav) =>
   Object.assign(makeEl("button"), { dataset: { msnav } }));
 
 globalThis.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
@@ -71,7 +71,7 @@ el("#drawerBg").hidden = true;
 const opened = {};
 let error = null;
 try {
-  for (const nav of ["model", "tasks", "tools", "sources"]) {
+  for (const nav of ["model", "tasks", "tools", "sources", "inbox"]) {
     el("#modelScreen").hidden = true;
     el("#drawerBg").hidden = true;
     panels.forEach((p) => { p.hidden = true; });

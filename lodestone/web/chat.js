@@ -349,11 +349,30 @@ function addMsg(role, text, images) {
 }
 function addTrace(steps) {
   if (!steps.length) return;
-  const el = document.createElement("div"); el.className = "trace";
-  el.innerHTML = steps.filter((s) => s.kind === "tool_call").map((s) => {
+  const calls = steps.filter((s) => s.kind === "tool_call");
+  if (!calls.length) return;
+  // Folded away by default. What an agent actually ran is worth being able to
+  // check — it is the difference between trusting the answer and taking it on
+  // faith — but it is not the answer, and a screenful of raw tool arguments
+  // between two replies buries the thing the user came for.
+  //
+  // <details> rather than a button and a class: it is open/closed state the
+  // browser already owns, it is keyboard-operable for free, and it cannot get
+  // out of step with a re-render the way a toggle flag can.
+  const el = document.createElement("details");
+  el.className = "trace";
+  // Name the tools in the summary, so the fold still says what happened.
+  const names = [...new Set(calls.map((c) => c.name))];
+  const shown = names.slice(0, 3).join(", ") + (names.length > 3 ? `, +${names.length - 3} more` : "");
+  el.innerHTML = `<summary class="trace-sum">
+      <span class="trace-chev" aria-hidden="true"></span>
+      <span>Show thinking</span>
+      <span class="trace-n">${calls.length} step${calls.length === 1 ? "" : "s"} · ${esc(shown)}</span>
+    </summary>
+    <div class="trace-body">` + calls.map((s) => {
     const res = (steps.find((r) => r.kind === "tool_result" && r.name === s.name) || {}).result || "";
-    return `<div class="step"><span class="tname">${s.name}</span>(${esc(JSON.stringify(s.arguments))})<span class="res">${esc(res.slice(0, 160))}</span></div>`;
-  }).join("");
+    return `<div class="step"><span class="tname">${esc(s.name)}</span>(${esc(JSON.stringify(s.arguments))})<span class="res">${esc(res.slice(0, 160))}</span></div>`;
+  }).join("") + `</div>`;
   $("#messages").appendChild(el); $("#messages").scrollTop = 1e9;
 }
 
@@ -363,8 +382,17 @@ let controller = null;          // AbortController for the in-flight turn
 function setBusy(on) {
   busy = on;
   $("#input").disabled = on;
-  $("#send").textContent = on ? "Stop" : "Send";
-  $("#send").classList.toggle("stopbtn", on);
+  const b = $("#send");
+  // Swap the ICON. This wrote textContent, which did two things at once: it
+  // crammed the word "Stop" into a 34px circle, and — because textContent
+  // replaces the element's children — it destroyed the arrow SVG that
+  // applyIcons had put there, so the send button was the word "Send" for the
+  // rest of the session. The label the assistive tech reads is set alongside,
+  // since a glyph on its own says nothing to a screen reader.
+  b.innerHTML = IC[on ? "stop" : "arrowUp"] || "";
+  b.title = on ? "Stop" : "Send";
+  b.setAttribute("aria-label", on ? "Stop generating" : "Send message");
+  b.classList.toggle("stopbtn", on);
   if (!on) { $("#input").focus(); autoGrow(); }
 }
 

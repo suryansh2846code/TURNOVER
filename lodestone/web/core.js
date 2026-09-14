@@ -48,6 +48,7 @@ const IC = {
   tasks: _S('<rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M5.4 8l1.7 1.7L11 5.9"/>'),
   tools: _S('<path d="M2 5h6M11 5h3M2 11h3M8 11h6"/><circle cx="9.3" cy="5" r="1.5"/><circle cx="6" cy="11" r="1.5"/>'),
   model: _S('<circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/>'),
+  inbox: _S('<path d="M2.2 9h3.4l1 2h6.8l1-2h3.4"/><path d="M2.2 9 4.6 3.3h6.8L13.8 9v3.6a1.2 1.2 0 0 1-1.2 1.2H3.4a1.2 1.2 0 0 1-1.2-1.2z"/>'),
   help: _S('<circle cx="8" cy="8" r="6"/><path d="M6.2 6.2a1.9 1.9 0 0 1 3.6.7c0 1.3-1.8 1.5-1.8 2.7"/><circle cx="8" cy="11.4" r=".55" fill="currentColor" stroke="none"/>'),
   message: _S('<path d="M2.5 4.5h11v6.5H7l-3 2v-2H2.5z"/>'),
   search: _S('<circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2L14 14"/>'),
@@ -55,6 +56,9 @@ const IC = {
   plus: _S('<path d="M8 3.5v9M3.5 8h9"/>', 18),
   mic: _S('<rect x="6" y="2" width="4" height="7.5" rx="2"/><path d="M4 8a4 4 0 0 0 8 0M8 11.5V14"/>', 17),
   arrowUp: _S('<path d="M8 12.5V4M4.5 7.5L8 4l3.5 3.5"/>', 17),
+  //: Filled, and rounded rather than a hard square — it sits inside a 34px
+  //: circle, where a sharp-cornered square reads as a rendering artefact.
+  stop: _S('<rect x="5" y="5" width="6" height="6" rx="1.4" fill="currentColor" stroke="none"/>', 17),
   lock: _S('<rect x="3.5" y="7" width="9" height="6" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>', 13),
   cloud: _S('<path d="M5 12a3 3 0 0 1 .3-6 3.5 3.5 0 0 1 6.6.8A2.6 2.6 0 0 1 11.5 12z"/>', 13),
   clock: _S('<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.4"/>'),

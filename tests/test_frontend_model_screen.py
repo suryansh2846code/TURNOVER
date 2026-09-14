@@ -38,7 +38,8 @@ def test_the_harness_reached_the_handlers(clicked):
     assert clicked["error"] is None, clicked["error"]
 
 
-@pytest.mark.parametrize("nav,panel", [("model", "model"), ("sources", "connectors")])
+@pytest.mark.parametrize("nav,panel", [("model", "model"), ("sources", "connectors"),
+                                       ("inbox", "inbox")])
 def test_a_settings_item_opens_the_screen_on_its_own_panel(clicked, nav, panel):
     """Model and Connectors share one shell, so opening the screen is only half
     of it — landing on the wrong panel shows the screen with the other page on
@@ -64,6 +65,13 @@ def test_the_screen_can_be_closed(clicked):
 
 
 # ── the panel really left the drawer ──────────────────────────────────────
+def test_routines_and_reminders_left_the_tasks_drawer():
+    """Two homes for the same list means one of them is the stale one."""
+    tasks_panel = INDEX.split('data-d="tasks"', 1)[1].split("</div>\n\n", 1)[0]
+    assert 'id="routineList"' not in tasks_panel
+    assert 'id="reminderList"' not in tasks_panel
+
+
 def test_no_sources_panel_is_left_inside_the_drawer():
     assert 'data-d="sources"' not in INDEX, (
         "the drawer still has a sources panel — two copies of #connectors would "

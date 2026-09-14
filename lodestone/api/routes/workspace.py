@@ -92,6 +92,32 @@ class NewRoutine(BaseModel):
     interval_min: int = 60
 
 
+class EditRoutine(BaseModel):
+    """A partial edit. Every field is optional — sending only what changed is
+    the difference between "rename this" and "replace this with what my form
+    happened to be holding"."""
+
+    name: str | None = None
+    agent_id: str | None = None
+    trigger: str | None = None
+    instruction: str | None = None
+    interval_min: int | None = None
+
+
+class NewReminder(BaseModel):
+    message: str
+    #: ISO datetime. The client owns the clock here: the user picked a wall
+    #: time in their own timezone, and re-deriving it server-side is how a
+    #: 9am reminder becomes a 2pm one.
+    fire_at: str
+    agent_id: str | None = None
+
+
+class EditReminder(BaseModel):
+    message: str | None = None
+    fire_at: str | None = None
+
+
 @router.get("/api/routines")
 def list_routines():
     from ...routines import get_routines
@@ -103,6 +129,15 @@ def create_routine(body: NewRoutine):
     from ...routines import get_routines
     return get_routines().create(body.name, body.agent_id, body.trigger,
                                  body.instruction, body.interval_min)
+
+
+@router.patch("/api/routines/{rid}")
+def edit_routine(rid: str, body: EditRoutine):
+    from ...routines import get_routines
+    out = get_routines().update(rid, **body.model_dump(exclude_none=True))
+    if out is None:
+        raise HTTPException(404, "no such routine")
+    return out
 
 
 @router.post("/api/routines/{rid}/toggle")
@@ -135,6 +170,29 @@ def list_reminders():
                       "fire_at": a["fire_at"], "agent_id": a.get("agent_id")})
     items.sort(key=lambda x: x["fire_at"])
     return {"reminders": items}
+
+
+@router.post("/api/reminders")
+def create_reminder(body: NewReminder):
+    from ...reminders import get_reminders
+    if not body.message.strip():
+        raise HTTPException(422, "a reminder needs something to say")
+    return get_reminders().add(body.message, body.fire_at, body.agent_id)
+
+
+@router.patch("/api/reminders/{rid}")
+def edit_reminder(rid: str, body: EditReminder):
+    """Reword or move a reminder.
+
+    Only reminders. The same list carries scheduled ACTIONS — a queued email,
+    a calendar event — and those are not free text with a time attached; a
+    half-edited action is worse than one the user cancels and re-asks for.
+    """
+    from ...reminders import get_reminders
+    out = get_reminders().update(rid, body.message, body.fire_at)
+    if out is None:
+        raise HTTPException(404, "no such reminder, or it has already fired")
+    return out
 
 
 @router.delete("/api/reminders/{rid}")
