@@ -11,6 +11,41 @@
 
 ---
 
+## Status — what has been done since (2026-09-14)
+
+This report is a **dated snapshot**, kept as written so the evidence stays
+readable. What it found has largely been acted on:
+
+| § | finding | status |
+|---|---|---|
+| D.1 | CLI login state machine duplicated verbatim | **done** — one `models/cli_login.py`, 147 lines deleted |
+| D.2 | `_augmented_path()` in three files | **done** — one implementation; the three `_EXTRA_BIN_DIRS` lists deliberately *not* merged, see below |
+| F.1 | `app.js` is 3,581 lines | **done** — eleven scripts, `app.js` is the 237-line shell |
+| F.2 | the harnesses can only load one file | **done** — `tests/js/_app_source.mjs`, order read from `index.html` |
+| F.4 | the dead delete button | **done** — endpoint added, plus a contract test for all 67 frontend calls |
+| G.1 | `CLAUDE.md` is 742 lines / 49.5 KB | **done** — 294 lines / 15 KB, nothing lost |
+| G.2 | architecture described in four places | **done** — `docs/ARCHITECTURE.md` is normative |
+| H.3 | no coverage measurement | **done** — runs in CI, 76%, no threshold |
+| — | CI was red | **done** — two missing extras; also recovered 20 silently-skipping macOS tests |
+
+**Still open, and deliberately so:**
+
+| § | finding | why it was left |
+|---|---|---|
+| C.1 | the 14-module cycle in `models/` | genuine design change; touches provider auth |
+| C.2 | 199 function-level imports | mostly a symptom of C.1 |
+| C.3 | eight feature modules own no package | wide import churn for a naming win |
+| C.4 | `api/` imports `desktop` | needs a bridge; two subsystems |
+| C.5 | `core/` imports `brain/` | one import, low value alone |
+| B.1–B.3 | `run_turn`, `store.search`, `brain.recall` | all well covered (92%, 86%, 69%); readability, not risk |
+
+**One finding here was wrong.** D.2 implied the three `_EXTRA_BIN_DIRS` lists
+should merge. They should not: each also drives the fallback binary scan in its
+own `find_*` function, so unifying them would send Cursor's finder through
+`~/.grok/bin`. Only the six lines that consume the lists were shared.
+
+---
+
 ## Scale
 
 | | |

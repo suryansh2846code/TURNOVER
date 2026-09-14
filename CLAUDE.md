@@ -222,7 +222,7 @@ In order: **the focused test → the subsystem's suite → `pytest` →
 `ruff check lodestone tests` → `mypy lodestone` → the `tests/js/` harnesses if
 the frontend changed → `lodestone app` opens and renders.**
 
-Baseline in CI: **1434 passed, 20 skipped**, ruff clean, mypy clean over 114
+Baseline in CI: **1440 passed, 20 skipped**, ruff clean, mypy clean over 114
 files, coverage 76%. Locally the split differs — some tests skip when a provider
 is genuinely connected on the machine. Run tests when stuck or finishing, not
 after every edit. Details: [`tests/CLAUDE.md`](tests/CLAUDE.md).

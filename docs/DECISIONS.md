@@ -431,6 +431,92 @@ context at once. If it does, the thing to bring back first is not the ownership
 map — it is a contract test per seam, which is the part that actually caught
 something.
 
+## Complexity reduction (X-series)
+
+*2026-09-14. A pass whose brief was "make the next change easier, not make the
+codebase different". Two real bugs were found on the way; the rest is
+structure.*
+
+### X1 — `docs/ARCHITECTURE.md` is the one normative architecture document
+
+Architecture was described in four places — `CLAUDE.md` §Layout, `PROJECT.md`
+§4, this file, and the eleven directory notes. Four descriptions of one system
+is three chances to read the stale one.
+
+`ARCHITECTURE.md` now owns subsystem ownership, the allowed dependency
+direction, the contracts between layers and the invariants. The others point at
+it. **Adding a fifth description is the failure mode to avoid**, including in a
+future audit report.
+
+### X2 — `CLAUDE.md` is an operating manual, not an archive
+
+742 lines loaded into every session before any work began, of which 53% was two
+sections of implementation history. Now 294 lines: purpose, commands, ownership,
+invariants, how to work here, and a table of where to look for everything else.
+
+Nothing was deleted — the war stories moved to `DESKTOP-SIGNIN.md` (which
+already held all ten incidents) and to new `docs/development/` files. Verified by
+grepping 28 load-bearing identifiers across the result, not by reading it over.
+
+### X3 — Coverage prints, and never gates
+
+No threshold, and there should not be one: a percentage invites tests written to
+raise it. The per-module table is the output that matters — it is how
+`grok_cli.cancel_cli_login` was found to have no test at all while its
+byte-identical twin in `cursor.py` was covered.
+
+Nothing is omitted from the report either. `desktop.py` sits at 31% because
+`run_app` needs a real window, and a file excluded to keep the number tidy is
+the number lying.
+
+### X4 — One vendor-CLI sign-in, and vendor lists stay with vendors
+
+`cursor.py` and `grok_cli.py` each carried the same ninety-line login state
+machine; normalising four names left two differences across it. Identical was
+never the problem — **separately maintained** was, and the coverage asymmetry
+above is what that looks like.
+
+The counterpart decision is where the sharing stops. The three `_EXTRA_BIN_DIRS`
+lists were **not** merged: each also drives the fallback binary scan in its own
+`find_*`, so unifying them would send Cursor's finder through `~/.grok/bin`.
+Deduplication that changes behaviour is not deduplication.
+
+### X5 — The frontend splits into plain scripts, never ES modules
+
+`app.js` went 3,581 → 237 lines across eleven files. Not modules: the nine
+`tests/js` harnesses evaluate the frontend with `new Function`, which compiles a
+script and cannot process `import`, and several of them reach into that scope to
+install a fixture. Several `<script src>` tags in one shared scope is
+semantically what one file already was.
+
+**`index.html` declares the order and is the only place it is written down.** A
+hardcoded list in the loader would be a second source of truth whose drift is
+silent — the browser loading one order while the tests load another is exactly
+the class of bug these harnesses exist to catch.
+
+### X6 — A test that reads the frontend reads all of it
+
+Twice, moving code out of `app.js` broke tests that greped it by path. The first
+time was eleven at once, loudly. The dangerous version is the one that keeps
+passing while checking a file the code has moved out of — and the next
+extraction would have produced exactly that.
+
+`tests/web_sources.py` reads `index.html` the same way `_app_source.mjs` does,
+and a guard now fails if any test reads `app.js` directly. Passing the path to a
+harness is still fine; only reading it here is the mistake.
+
+### X7 — Each file must parse on its own, not just the concatenation
+
+The `tools.js` cut ended one line early, leaving a closing brace behind. The two
+halves **cancelled out** when joined, so `node --check` on the whole was happy
+while every top-level declaration after the seam sat nested inside a truncated
+function and nothing was global.
+
+Parsing the concatenation is a different question from parsing each file. It is
+now the fifth check before any cut, and it refuses the bad one.
+
+---
+
 ## Deferred (tracked, do later)
 
 - **Tier 2 scaling**: sqlite-vec (ANN) + FTS5 + incremental indexing, for when the
