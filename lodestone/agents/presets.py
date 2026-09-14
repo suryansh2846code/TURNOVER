@@ -46,6 +46,7 @@ PRESETS: dict[str, Agent] = {
         ),
         tools=[*_BASE_TOOLS, "gmail_search", "web_search"],
         recall_sources=["gmail", "gcal"],
+        actions=["send_email", "create_event", "set_reminder", "create_routine"],
     ),
     "launch": Agent(
         id="launch",
@@ -58,6 +59,7 @@ PRESETS: dict[str, Agent] = {
             "action items as tasks."
         ),
         tools=[*_BASE_TOOLS, "web_search", "add_task", "list_tasks", "complete_task"],
+        actions=["send_email", "create_event", "set_reminder", "create_routine"],
     ),
     "research": Agent(
         id="research",
@@ -68,6 +70,9 @@ PRESETS: dict[str, Agent] = {
             "compare options, and synthesize findings — combining the public web "
             "with what the user already knows in their brain. Cite sources."
         ),
+        # No actions at all: Research investigates and reports. It has nothing
+        # to send with, so it is not taught a protocol for sending — which also
+        # removes any way for it to claim it sent something.
         tools=[*_BASE_TOOLS, "web_search"],
     ),
     "personal": Agent(
@@ -82,6 +87,7 @@ PRESETS: dict[str, Agent] = {
             "discreet, and proactive."
         ),
         tools=[*_BASE_TOOLS, "add_task", "list_tasks", "complete_task"],
+        actions=["send_email", "create_event", "set_reminder", "create_routine"],
     ),
 }
 

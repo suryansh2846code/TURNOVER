@@ -33,6 +33,31 @@ from .effort import Effort, get_effort
 log = get_logger(__name__)
 
 
+@dataclass
+class Spend:
+    """What a turn has spent, shared by everyone working on it.
+
+    Mutable and held by reference on the frozen `Chain`, which is the point: a
+    sub-agent gets the same ledger rather than a copy, so three agents at High
+    cannot each spend a full allowance. Depth and per-agent step budgets bound
+    the shape of a chain; this is what bounds its cost.
+    """
+
+    limit: int = 0
+    used: int = 0
+
+    def add(self, tokens: int) -> None:
+        self.used += max(0, int(tokens or 0))
+
+    @property
+    def exhausted(self) -> bool:
+        return self.limit > 0 and self.used >= self.limit
+
+    @property
+    def remaining(self) -> int:
+        return max(0, self.limit - self.used) if self.limit > 0 else 0
+
+
 @dataclass(frozen=True)
 class Chain:
     """Who is currently asking whom, on what budget, and until when."""
@@ -43,6 +68,9 @@ class Chain:
     #: ends the agent the user is talking to and leaves the one it delegated to
     #: running — which is the same lie one level further in.
     cancel: threading.Event | None = None
+    #: The shared token ledger for this turn. Inherited, never re-created, so a
+    #: delegated question spends the parent's remainder.
+    spend: Spend | None = None
 
     @property
     def depth(self) -> int:
@@ -68,8 +96,13 @@ def enter(agent_id: str, effort: Effort,
           cancel: threading.Event | None = None):
     """Record that `agent_id` is now running. Returns a token for `leave`."""
     chain = current_chain()
+    # The first agent opens the ledger; everyone below it inherits the same one,
+    # so a delegated question spends the parent's remainder rather than a fresh
+    # allowance of its own.
+    spend = chain.spend or Spend(limit=effort.max_tokens_per_turn)
     return _CHAIN.set(Chain(agents=(*chain.agents, agent_id), effort=effort,
-                            cancel=cancel if cancel is not None else chain.cancel))
+                            cancel=cancel if cancel is not None else chain.cancel,
+                            spend=spend))
 
 
 def leave(token) -> None:
@@ -101,6 +134,9 @@ def refusal(agent_id: str) -> str | None:
         return (f"You have already passed this question through "
                 f"{chain.depth + 1} agents, which is the limit. Answer with "
                 "what you have.")
+    if chain.spend is not None and chain.spend.exhausted:
+        return ("This turn has spent its budget, so there is nothing left to "
+                "pass on. Answer with what you have.")
     if agent_id in chain.agents:
         return (f"'{agent_id}' is already working on this question further up "
                 "the chain — asking it again would loop. Answer yourself.")

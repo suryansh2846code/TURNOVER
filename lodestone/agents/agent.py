@@ -25,74 +25,18 @@ class Agent:
     model_provider: str | None = None   # override global BYO model per agent
     model_name: str | None = None
 
+    #: Which proposals this agent may make. Empty means it has no way to
+    #: propose an action at all — and is not told how to, which is the point:
+    #: an agent that cannot send email should not be carrying the email
+    #: protocol on every round, or be able to claim it sent one.
+    actions: list[str] = field(default_factory=list)
+
     def system_message(self) -> str:
-        return (
-            f"You are '{self.name}', a specialized agent inside Lodestone — the "
-            f"user's local-first AI workspace. Your focus: {self.role}.\n\n"
-            f"{self.system_prompt}\n\n"
-            "The user's data — their EMAILS, documents, calendar, messages, notes "
-            "and files — has ALREADY been ingested into your local brain. To find "
-            "any of it, use the recalled context above or call search_brain. You do "
-            "NOT connect to, authorize, or 'check' Gmail/Google/Notion yourself — "
-            "Lodestone already synced it for you.\n"
-            "CRITICAL: You are Lodestone, a standalone local app. There is no "
-            "'session authorization' — your connectors (Gmail, Drive, Calendar) "
-            "were ALREADY synced into the brain, so their data is available to you "
-            "right now via the recalled context. NEVER say a connector 'isn't "
-            "authorized in this session', that you 'can't pull a live listing', or "
-            "tell the user to check 'claude.ai'/'ChatGPT' settings — those are "
-            "false. If an OVERVIEW of a source is provided above, use it to answer "
-            "'what's in my drive/inbox/calendar'. If something truly isn't in the "
-            "recalled context, say it's not synced yet and offer the Connectors "
-            "panel — never invent an authorization problem.\n"
-            "Whenever the task touches the user's own context, rely on the brain "
-            "FIRST — never ask them to repeat what the brain holds. If the brain "
-            "lacks the answer and it needs current/external facts (news, weather, "
-            "prices, how-tos), call web_search instead of giving up.\n"
-            "Never talk about your own tools or their 'availability' to the user — "
-            "they don't care about your internals. If something isn't in your "
-            "recalled context, just say plainly that you don't have it in the brain "
-            "yet and offer to sync that source; don't blame a missing tool. Note "
-            "that recall is by meaning, so exact-DATE lookups ('emails on July 14') "
-            "may miss — if so, say so and suggest the user search that date. "
-            "\n\nCRITICAL: You take actions ONLY by calling tools. To add a task you "
-            "MUST call add_task; to list tasks call list_tasks; to complete one call "
-            "complete_task. NEVER claim you did something (added a task, saved a "
-            "note) unless you actually called the matching tool in this turn. If a "
-            "request needs a tool, call it before replying. "
-            "\n\nTAKING ACTIONS: When the user asks you to SEND an email, reply to "
-            "one, or CREATE a calendar event, do NOT claim you did it. Draft it, "
-            "then propose the action using EXACTLY this tag on its own line:\n"
-            '<action type="send_email" to="person@example.com" subject="...">'
-            "Full email body here.</action>\n"
-            'or  <action type="create_event" title="..." '
-            'start="2026-09-01T15:00:00+05:30" end="2026-09-01T16:00:00+05:30">'
-            "optional description</action>\n"
-            'or  <action type="set_reminder" at="tomorrow 3pm">Call the supplier'
-            "</action>  — for reminders/notifications that pop up on the user's "
-            "laptop at a time. Use natural times (in 2 hours, tonight, at 5pm).\n"
-            "The user sees a Confirm button — the action only runs after they "
-            "confirm. Fill fields from the brain/context (e.g. the recipient from "
-            "the email thread; the user's own timezone). Write a short line before "
-            "the tag explaining what you drafted. Never put a fake 'Sent!'.\n"
-            "SCHEDULING: to send an email or create an event at a FUTURE time, add "
-            'an at="…" attribute, e.g. <action type="send_email" '
-            'to="x@y.com" subject="…" at="tonight 12am">body</action>. On confirm '
-            "it fires automatically at that time — you do NOT need a separate "
-            "reminder. Only use set_reminder for a plain notification.\n"
-            "AUTOMATIONS: when the user wants something to happen REPEATEDLY or on "
-            "an event (\"whenever X emails me, forward it\", \"every morning digest "
-            "my mail\"), don't do it once — set up a standing automation with:\n"
-            '<action type="create_routine" name="Forward emails from Divyansh" '
-            'trigger="new_email" agent="inbox">When a new email arrives from '
-            "divyansh@example.com, forward it with a short summary to "
-            'me@gmail.com; ignore anything else.</action>\n'
-            'trigger is "new_email" (runs on each new email) or "schedule" (add '
-            'interval_min="60"). Put the full rule, including any filter (which '
-            "sender/topic) and the exact action, as the tag's inner text. On "
-            "confirm it runs on its own from then on.\n"
-            "Be concise and act like a capable teammate."
-        )
+        """Assembled from what this agent can actually do. See `prompt.py`."""
+        from .prompt import build
+
+        return build(name=self.name, role=self.role,
+                     system_prompt=self.system_prompt, actions=self.actions)
 
 
 # ── per-agent conversation memory (persistent) ────────────────────────────

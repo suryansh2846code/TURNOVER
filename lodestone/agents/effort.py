@@ -56,6 +56,15 @@ class Effort:
     #: Whether the agent is asked to keep an explicit plan on multi-step work.
     allow_planning: bool
 
+    #: Tokens one turn may spend, counted across every model call it makes —
+    #: including the ones a sub-agent makes on its behalf. Rounds were the only
+    #: ceiling before, and rounds are a poor proxy: a round carrying a long
+    #: conversation and four tool results costs many times one that carries a
+    #: sentence. This is also what finally bounds a chain in aggregate, which
+    #: `docs/AGENTS.md` has listed as missing since delegation landed.
+    #: 0 means unbounded.
+    max_tokens_per_turn: int = 0
+
     def child(self) -> Effort:
         """The budget a delegated sub-agent gets.
 
@@ -73,6 +82,11 @@ class Effort:
             max_delegation_depth=max(0, self.max_delegation_depth - 1),
             recall_limit=self.recall_limit,
             allow_planning=False,
+            # Not halved: the ledger is SHARED down the chain, so a sub-agent
+            # spends what the parent has left rather than an allowance of its
+            # own. Halving here would bound each hop twice and the whole chain
+            # not at all.
+            max_tokens_per_turn=self.max_tokens_per_turn,
         )
 
 
@@ -81,7 +95,7 @@ LOW = Effort(
     description="Quick answers. Best for small local models and simple questions.",
     max_steps=5, max_parallel_tools=2, history_verbatim=6,
     summarise_with_model=False, max_delegation_depth=0, recall_limit=6,
-    allow_planning=False,
+    allow_planning=False, max_tokens_per_turn=40_000,
 )
 
 MEDIUM = Effort(
@@ -89,7 +103,7 @@ MEDIUM = Effort(
     description="The default. Looks things up properly without running up a bill.",
     max_steps=12, max_parallel_tools=4, history_verbatim=10,
     summarise_with_model=True, max_delegation_depth=1, recall_limit=10,
-    allow_planning=True,
+    allow_planning=True, max_tokens_per_turn=150_000,
 )
 
 HIGH = Effort(
@@ -97,7 +111,7 @@ HIGH = Effort(
     description="Digs in: more lookups, asks other agents, keeps a plan. Costs more.",
     max_steps=24, max_parallel_tools=6, history_verbatim=16,
     summarise_with_model=True, max_delegation_depth=2, recall_limit=16,
-    allow_planning=True,
+    allow_planning=True, max_tokens_per_turn=500_000,
 )
 
 LEVELS: dict[str, Effort] = {e.name: e for e in (LOW, MEDIUM, HIGH)}
@@ -145,6 +159,7 @@ def describe_levels() -> list[dict[str, object]]:
         {
             "name": e.name, "label": e.label, "description": e.description,
             "max_steps": e.max_steps,
+            "max_tokens_per_turn": e.max_tokens_per_turn,
             "delegation": e.max_delegation_depth > 0,
             "planning": e.allow_planning,
         }

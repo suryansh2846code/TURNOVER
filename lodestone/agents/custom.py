@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from ..config import get_settings
 from ..log import suppressed
 from .agent import Agent
+from .prompt import KNOWN_ACTIONS
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS custom_agents (
@@ -44,6 +45,10 @@ class CustomAgentStore:
             system_prompt=r["system_prompt"],
             tools=json.loads(r["tools"]),
             recall_sources=json.loads(r["recall_sources"]),
+            # An agent the user built themselves keeps every proposal it could
+            # make before the prompt was split by capability. Narrowing one
+            # without asking would quietly take away something they had.
+            actions=list(KNOWN_ACTIONS),
         )
 
     def list(self) -> builtins.list[Agent]:

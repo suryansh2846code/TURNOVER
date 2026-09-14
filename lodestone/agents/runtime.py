@@ -26,6 +26,15 @@ from .tools import build_tools
 #: pressed the button, so this confirms rather than apologises.
 STOPPED_NOTE = "■ Stopped."
 
+#: Given to the model when the turn's *money* runs out rather than its rounds.
+#: Worded separately from BUDGET_PROMPT because the two are different facts and
+#: a model that is told the wrong one reasons about the wrong constraint.
+SPEND_PROMPT = (
+    "You have spent this turn's budget. Do not call any more tools and do not "
+    "ask another agent. Answer now with what you have, and say plainly which "
+    "parts you could not finish."
+)
+
 #: Replaced by the per-turn budget in `effort.py`. Kept as the floor a turn
 #: can never drop below, so a misconfigured profile cannot produce a loop that
 #: never calls a tool at all.
@@ -414,6 +423,9 @@ def run_turn(agent_id: str, user_text: str, *,
     runner = ToolRunner(effort=profile, cancel=cancel)
     budget = max(MIN_STEPS, profile.max_steps)
     chain_token = delegation.enter(agent.id, profile, cancel)
+    # Shared with every sub-agent this turn reaches, so three agents at High
+    # spend one budget between them rather than three.
+    ledger = delegation.current_chain().spend
     plan_token = planning.start()
     stalls = 0
     reply = ""
@@ -443,14 +455,30 @@ def run_turn(agent_id: str, user_text: str, *,
             if cancellation.stopped(cancel):
                 was_stopped = True
                 break
+            # Rounds are a poor proxy for cost: one carrying a long conversation
+            # and four tool results is worth many carrying a sentence. When the
+            # money runs out the turn still answers — it is just told to stop
+            # looking, the same way a spent step budget is handled below.
+            if ledger is not None and ledger.exhausted and _step > 0:
+                log.debug("agent %s hit its token budget after %d rounds",
+                          agent_id, _step)
+                messages.append(Message(role="system", content=SPEND_PROMPT))
+                reply = _answer_without_tools(provider, messages, _failed, emit)
+                if isinstance(reply, TurnResult):
+                    return reply
+                break
             # low temperature → more reliable instruction-following & tool use
             try:
                 result = _collect(provider.stream(messages, tools=tools,
                                                   temperature=0.15), emit, cancel)
             except Exception as exc:
                 return _failed(exc)
-            spent[0] += getattr(result, "input_tokens", 0) or 0
-            spent[1] += getattr(result, "output_tokens", 0) or 0
+            round_in = getattr(result, "input_tokens", 0) or 0
+            round_out = getattr(result, "output_tokens", 0) or 0
+            spent[0] += round_in
+            spent[1] += round_out
+            if ledger is not None:
+                ledger.add(round_in + round_out)
             # Stopped while the answer was arriving — keep what was written.
             if cancellation.stopped(cancel):
                 reply = result.text or reply

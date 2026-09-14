@@ -4,7 +4,12 @@ The turn loop, tools, effort, delegation, planning, grounding, approvals,
 permissions.
 
 - Effort is one gear selector (Low/Medium/High), not a settings screen — it
-  derives every budget at once, and it spends the *user's* money.
+  derives every budget at once, and it spends the *user's* money. It caps
+  **tokens** as well as rounds, on one ledger shared down the delegation chain,
+  so three agents spend one budget between them.
+- **An agent is only told what it can do.** The system prompt is assembled from
+  blocks in `prompt.py`; `Agent.actions` selects the proposal protocols. An
+  agent with no actions has no way to claim it sent anything.
 - Tool calls in a round run in parallel; results reassemble by `tool_call_id`.
   Delegation guards live in a `ContextVar`, so it is one `copy_context()` **per
   call**.
