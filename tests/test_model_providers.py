@@ -243,3 +243,42 @@ def test_provider_test_endpoint():
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
 
+
+def test_unknown_provider_id_does_not_silently_become_the_mock():
+    """A drifted provider id must not resolve to the offline mock.
+
+    `_REGISTRY.get(name, MockProvider)` answered any unrecognised id with the
+    mock, and the mock reports itself ready — so a stale value in localStorage,
+    or a label that never mapped, produced canned offline replies ("Based on
+    your brain: …") while the picker still showed a real vendor. Nothing told
+    the user, and token usage sat at zero in a way that read as a broken meter.
+    """
+    from lodestone.models.registry import MockProvider, UnknownProvider
+
+    p = get_provider("not-a-real-provider")
+    assert not isinstance(p, MockProvider)
+    assert isinstance(p, UnknownProvider)
+
+    ready, why = p.is_ready()
+    assert ready is False
+    # The message names what the user picked, so it is repairable rather than
+    # mysterious — and says nothing about our internals.
+    assert "not-a-real-provider" in why
+    assert "Lodestone" in why
+
+    # Asked by name, the mock is still exactly itself. It is a real backend for
+    # a first launch with no keys; it just stops being what a typo resolves to.
+    assert isinstance(get_provider("mock"), MockProvider)
+
+
+def test_a_turn_on_an_unknown_provider_says_so_instead_of_answering():
+    """The user-visible half: the turn stops, it does not produce a canned reply."""
+    from lodestone.agents.runtime import run_turn
+
+    result = run_turn("research", "who is divyansh",
+                      provider_name="not-a-real-provider")
+
+    assert "isn't ready" in result.reply
+    assert "not-a-real-provider" in result.reply
+    assert "Based on your brain" not in result.reply
+    assert result.trace == []

@@ -15,6 +15,7 @@ import uuid
 from functools import lru_cache
 
 from ..config import get_settings
+from ..log import get_logger
 from .anthropic import AnthropicProvider
 from .base import ChatResult, LLMProvider, ToolCall
 from .claude_code import ClaudeCodeProvider
@@ -23,6 +24,8 @@ from .deepseek import DeepSeekProvider
 from .gemini import GeminiProvider
 from .openai_compat import OllamaProvider, OpenAICompatProvider, OpenRouterProvider
 from .xai import XAIProvider
+
+log = get_logger(__name__)
 
 
 class SubscriptionProvider(OpenAICompatProvider):
@@ -564,10 +567,51 @@ def _entitled_model(provider_name: str, model: str | None) -> str | None:
     return resolved
 
 
+class UnknownProvider(LLMProvider):
+    """A provider id this build does not recognise.
+
+    The registry used to answer an unknown id with `MockProvider`, and the mock
+    reports itself ready — so a stale id in localStorage, a rename, or a label
+    that never mapped produced canned offline replies ("Based on your brain: …")
+    while the picker still showed a real vendor. The user was told nothing, and
+    the one number that would have given it away — token usage — stayed at zero
+    for a reason that looked like the meter being broken.
+
+    Not an exception. `get_provider` is called from a route handler, a brain
+    enrichment pass and the agent loop, and an unrecognised id is user state
+    that has drifted, not a programming error. Answering with a provider that is
+    honestly *not ready* routes it into the message the app already has for
+    exactly this — pick another model — instead of a 500 halfway through a turn.
+    """
+
+    def __init__(self, model: str | None = None, requested: str = "") -> None:
+        # The requested id, so the message names what the user actually chose
+        # rather than the word "unknown".
+        self.name = requested or "unknown"
+        self.model = model or ""
+
+    def is_ready(self) -> tuple[bool, str]:
+        return False, (f"'{self.name}' is not a model provider this version of "
+                       "Lodestone knows about")
+
+    def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
+        # A chat() returns a ChatResult and never raises. Nothing should reach
+        # here — `is_ready` is False — but a caller that skips the check gets
+        # an empty answer rather than an exception it cannot translate.
+        return ChatResult(text="")
+
+
 @lru_cache
 def get_provider(name: str | None = None, model: str | None = None) -> LLMProvider:
     name = (name or get_settings().model_provider or "mock").lower()
-    cls = _REGISTRY.get(name, MockProvider)
+    cls = _REGISTRY.get(name)
+    if cls is None:
+        # Never silently substitute the offline mock: the user keeps the model
+        # they picked and gets told it is not one we have, which is repairable.
+        log.warning("unknown model provider %r requested", name)
+        p: LLMProvider = UnknownProvider(model=model, requested=name)
+        _wrap_usage(p)
+        return p
     safe_model = _entitled_model(name, _compatible_model(name, model))
     p = cls(model=safe_model)
     _wrap_usage(p)
