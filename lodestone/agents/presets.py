@@ -15,6 +15,11 @@ from .mcp_tools import SENTINEL as MCP_TOOLS
 #: server the user adds tomorrow, and an install with no connectors gains
 #: nothing from it. Connector writes are never included — they go through
 #: propose → confirm (`permissions.NEVER_UNATTENDED`).
+#: `run_python` is deliberately absent too, and for the same reason one step
+#: further: it runs code. The user adds it to an agent themselves. The file
+#: tools ARE here, because they can reach nothing at all until the user opens a
+#: folder — the grant is the consent, and there are no grants by default.
+#:
 #: `forget_fact` is deliberately absent. These agents read email, issues and
 #: messages other people wrote, and "forget everything about X" is a sentence an
 #: injection would write — so an agent gets it only when the user puts it in
@@ -25,7 +30,7 @@ _BASE_TOOLS = ["search_brain", "who_is", "whats_true_about_me", "timeline",
                "list_entities", "web_search", "ask_agent", "ask_agents",
                "update_plan", "calendar_lookup", "sync_source", "search_source",
                "list_routines", "pause_routine", "list_pending_approvals",
-               "list_scheduled",
+               "list_scheduled", "list_dir", "read_file", "write_file",
                MCP_TOOLS]
 
 PRESETS: dict[str, Agent] = {

@@ -282,6 +282,45 @@ def _turn_images(body: ChatIn) -> list:
         raise HTTPException(422, str(exc)) from None
 
 
+class FolderIn(BaseModel):
+    """A folder the user is opening to their agents, or closing again."""
+
+    path: str
+
+
+@router.get("/api/agents/folders")
+def list_agent_folders():
+    """Which folders agents can work in. Empty until the user picks one."""
+    from ...agents import file_tools
+
+    return {"folders": file_tools.granted_roots()}
+
+
+@router.post("/api/agents/folders")
+def grant_agent_folder(body: FolderIn):
+    """Open a folder to agents.
+
+    The grant IS the consent, so this is the only way anything on disk becomes
+    reachable — there are no default grants and no implicit ones.
+    """
+    from ...agents import file_tools
+
+    try:
+        return file_tools.grant_folder(body.path)
+    except ValueError as exc:
+        # The message is written for a person, so it is passed through rather
+        # than replaced with something about paths.
+        raise HTTPException(400, str(exc)) from None
+
+
+@router.delete("/api/agents/folders")
+def revoke_agent_folder(path: str):
+    from ...agents import file_tools
+
+    return {"ok": file_tools.revoke_folder(path),
+            "folders": file_tools.granted_roots()}
+
+
 @router.post("/api/agents/turns/{turn_id}/stop")
 async def stop_turn(turn_id: str):
     """Stop a running turn.

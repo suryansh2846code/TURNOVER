@@ -10,7 +10,14 @@ from typing import Any
 
 from ..brain import get_brain
 from ..models.base import Tool
-from . import automation_tools, brain_tools, mcp_tools, source_tools
+from . import (
+    automation_tools,
+    brain_tools,
+    code_tools,
+    file_tools,
+    mcp_tools,
+    source_tools,
+)
 from .effort import get_effort
 from .results import ToolResult
 
@@ -240,6 +247,10 @@ TOOL_IMPLS = {
     "web_search": _web_search,
     "gmail_search": _gmail_search,
     "calendar_lookup": source_tools.calendar_lookup,
+    "list_dir": file_tools.list_dir,
+    "read_file": file_tools.read_file,
+    "write_file": file_tools.write_file,
+    "run_python": code_tools.run_python,
     "list_routines": automation_tools.list_routines,
     "pause_routine": automation_tools.pause_routine,
     "list_pending_approvals": automation_tools.list_pending_approvals,
@@ -450,6 +461,49 @@ TOOL_DEFS: dict[str, Tool] = {
         parameters={"type": "object", "properties": {
             "query": {"type": "string", "description": "Gmail search query"},
             "max_results": {"type": "integer", "default": 10}}},
+    ),
+    "list_dir": Tool(
+        name="list_dir",
+        description=(
+            "What is inside a folder the user has opened to you. Call it with "
+            "no path to see which folders those are. You can reach nothing "
+            "outside them."
+        ),
+        parameters={"type": "object", "properties": {
+            "path": {"type": "string", "description": "Omit to list the folders "
+                                                      "you are allowed to use"}}},
+    ),
+    "read_file": Tool(
+        name="read_file",
+        description="Read a text file from inside a folder the user opened to "
+                    "you. Use it before changing a file, so you are editing "
+                    "what is actually there.",
+        parameters={"type": "object", "properties": {
+            "path": {"type": "string"}}, "required": ["path"]},
+    ),
+    "write_file": Tool(
+        name="write_file",
+        description=(
+            "Write a text file inside a folder the user opened to you. This "
+            "REPLACES the file. Read it first if you mean to change part of it, "
+            "and say in your reply what you wrote and where."
+        ),
+        parameters={"type": "object", "properties": {
+            "path": {"type": "string"},
+            "content": {"type": "string"}}, "required": ["path", "content"]},
+    ),
+    "run_python": Tool(
+        name="run_python",
+        description=(
+            "Run a short Python snippet and get back whatever it prints. Use it "
+            "for arithmetic, parsing, dates, and reshaping data — anything where "
+            "working it out in your head would be guessing. It runs on its own "
+            "in a scratch folder with no network and no access to the user's "
+            "data, so read files with read_file and pass what you need into the "
+            "code. Only run code YOU wrote for the task at hand."
+        ),
+        parameters={"type": "object", "properties": {
+            "code": {"type": "string"}}, "required": ["code"]},
     ),
     "list_routines": Tool(
         name="list_routines",
