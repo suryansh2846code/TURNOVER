@@ -179,8 +179,19 @@ Each step ends green. The split does not begin until step 3 is proven.
 |---|---|---|---|---|
 | **1** | Add `tests/js/_app_source.mjs`. Nothing uses it yet. | 1 new | its output for a single-script `index.html` is byte-identical to `readFileSync(app.js)`, pinned by `tests/test_frontend_source_loader.py` | **done** |
 | **2** | Point all nine harnesses at it. **`app.js` is still one file**, so a pure no-op refactor of the loader. | 10 | suite unchanged — 1440 passed, 1458 collected, before and after. Proven real by deleting app.js's `<script>` tag: 26 passing harness tests become 18 failures and 7 errors. | **done** |
-| **3** | Prove the mechanism: move **one** small, self-contained cluster out — `core.js` (`$`, `api`, `esc`, `md`, `toast`, orbs, icons ≈ 115 lines) — and add its `<script>` tag **first** in `index.html`. | 3 | full suite green **without touching a harness**. `lodestone app` opens and renders. | next |
-| **4+** | One cluster per commit, largest value first: `providers.js` (863), `models.js` (792), `chat.js` (393)… | 3 each | suite green between each | |
+| **3** | Prove the mechanism: move **one** small, self-contained cluster out — `core.js` (`$`, `api`, `esc`, `md`, `toast`, orbs, icons) — and add its `<script>` tag **first** in `index.html`. | 7 | suite green **without touching a harness**. Removing core.js's tag, or loading it after app.js, each turn 19 passing drawer tests into 11 failures and 7 errors. | **done** |
+| **4+** | One cluster per commit, largest value first: `providers.js` (863), `models.js` (792), `chat.js` (393)… | 3 each | suite green between each | next |
+
+Step 3 cost more than three files, for a reason worth knowing before step 4:
+**two Python tests were reading `app.js` when they meant "the app's
+JavaScript".** One greps for `prefers-reduced-motion`; the other extracts every
+`(method, path)` the frontend calls. Both now use `tests/web_sources.py`, which
+reads `index.html` the same way `_app_source.mjs` does, and a test asserts the
+two loaders agree.
+
+**Before moving anything, grep for who reads the file you are moving out of.**
+A test that greps one file out of several does not fail — it passes, for the
+wrong reason.
 
 Step 2 needed one unplanned fix, worth knowing about before writing another
 harness driver: `test_frontend_tool_provenance.py` mutates `app.js` into a temp
