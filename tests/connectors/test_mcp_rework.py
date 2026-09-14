@@ -60,15 +60,30 @@ def test_an_unrecognised_verb_is_treated_as_a_write(name):
 
 @pytest.mark.parametrize("name", [
     "list_issues", "search_messages", "get_page", "read_file",
-    "find_customer", "describe_table", "entries", "recent_items", "my_issues",
+    "find_customer", "describe_table",
 ])
 def test_a_recognised_read_stays_callable(name):
     """Failing closed is only acceptable if ordinary reads still work — every
     read needing a tap would make the category useless."""
     from lodestone.connectors.mcp_source import classify_tools
 
-    kinds = classify_tools([tool(name, ["q"] if "_" in name else [])])
+    kinds = classify_tools([tool(name, ["q"])])
     assert name in kinds.readable, f"{name} should not need an approval card"
+
+
+@pytest.mark.parametrize("name", ["entries", "my_issues"])
+def test_a_listing_named_for_its_contents_is_a_read(name):
+    """A name with no verb in it — `entries`, `my_issues` — is a listing, but
+    only while it takes nothing to act on. The moment one requires an argument
+    it is acting on something, and back it goes behind a confirmation.
+
+    `recent_items` is deliberately not here: `recent` is a read stem, so it is
+    a read on the stronger rule above and stays one with arguments.
+    """
+    from lodestone.connectors.mcp_source import classify_tools
+
+    assert name in classify_tools([tool(name)]).readable
+    assert name in classify_tools([tool(name, ["target"])]).write
 
 
 def test_the_servers_own_declaration_wins_over_the_name():

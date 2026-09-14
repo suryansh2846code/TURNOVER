@@ -918,8 +918,8 @@ class MCPConnector(Connector):
             return False, "this connector has no command to run"
         elif resolve_command(self.spec.command) is None:
             return False, (
-                f"{self.label} needs {self.spec.command}, which isn't installed "
-                "on this Mac. Install it, then try connecting again.")
+                f"{self.label} could not be started — {self.spec.command} is "
+                "missing on this Mac. Install it, then try connecting again.")
         missing = self.spec.missing_env()
         if missing:
             return False, (f"{self.label} still needs "

@@ -278,10 +278,13 @@ def add_from_catalog(entry_id: str, env: dict[str, str] | None = None,
     if missing_args:
         return None, (f"{entry.name} still needs "
                       f"{', '.join(missing_args).lower()} before it can connect.")
-    missing_env = [v.name for v in entry.needs_env if not (env or {}).get(v.name)]
+    # Named by their labels, not their variable names: `GITHUB_TOKEN` is an
+    # internal, and the label is the words that were above the box they left
+    # empty. Same rule as `needs_args` directly above.
+    missing_env = [v.label for v in entry.needs_env if not (env or {}).get(v.name)]
     if missing_env:
         return None, (f"{entry.name} still needs "
-                      f"{', '.join(missing_env)} before it can connect.")
+                      f"{', '.join(missing_env).lower()} before it can connect.")
 
     spec = entry.to_spec(args=args)
 
