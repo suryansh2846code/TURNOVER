@@ -1,5 +1,34 @@
-// The workspace's own state. Primitives ($, api, esc, md, toast, orbs, icons)
-// live in core.js, which index.html loads first.
+/**
+ * The workspace shell: state, chrome, the agent rail, the drawers, the keyboard
+ * shortcuts, and boot.
+ *
+ * This file was the whole frontend — 3,581 lines. It is the last piece now, and
+ * everything it used to hold sits beside it, loaded by `index.html` in this
+ * order, all in one shared global scope:
+ *
+ *   core.js          $ api esc md toast, the orb palette, the icon set
+ *   providers.js     the catalog and its state, sign-in, the provider cards
+ *   models.js        the model picker, agent bindings, loadProviders()
+ *   chat.js          sending a turn, and everything that renders one
+ *   brain.js         the brain panel, sync, Google, entity and search modals
+ *   connectors.js    adding a source, and setting one up
+ *   workspace.js     approvals, tasks, reminders, routines, first-run
+ *   brain-screen.js  the full-screen canvas view
+ *   usage.js         the token meter and enrichment progress
+ *   tools.js         the Tools & skills panel
+ *   app.js           this file
+ *
+ * **Plain scripts, not modules.** The test harnesses evaluate the frontend with
+ * `new Function`, which compiles a script and cannot process `import`, and
+ * several of them reach into this scope to install a fixture. The order above
+ * is declared once, in `index.html`, and both the browser and the harnesses
+ * read it from there — see docs/development/frontend-testing.md.
+ *
+ * Load order is the dependency graph. `core.js` goes first because `esc` and
+ * `md` have ~119 call sites, and a `const` read before its definition is a
+ * temporal dead-zone ReferenceError that `node --check` passes and that has
+ * blanked a screen here twice.
+ */
 let current = null;
 let agents = [];
 let CONNECTORS = [];

@@ -213,12 +213,19 @@ change.** Not scheduled.
 | `/api/usage` | `api/routes/providers.py` | token accounting is its own subject |
 | the HUD bridge, `fs/browse`, page serving | `api/routes/workspace.py` | a five-concern grab-bag; see §6.1 |
 
-### 6.6 `web/app.js` is one 3,581-line file
-Twelve coherent clusters, no module boundaries, 37 module-level globals.
-**It cannot be split until the test harness changes first:** all nine
-`tests/js/*.mjs` harnesses read `app.js` as a single file and evaluate it with
-`new Function(src)`, which cannot process `import`/`export`. See
-[`docs/development/frontend-testing.md`](development/frontend-testing.md).
+### 6.6 ~~`web/app.js` is one 3,581-line file~~ · **CLOSED**
+
+> **Closed 2026-09-14.** `app.js` is 208 lines; the frontend is eleven plain
+> scripts, each with one responsibility, listed in
+> [`lodestone/web/CLAUDE.md`](../lodestone/web/CLAUDE.md). `index.html` declares
+> the load order and is the only place it is written down — the browser and the
+> harnesses both read it from there.
+>
+> The blocker was never the code. The harnesses evaluate the frontend with
+> `new Function`, which compiles a script and cannot process `import`, so the
+> loader had to change first and land as a proven no-op before a line moved.
+> Method, and the five checks to run before any further move:
+> [`docs/development/frontend-testing.md`](development/frontend-testing.md).
 
 ---
 
