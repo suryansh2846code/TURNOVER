@@ -49,6 +49,12 @@ class ChatIn(BaseModel):
     #: An unknown value falls back rather than failing — it arrives from a
     #: client's localStorage, which can outlive a rename.
     effort: str | None = None
+    #: A name the CLIENT chose for this turn, so it can stop it later. Chosen
+    #: client-side because a turn is cancellable from the moment the user can
+    #: see a Stop button, and an id handed back by the server would leave a
+    #: window at the start of exactly the slowest turns. Absent means the turn
+    #: cannot be stopped, which is what an internal caller gets.
+    turn_id: str | None = Field(default=None, max_length=128)
 
 
 class SecretIn(BaseModel):

@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import contextvars
 import json
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from ..log import get_logger
 from ..models.base import ToolCall
+from . import cancellation
 from .effort import Effort
 from .tools import run_tool
 
@@ -56,11 +58,21 @@ class ToolOutcome:
     """True when this exact call was already made this turn."""
 
 
+#: What a tool reports when the user stopped the turn before it ran. A sentence
+#: rather than an empty string, because it is written into the transcript the
+#: next round would read — and "" reads as "this tool found nothing".
+STOPPED_OUTPUT = "Not run — the user stopped this turn."
+
+
 @dataclass
 class ToolRunner:
     """Runs a model's tool calls for one turn, remembering what it has run."""
 
     effort: Effort
+    #: Set when the user presses Stop. Checked before each call is executed, so
+    #: a round of six tools that is stopped after the first does not run the
+    #: other five — the expensive half of a stopped turn is usually here.
+    cancel: threading.Event | None = None
     _memo: dict[str, str] = field(default_factory=dict, repr=False)
     calls_made: int = 0
     repeats_seen: int = 0
@@ -126,6 +138,8 @@ class ToolRunner:
         return [o for o in outcomes if o is not None]
 
     def _execute(self, call: ToolCall, key: str) -> ToolOutcome:
+        if cancellation.stopped(self.cancel):
+            return ToolOutcome(call, STOPPED_OUTPUT)
         output = run_tool(call.name, call.arguments)
         self._memo[key] = output
         return ToolOutcome(call, output)

@@ -155,7 +155,8 @@ def _ask_agent(agent_id: str, question: str) -> str:
 
     chain = delegation.current_chain()
     budget = (chain.effort or get_effort()).child()
-    result = run_turn(target, question, effort=budget)
+    # The sub-agent stops when the parent does — same event, not a copy.
+    result = run_turn(target, question, effort=budget, cancel=chain.cancel)
     used = ", ".join(sorted({s.name for s in result.trace if s.kind == "tool_call"}))
     header = f"[{target} answered"
     header += f", using: {used}]" if used else "]"

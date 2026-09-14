@@ -9,6 +9,11 @@ permissions.
   Delegation guards live in a `ContextVar`, so it is one `copy_context()` **per
   call**.
 - Compress old turns, never drop them.
+- **Anything the user starts, they can stop.** A turn carries a stop event
+  (`cancellation.py`); the loop reads it between rounds, before each tool, and
+  while a stream is arriving. A stopped turn keeps the half-written answer and
+  spends nothing more — not one wrap-up call, not the post-turn learning — and
+  its delegated sub-agents stop with it.
 - **Anything we add to the model's input, we take back out before a tool reads
   it.** The date note goes in with `grounding.prefixed` and comes out with
   `grounding.strip_arguments` — a model copies its own input, and a date inside

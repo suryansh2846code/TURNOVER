@@ -330,6 +330,21 @@ function addTrace(steps) {
 
 let busy = false;               // one turn at a time per the whole workspace
 let controller = null;          // AbortController for the in-flight turn
+let turnId = null;              // the name this turn answers to, for Stop
+
+// Stop the running turn. The server is told first and the fetch is left alone,
+// because the turn keeps whatever it had already written and sends it back —
+// aborting here would throw that away and, worse, leave the model calls running
+// on the user's own key with the screen saying the work had ended.
+async function stopTurn() {
+  if (!turnId) { if (controller) controller.abort(); return; }
+  const id = turnId;
+  try {
+    await api(`/api/agents/turns/${encodeURIComponent(id)}/stop`, { method: "POST" });
+  } catch (_) {
+    if (controller) controller.abort();   // could not reach it; end it locally
+  }
+}
 
 function setBusy(on) {
   busy = on;
@@ -404,6 +419,10 @@ async function send(text) {
   if (busy) return;             // guard: ignore sends while a turn is running
   setBusy(true);
   controller = new AbortController();
+  // Named before the request leaves, so Stop works from the first frame the
+  // button is visible rather than from whenever the server gets around to us.
+  turnId = (crypto.randomUUID && crypto.randomUUID())
+    || `t-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   // Detach the attachments the moment the turn starts: the user can type the
   // next message while this one runs, and anything still in the tray then
   // belongs to THAT message, not this one.
@@ -424,10 +443,10 @@ async function send(text) {
     loadReminders();   // …or set a reminder
   } catch (e) {
     think.done();
-    if (controller && controller.signal.aborted) addMsg("assistant", "■ stopped");
+    if (controller && controller.signal.aborted) addMsg("assistant", "■ Stopped.");
     else addMsg("assistant", "△ " + e);
   }
-  finally { controller = null; setBusy(false); }
+  finally { controller = null; turnId = null; setBusy(false); }
 }
 
 // Run one turn over Server-Sent Events, showing the reply as it is written and
@@ -439,6 +458,7 @@ async function streamTurn(text, think) {
     message: text, provider: $("#provider").value || undefined,
     model: localStorage.getItem("lodestone_model") || undefined,
     effort: localStorage.getItem("lodestone_effort") || undefined,
+    turn_id: turnId || undefined,
     images: sentImages.map((a) => ({ data_url: a.dataUrl, name: a.name })),
   });
   let resp;

@@ -163,7 +163,7 @@ $("#pickIngest").onclick = async () => {
 
 $("#composer").onsubmit = (e) => {
   e.preventDefault();
-  if (busy) { if (controller) controller.abort(); return; }   // Stop
+  if (busy) { stopTurn(); return; }   // Stop — the server hears about it
   const v = $("#input").value.trim();
   if ((v || attachments.length) && current) {
     $("#input").value = ""; autoGrow(); send(v);

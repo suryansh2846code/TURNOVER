@@ -14,6 +14,7 @@ not, and if they do not, no model is going to rescue them.
 """
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -194,6 +195,26 @@ def run(*, include_slow: bool = True) -> Scorecard:
         check("date_note", "The date we tell the model never reaches a tool")(
             bool(note_args) and "[Today is" not in note_args.get("query", ""),
             note_args.get("query", "(never called)")[:60])
+
+        # ── stop actually stops ──────────────────────────────────────────
+        # Everything after the first check is spend the user asked to end.
+        stop = threading.Event()
+        spend = {"tools": 0}
+
+        def stops_the_turn(**kw):
+            spend["tools"] += 1
+            stop.set()                      # the user presses Stop, mid-tool
+            return "ok"
+
+        tools_mod.TOOL_IMPLS["list_entities"] = stops_the_turn
+        provider = _scripted([[("list_entities", {"limit": i})] for i in range(24)])
+        use(provider)
+        halted = runtime.run_turn("research", "dig deep", effort="high",
+                                  cancel=stop)
+        check("stop", "Stop ends the turn, not just the watching")(
+            halted.stopped and provider.rounds == 1 and spend["tools"] == 1,
+            f"{provider.rounds} model call(s) and {spend['tools']} tool(s), "
+            f"of a 24-round budget")
 
         # ── parallelism ──────────────────────────────────────────────────
         if include_slow:

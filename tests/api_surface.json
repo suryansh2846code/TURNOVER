@@ -67,6 +67,7 @@
  "POST /api/agents/effort",
  "POST /api/agents/lead",
  "POST /api/agents/permissions",
+ "POST /api/agents/turns/{turn_id}/stop",
  "POST /api/agents/{agent_id}/chat",
  "POST /api/agents/{agent_id}/chat/stream",
  "POST /api/agents/{agent_id}/clear",

@@ -24,6 +24,7 @@ trusted to a prompt:
 from __future__ import annotations
 
 import contextvars
+import threading
 from dataclasses import dataclass
 
 from ..log import get_logger
@@ -34,10 +35,14 @@ log = get_logger(__name__)
 
 @dataclass(frozen=True)
 class Chain:
-    """Who is currently asking whom, and on what budget."""
+    """Who is currently asking whom, on what budget, and until when."""
 
     agents: tuple[str, ...] = ()
     effort: Effort | None = None
+    #: The parent turn's stop event, carried down the chain. Without it, Stop
+    #: ends the agent the user is talking to and leaves the one it delegated to
+    #: running — which is the same lie one level further in.
+    cancel: threading.Event | None = None
 
     @property
     def depth(self) -> int:
@@ -59,10 +64,12 @@ def current_chain() -> Chain:
     return _CHAIN.get() or _EMPTY
 
 
-def enter(agent_id: str, effort: Effort):
+def enter(agent_id: str, effort: Effort,
+          cancel: threading.Event | None = None):
     """Record that `agent_id` is now running. Returns a token for `leave`."""
     chain = current_chain()
-    return _CHAIN.set(Chain(agents=(*chain.agents, agent_id), effort=effort))
+    return _CHAIN.set(Chain(agents=(*chain.agents, agent_id), effort=effort,
+                            cancel=cancel if cancel is not None else chain.cancel))
 
 
 def leave(token) -> None:

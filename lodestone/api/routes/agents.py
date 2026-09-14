@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ...agents import list_agents, run_turn
+from ...agents import cancellation, list_agents, run_turn
 from ...agents.agent import AgentMemory
 from ...brain import get_brain
 from ...config import get_settings
@@ -282,6 +282,24 @@ def _turn_images(body: ChatIn) -> list:
         raise HTTPException(422, str(exc)) from None
 
 
+@router.post("/api/agents/turns/{turn_id}/stop")
+async def stop_turn(turn_id: str):
+    """Stop a running turn.
+
+    `async` and doing no work, deliberately: `/chat` runs on the bounded
+    `@calls_a_model` lane, so when every slot is busy — which is precisely when
+    somebody wants to press Stop — a handler that needed a worker thread would
+    queue behind the very turns it is meant to end.
+
+    Always reports success. Stop is idempotent, it is allowed to arrive before
+    the turn registers, and a turn that has already finished is also "stopped"
+    as far as the person who pressed the button is concerned. Telling them
+    otherwise would be reporting our bookkeeping as their problem.
+    """
+    cancellation.cancel(turn_id)
+    return {"ok": True, "turn_id": turn_id}
+
+
 @router.post("/api/agents/{agent_id}/chat")
 @calls_a_model
 def chat(agent_id: str, body: ChatIn):
@@ -291,15 +309,18 @@ def chat(agent_id: str, body: ChatIn):
     # message is only empty when nothing came with it.
     if not message and not images:
         raise HTTPException(422, "message is empty")
+    stop = cancellation.begin(body.turn_id)
     try:
         result = run_turn(agent_id, message, provider_name=body.provider,
                           model_name=body.model, effort=body.effort,
-                          images=images)
+                          images=images, cancel=stop)
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'") from None
     except Exception as exc:  # never 500 the chat — return a readable message
         return {"agent_id": agent_id, "provider": "", "model": "", "trace": [],
                 "reply": f"⚠️ Something went wrong: {str(exc)[:200]}"}
+    finally:
+        cancellation.end(body.turn_id)
     return result.as_dict()
 
 
@@ -336,17 +357,21 @@ async def chat_stream(agent_id: str, body: ChatIn):
 
     send, receive = anyio.create_memory_object_stream(max_buffer_size=512)
 
+    stop = cancellation.begin(body.turn_id)
+
     def _work(push) -> None:
         try:
             result = run_turn(agent_id, message, provider_name=body.provider,
                               model_name=body.model, effort=body.effort,
-                              images=images, on_event=push)
+                              images=images, cancel=stop, on_event=push)
             push({"type": "done", "result": result.as_dict()})
         except KeyError:
             push({"type": "error", "message": f"unknown agent '{agent_id}'"})
         except Exception as exc:                       # never break the stream
             log.debug("streamed turn failed: %s", exc)
             push({"type": "error", "message": str(exc)[:300]})
+        finally:
+            cancellation.end(body.turn_id)
 
     async def _pump() -> None:
         async with send:

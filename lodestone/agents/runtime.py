@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -13,13 +14,17 @@ from ..log import get_logger, suppressed
 from ..models import Message, get_provider
 from ..models.base import ChatResult
 from ..models.entitlements import resolve_usable_model
-from . import delegation, grounding, planning
+from . import cancellation, delegation, grounding, planning
 from .agent import Agent, AgentMemory
 from .context import build_history
 from .effort import Effort, get_effort
 from .loop import BUDGET_PROMPT, STALL_LIMIT, ToolRunner
 from .presets import get_agent
 from .tools import build_tools
+
+#: What a stopped turn says after whatever it had already written. The user
+#: pressed the button, so this confirms rather than apologises.
+STOPPED_NOTE = "■ Stopped."
 
 #: Replaced by the per-turn budget in `effort.py`. Kept as the floor a turn
 #: can never drop below, so a misconfigured profile cannot produce a loop that
@@ -49,6 +54,8 @@ class TurnResult:
     effort: str = ""
     steps_used: int = 0
     plan: list[dict] = field(default_factory=list)
+    #: The user pressed Stop. The reply is whatever had been written by then.
+    stopped: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -60,6 +67,7 @@ class TurnResult:
             "effort": self.effort,
             "steps_used": self.steps_used,
             "plan": self.plan,
+            "stopped": self.stopped,
             "trace": [
                 {"kind": s.kind, "name": s.name, "arguments": s.arguments,
                  "result": s.result, "repeated": s.repeated}
@@ -207,20 +215,28 @@ def format_runtime_context_prompt(identity: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _collect(events, emit) -> ChatResult:
+def _collect(events, emit, cancel=None) -> ChatResult:
     """Drain a provider stream, passing text on as it arrives.
 
     The whole response is still assembled, because the agent loop needs the
     tool calls from the same round — streaming only the prose would be simpler
     and would break it.
+
+    Text is also accumulated as it goes, which only matters when the drain ends
+    early: a turn stopped mid-sentence still has the sentence, and throwing it
+    away would make Stop cost the user the answer they had already paid for.
     """
     result = None
+    partial: list[str] = []
     for event in events:
+        if cancellation.stopped(cancel):
+            break
         if event.kind == "text" and event.text:
+            partial.append(event.text)
             emit({"type": "token", "text": event.text})
         elif event.kind == "done":
             result = event.result
-    return result if result is not None else ChatResult(text="")
+    return result if result is not None else ChatResult(text="".join(partial))
 
 
 def _answer_without_tools(provider, messages, on_failure, emit):
@@ -242,6 +258,7 @@ def run_turn(agent_id: str, user_text: str, *,
              model_name: str | None = None,
              effort: str | Effort | None = None,
              images: list | None = None,
+             cancel: threading.Event | None = None,
              on_event: Callable[[dict], None] | None = None) -> TurnResult:
     agent = get_agent(agent_id)
     profile = effort if isinstance(effort, Effort) else get_effort(effort)
@@ -360,12 +377,13 @@ def run_turn(agent_id: str, user_text: str, *,
         role="user", content=grounding.prefixed(date_line, user_text),
         images=images))
     mem.append(agent.id, "user", user_text)
-    runner = ToolRunner(effort=profile)
+    runner = ToolRunner(effort=profile, cancel=cancel)
     budget = max(MIN_STEPS, profile.max_steps)
-    chain_token = delegation.enter(agent.id, profile)
+    chain_token = delegation.enter(agent.id, profile, cancel)
     plan_token = planning.start()
     stalls = 0
     reply = ""
+    was_stopped = False
 
     def _failed(exc: Exception) -> TurnResult:
         hint = ""
@@ -385,12 +403,22 @@ def run_turn(agent_id: str, user_text: str, *,
     # into whatever the caller does next.
     try:
         for _step in range(budget):
+            # Before spending a model call. This is the check that matters
+            # most: everything after it is the part the user is paying for.
+            if cancellation.stopped(cancel):
+                was_stopped = True
+                break
             # low temperature → more reliable instruction-following & tool use
             try:
                 result = _collect(provider.stream(messages, tools=tools,
-                                                  temperature=0.15), emit)
+                                                  temperature=0.15), emit, cancel)
             except Exception as exc:
                 return _failed(exc)
+            # Stopped while the answer was arriving — keep what was written.
+            if cancellation.stopped(cancel):
+                reply = result.text or reply
+                was_stopped = True
+                break
             if not result.wants_tools:
                 reply = result.text
                 break
@@ -427,6 +455,10 @@ def run_turn(agent_id: str, user_text: str, *,
                     name=call.name,
                 ))
 
+            if cancellation.stopped(cancel):
+                was_stopped = True
+                break
+
             # Put the plan back in front of the model. Without re-stating it,
             # a long turn drifts: the plan scrolls out of attention and the
             # agent finishes part one thoroughly and forgets the rest.
@@ -449,6 +481,9 @@ def run_turn(agent_id: str, user_text: str, *,
                 if stalls >= STALL_LIMIT:
                     log.debug("agent %s stalled after %d rounds; asking it to answer",
                               agent_id, _step + 1)
+                    if cancellation.stopped(cancel):
+                        was_stopped = True
+                        break
                     messages.append(Message(role="system", content=BUDGET_PROMPT))
                     reply = _answer_without_tools(provider, messages, _failed, emit)
                     if isinstance(reply, TurnResult):
@@ -460,10 +495,15 @@ def run_turn(agent_id: str, user_text: str, *,
             # Budget spent while still calling tools. An agent that has looked
             # things up for twenty rounds can usually answer — it has just never
             # been told to stop.
-            messages.append(Message(role="system", content=BUDGET_PROMPT))
-            reply = _answer_without_tools(provider, messages, _failed, emit)
-            if isinstance(reply, TurnResult):
-                return reply
+            if cancellation.stopped(cancel):
+                # A stopped turn does not get one more call to wrap up. The
+                # user asked for it to end, not to finish tidily.
+                was_stopped = True
+            else:
+                messages.append(Message(role="system", content=BUDGET_PROMPT))
+                reply = _answer_without_tools(provider, messages, _failed, emit)
+                if isinstance(reply, TurnResult):
+                    return reply
 
     finally:
         delegation.leave(chain_token)
@@ -472,11 +512,28 @@ def run_turn(agent_id: str, user_text: str, *,
         plan_snapshot = (planning.current() or planning.Plan()).as_list()
         planning.finish(plan_token)
 
+    if was_stopped:
+        # Keep the half-written answer: the user paid for it. `STOPPED_NOTE`
+        # goes on the end rather than replacing it, so the transcript reads as
+        # what happened instead of as an error.
+        reply = f"{reply.strip()}\n\n{STOPPED_NOTE}" if reply.strip() else STOPPED_NOTE
     reply = reply or "(the model returned nothing)"
     steps_used = len([s for s in trace if s.kind == "tool_call"])
 
     mem.append(agent.id, "assistant", reply,
                tool_json=json.dumps([s.name for s in trace if s.kind == "tool_call"]))
+
+    if was_stopped:
+        # Both of the calls below are model calls, and a stopped turn has no
+        # business making two more of them. Nothing is lost that matters: the
+        # user's message is already stored as searchable evidence, and the next
+        # turn they actually finish will curate it.
+        return TurnResult(
+            agent_id=agent.id, reply=reply, trace=trace,
+            provider=provider.name, model=provider.model,
+            runtime_identity=identity, effort=profile.name,
+            steps_used=steps_used, plan=plan_snapshot, stopped=True,
+        )
 
     # Auto-learn: quietly capture durable facts the user revealed this turn, so
     # simply talking to an agent grows the brain — no manual "add fact" step.
