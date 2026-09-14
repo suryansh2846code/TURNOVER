@@ -200,11 +200,21 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   animation: bs-pulse 1s ease-in-out infinite; }
 @keyframes bs-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.7); } }
 
-.messages { flex: 1; overflow-y: auto; padding: 26px 26px 104px; display: flex; flex-direction: column; gap: 16px; }
-.msg { max-width: 74%; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.62; }
-.msg.user { align-self: flex-end; background: var(--user); border: 1px solid var(--border);
+/* The conversation and the composer share ONE measure, centred. They did not:
+   the composer was capped at 840px while messages ran the full width of the
+   column, so a user's bubble ended well to the right of the input it was typed
+   into. The cap lives in the PADDING rather than on a wrapper, because the
+   messages are direct flex children — constraining the container's content box
+   is what keeps `align-self: flex-end` meaning "right edge of the column"
+   instead of "right edge of the window". max() so a narrow window falls back
+   to a plain 26px gutter instead of negative padding. */
+.messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;
+  padding: 26px max(26px, calc(50% - 420px)) 104px; }
+.msg { max-width: 100%; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.62; }
+.msg.user { align-self: flex-end; max-width: 78%;
+  background: var(--user); border: 1px solid var(--border);
   border-radius: 16px; padding: 12px 16px; white-space: pre-wrap; }
-.msg.assistant { align-self: flex-start; display: flex; gap: 12px; max-width: 80%; }
+.msg.assistant { align-self: flex-start; display: flex; gap: 12px; max-width: 100%; }
 .msg.assistant .a-orb { margin-top: 2px; }
 .msg.assistant .a-body { min-width: 0; }
 .msg.assistant p { margin: 0 0 9px; } .msg.assistant p:last-child { margin-bottom: 0; }
