@@ -84,19 +84,27 @@ SCENARIO = {
 # A harness that passes against the bug it exists to catch is worse than none,
 # because it reads as coverage. Both bugs below are the ones this feature is.
 def _mutated(tmp_path: pathlib.Path, old: str, new: str) -> pathlib.Path:
-    """A copy of the web directory with one line of `app.js` broken.
+    """A copy of the web directory with one line of the frontend broken.
 
-    The whole directory, not just the file: the harness loads the app the way
+    The whole directory, not just one file: the harness loads the app the way
     the browser does, reading `index.html` for which scripts to run and in what
-    order (`tests/js/_app_source.mjs`). A lone mutated `app.js` in an empty
-    directory has no page to be loaded by, and would only prove that the loader
-    reports a missing one.
+    order (`tests/js/_app_source.mjs`). A lone mutated file in an empty
+    directory has no page to be loaded by.
+
+    Which file holds the anchor is looked up rather than assumed. It was
+    `app.js` when `app.js` was the whole frontend; it is `tools.js` today and
+    will be somewhere else again. Naming the file here would turn every future
+    extraction into a broken self-check — and a self-check is the one thing that
+    must not quietly stop working.
     """
-    src = APP_JS.read_text()
-    assert src.count(old) == 1, f"anchor moved, cannot reintroduce the bug: {old!r}"
+    from web_sources import app_scripts
+
+    owners = [p for p in app_scripts() if p.read_text().count(old) == 1]
+    assert len(owners) == 1, (
+        f"anchor is in {len(owners)} of the frontend's scripts, expected 1: {old!r}")
     web = tmp_path / "web"
-    shutil.copytree(APP_JS.parent, web)
-    (web / APP_JS.name).write_text(src.replace(old, new))
+    shutil.copytree(owners[0].parent, web)
+    (web / owners[0].name).write_text(owners[0].read_text().replace(old, new))
     return web / APP_JS.name
 
 
