@@ -487,3 +487,37 @@ Added 2026-09-13 (QA), each checked directly rather than assumed:
 the last review) with 62 `innerHTML` writes and 93 top-level functions. The
 `tests/js/` harnesses have grown 3 → 8, but they still execute roughly six of
 those 93 functions.
+
+---
+
+## A12 — `scheduler.py` runs unattended on every machine at 30% coverage
+
+The background sync loop is the least-protected code in the repository, and it
+is code no user ever watches run.
+
+```bash
+pytest -q --cov --cov-report=term-missing | grep scheduler
+# lodestone/scheduler.py   184   129   30%   41-45, 54, 72-75, 79-88, 91-188, ...
+```
+
+`_sync_all` — 99 lines, the function that drives every connector, decides what
+is stale, and is meant to be cooperatively cancellable — is almost entirely
+uncovered. So is the loop that calls it.
+
+This matters more than it looks. A failure here is silent by construction: the
+loop swallows what it must to survive a bad connector, it runs on a timer with
+nobody watching, and the symptom a user reports is "my brain stopped updating",
+days later, with nothing in the UI to say so.
+
+**To close:** a fake connector and a driven clock, then test the things that
+only this module does — cancellation actually stopping mid-pass, one failing
+connector not taking the others down, the watermark advancing only on success,
+and two scheduler instances never running at once after a reload.
+
+**Severity: medium** (silent, unattended, user-visible only long after the fact)
+· **Owner: Connectors + API** · **Cost: medium**
+
+> Found while measuring coverage during the complexity-reduction pass, not while
+> working on the scheduler. Recorded rather than fixed because it is a testing
+> gap, not a complexity one — it was outside that task's scope, and deserves to
+> be someone's actual task rather than a footnote in another.

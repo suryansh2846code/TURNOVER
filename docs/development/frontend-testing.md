@@ -181,7 +181,24 @@ Each step ends green. The split does not begin until step 3 is proven.
 | **2** | Point all nine harnesses at it. **`app.js` is still one file**, so a pure no-op refactor of the loader. | 10 | suite unchanged — 1440 passed, 1458 collected, before and after. Proven real by deleting app.js's `<script>` tag: 26 passing harness tests become 18 failures and 7 errors. | **done** |
 | **3** | Prove the mechanism: move **one** small, self-contained cluster out — `core.js` (`$`, `api`, `esc`, `md`, `toast`, orbs, icons) — and add its `<script>` tag **first** in `index.html`. | 7 | suite green **without touching a harness**. Removing core.js's tag, or loading it after app.js, each turn 19 passing drawer tests into 11 failures and 7 errors. | **done** |
 | **4** | `providers.js` — the catalog state, the sign-in HUD, the CLI instructions, `renderProviderConnectBox`. | 3 | 70 frontend tests green, no harness touched. app.js 3,507 → 2,645. | **done** |
-| **5+** | One cluster per commit: the model picker (~790), chat (~390), connectors (~286), the brain screen (~145)… | 3 each | suite green between each | next |
+| **5** | The remaining clusters, one commit each: `models.js` (845), `chat.js` (380), `brain.js` (223), `connectors.js` (302), `workspace.js` (378), `brain-screen.js` (160), `usage.js` (142), `tools.js` (143). | 3 each | suite green between each | **done** |
+
+**The split is complete.** `app.js` went 3,581 → 208 lines across eleven files,
+and no harness was touched after step 2.
+
+### A fifth check, learned the expensive way
+
+The `tools.js` cut ended one line early, leaving `loadTools`' closing brace
+behind in `app.js`. The two halves **cancelled out** when the files were
+concatenated, so `node --check` on the whole was perfectly happy — while every
+top-level declaration after the seam sat nested inside a truncated function and
+nothing was global any more.
+
+So the checks before a cut are now five, and this is the one people skip:
+
+5. **Does each file parse on its own?** Parsing the concatenation is not the
+   same question, and a cut that is off by one brace passes the concatenation
+   check while breaking the app at runtime.
 
 ### Deciding which cluster goes next
 
