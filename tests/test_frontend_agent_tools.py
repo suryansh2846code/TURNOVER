@@ -20,12 +20,18 @@ import pytest
 ROOT = Path(__file__).parent.parent
 WEB = ROOT / "lodestone/web"
 
+#: One word each, and a heading — the shape `describe_tools()` now returns.
 BUILTIN = [
-    {"name": "search_brain", "label": "search_brain", "description": "Search your brain",
-     "source": "builtin", "connector": ""},
-    {"name": "remember", "label": "remember", "description": "Remember something",
-     "source": "builtin", "connector": ""},
+    {"name": "search_brain", "label": "Search", "category": "Memory",
+     "description": "Search your brain", "source": "builtin", "connector": ""},
+    {"name": "remember", "label": "Remember", "category": "Memory",
+     "description": "Remember something", "source": "builtin", "connector": ""},
+    {"name": "run_python", "label": "Run", "category": "Your Mac",
+     "description": "Run Python on this Mac", "source": "builtin", "connector": ""},
 ]
+
+#: The reading order, as the API names it. "Your Mac" last on purpose.
+CATEGORIES = ["Memory", "Tasks", "Your Mac"]
 CATEGORY = {"name": "mcp", "label": "Everything my connectors can read",
             "description": "Stays correct as connectors are added or removed.",
             "source": "category", "connector": ""}
@@ -40,7 +46,8 @@ DOWN = {"name": "linear", "label": "Linear", "ready": False,
 def run(agent_tools, tools, connectors, **kw) -> dict:
     payload = {
         "agent": {"id": "chotu", "name": "chotu", "tools": agent_tools},
-        "tools": tools, "connectors": connectors, **kw,
+        "tools": tools, "connectors": connectors,
+        "categories": kw.pop("categories", CATEGORIES), **kw,
     }
     proc = subprocess.run(
         ["node", str(ROOT / "tests/js/agent_tools.mjs"), str(WEB / "app.js")],
@@ -59,9 +66,44 @@ def full() -> dict:
 # ── grouping: where a tool comes from ─────────────────────────────────────
 def test_tools_are_grouped_by_where_they_come_from(full):
     kinds = {g["name"]: g["kind"] for g in full["groups"]}
-    assert kinds["Built in"] == "builtin"
+    assert kinds["Memory"] == "builtin"
     assert kinds["Notion"] == "connector"
     assert kinds["Your connectors"] == "category"
+
+
+def test_built_ins_are_split_by_subject_not_piled_under_one_heading(full):
+    """Thirty-two rows under "Built in" is a wall nobody can choose from."""
+    builtin = [g["name"] for g in full["groups"] if g["kind"] == "builtin"]
+    assert "Built in" not in builtin
+    assert {"Memory", "Your Mac"} <= set(builtin), builtin
+
+
+def test_the_heading_order_is_the_api_s_and_not_alphabetical():
+    """"Your Mac" belongs last whatever letter it starts with, and that is a
+    judgement the layer owning the categories already made.
+
+    The fixture names an order that DISAGREES with the alphabet, because one
+    that agrees cannot tell the two apart — the first version of this test
+    used Memory/Your Mac, which are alphabetical anyway, and passed happily
+    with the sort replaced by localeCompare.
+    """
+    web = {"name": "web_search", "label": "Search", "category": "Web",
+           "description": "", "source": "builtin", "connector": ""}
+    mem = {"name": "search_brain", "label": "Search", "category": "Memory",
+           "description": "", "source": "builtin", "connector": ""}
+    out = run([], [web, mem], [], categories=["Web", "Memory"])
+    names = [g["name"] for g in out["groups"] if g["kind"] == "builtin"]
+    assert names == ["Web", "Memory"], (
+        f"{names} is the alphabet, not the order the API asked for")
+
+
+def test_a_tool_whose_category_the_api_did_not_name_still_renders():
+    """Visible enough to get fixed, not broken enough to lose the screen."""
+    odd = {"name": "future_tool", "label": "Future", "description": "",
+           "source": "builtin", "connector": ""}
+    out = run([], [odd], [])
+    names = [g["name"] for g in out["groups"]]
+    assert "Other" in names, names
 
 
 def test_a_connector_tool_is_named_after_its_connector(full):
@@ -75,8 +117,8 @@ def test_connectors_come_before_the_built_ins(full):
     """The screen exists because of connectors. Built-ins never needed
     explaining, so they do not go first."""
     names = [g["name"] for g in full["groups"]]
-    assert names.index("Your connectors") < names.index("Built in")
-    assert names.index("Notion") < names.index("Built in")
+    assert names.index("Your connectors") < names.index("Memory")
+    assert names.index("Notion") < names.index("Memory")
 
 
 def test_the_category_is_its_own_group(full):
@@ -180,3 +222,35 @@ def test_an_agent_with_no_tools_is_not_a_blank_panel():
     assert "no tools yet" in out["html"]
     assert "your brain is read on every" in out["html"], "it must say what still works"
     assert "Open Connectors" in out["html"], "it must offer the first thing worth adding"
+
+
+# ── one readable line ─────────────────────────────────────────────────────
+def test_a_connectors_own_instructions_do_not_become_the_page():
+    """A connector's description is written FOR A MODEL by whoever wrote the
+    server — Notion's search tool ships four hundred words about query_type and
+    filter nesting. Rendered whole, twenty-seven of those are a page of prose
+    where a list of switches should be."""
+    wall = ("Before the first content search for this connection, call fetch "
+            'with {"id":"self"} unless its current access result is already in '
+            "context. Choose the content-search tool by "
+            "current_tool_access.ai_search.status, not by query wording. " * 4)
+    out = run([], [{"name": "notion__search", "label": "Search", "connector": "Notion",
+                    "source": "mcp", "description": wall}],
+              [{"name": "notion", "label": "Notion", "ready": True, "reason": "", "mcp": True}])
+    shown = out["html"].split('class="at-ds"', 1)[1].split("</span>", 1)[0]
+    assert len(shown) < 200, f"{len(shown)} characters reached the row"
+    assert "query wording" not in shown, "it kept going past the first sentence"
+
+
+def test_a_short_description_is_left_alone():
+    out = run([], BUILTIN, [])
+    assert "Search your brain" in out["html"]
+
+
+def test_trimming_is_display_only():
+    """The full text is still what the model is given. Nothing here may change
+    what a tool does — only how much of its manual is on screen."""
+    src = (WEB / "tools.js").read_text()
+    blurb = src.split("function toolBlurb", 1)[1].split("\n}", 1)[0]
+    for mutation in ("row.description =", "t.description =", "delete "):
+        assert mutation not in blurb, f"toolBlurb mutates the row: {mutation}"
