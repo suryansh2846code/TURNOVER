@@ -406,6 +406,29 @@
         <button id="addConnector" class="tiny">+ Add a connector</button>
         <button id="addCustomApp" class="tiny ghost">+ Connect a custom app</button>
       </div>
+
+      <!-- A site an agent can read is something this app can reach on the
+           user's behalf, so it belongs on the same screen as the connectors.
+           Anywhere else and there is no single place that answers "what does
+           this have access to". -->
+      <section class="cn-web" id="cnWeb">
+        <div class="cn-web-head">
+          <div>
+            <div class="cn-web-title">Websites agents can read</div>
+            <div class="cn-web-sub" id="webSub">Agents can only open sites you list here. They can read and report; they cannot click, type or buy anything.</div>
+          </div>
+          <button id="webSetup" class="tiny" hidden>Set up browsing</button>
+        </div>
+        <div id="webSetupState" class="cn-web-setup" hidden></div>
+        <div id="webSites" class="cn-web-list"></div>
+        <div class="cn-web-add">
+          <input id="webInput" class="set-input" type="text" autocomplete="off"
+                 placeholder="example.com" aria-label="Website to allow" />
+          <button id="webAdd" class="tiny">Allow site</button>
+        </div>
+        <div id="webErr" class="cn-web-err" hidden></div>
+        <button id="webForget" class="tiny ghost" hidden>Forget every sign-in</button>
+      </section>
     </div>
 
     <!-- ── panel: model ────────────────────────────────────────────────── -->
@@ -441,6 +464,27 @@
               <div class="set-desc" id="defEffortDesc">How hard the model works before answering.</div>
             </div>
             <div class="set-ctl"><select id="defEffort" class="set-select"></select></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- The standing half of the unattended-action gate. The approvals card
+           is where a grant is normally made, because that is where the user
+           learns they want one; this is where every grant can be reviewed and
+           taken back, so a standing permission is never invisible. -->
+      <section class="ms-sec">
+        <h2 class="ms-h2">Acting without asking</h2>
+        <p class="ms-sub">Agents running on their own always ask before emailing or inviting someone new. These are the people they may reach without asking each time.</p>
+        <div id="allowList" class="set-group"></div>
+        <div class="set-row">
+          <div class="set-main">
+            <div class="set-label">Allow someone</div>
+            <div class="set-desc">An email address agents may reach unattended.</div>
+          </div>
+          <div class="set-ctl allow-add">
+            <input id="allowInput" class="set-input" type="email"
+                   placeholder="someone@example.com" autocomplete="off" />
+            <button id="allowAdd" class="tiny">Allow</button>
           </div>
         </div>
       </section>
@@ -498,6 +542,30 @@
           </div>
           <div class="set-row set-row-block">
             <div id="usageBox" class="usage-box"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Read-only, deliberately. The app records every failure it survives
+           and wrote them where a shipped user cannot look, which made "it just
+           doesn't work" unfalsifiable. This is that evidence, plus a Copy
+           button, and nothing that runs anything. -->
+      <section class="ms-sec">
+        <h2 class="ms-h2">What just happened</h2>
+        <p class="ms-sub">The app's own record of what it tried and what went wrong — useful if something looks broken. Passwords and keys are removed before it is shown.</p>
+        <div class="set-group">
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Recent activity</div>
+              <div class="set-desc" id="logMeta">Not loaded yet.</div>
+            </div>
+            <div class="set-ctl log-ctl">
+              <button id="logRefresh" class="tiny ghost">Refresh</button>
+              <button id="logCopy" class="tiny">Copy</button>
+            </div>
+          </div>
+          <div class="set-row set-row-block">
+            <pre id="logBox" class="log-box" tabindex="0"></pre>
           </div>
         </div>
       </section>
@@ -611,6 +679,8 @@
   <script src="/static/brain-screen.js"></script>
   <script src="/static/usage.js"></script>
   <script src="/static/tools.js"></script>
+  <script src="/static/diagnostics.js"></script>
+  <script src="/static/browser.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

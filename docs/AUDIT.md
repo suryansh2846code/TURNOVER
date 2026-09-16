@@ -26,13 +26,48 @@ brain-search delete button had never worked. **A12 is new**, and is the most
 serious item in this file: the background sync loop runs unattended on every
 machine at 30% coverage, where a failure is silent by construction.
 
-Still open and unchanged: A1 (the committed Google client), A6 (recall
-throughput), A7 (`suppressed()` call sites), A9 (the review queue has no
-consumer), A10 (the extractors disagree).
+Still open and unchanged: A6 (recall throughput), A7 (`suppressed()` call
+sites), A9 (the review queue has no consumer), A10 (the extractors disagree).
+
+**Re-reviewed 2026-09-16.** **A1 and A12 are closed** — the two items named above
+as most serious. A1 closed as prescribed (a rehearsed rotation procedure plus a
+test pinning the precedence chain it depends on), not by deleting the client.
+A12 closed with a driven-clock test suite that took `scheduler.py` from 30%, and
+which caught three real defects in the process; each is recorded in its entry.
 
 ---
 
-## A1 — A live Google OAuth client secret is committed
+## A1 — ~~A live Google OAuth client secret is committed~~ · **CLOSED**
+
+> **Closed 2026-09-16.** Not by removing the file — that breaks first launch and
+> was never the fix. The gap was that the *recovery* was undocumented and had
+> never been rehearsed, so the day the client is revoked would have been spent
+> discovering the procedure rather than running it.
+>
+> What closed it:
+>
+> * **H12 now states the abuse path and the blast radius** — one revocation takes
+>   Gmail, Calendar and Drive down for every user simultaneously.
+> * **[`development/google-client-rotation.md`](development/google-client-rotation.md)**
+>   is the rehearsed procedure, including the step that matters most: the
+>   replacement client is verified against a real Google account *before* it is
+>   committed, via `$GOOGLE_CLIENT_SECRETS`. It also records what an existing
+>   user experiences — the ~1 hour where a live access token 401s instead of
+>   self-healing, and the fact that the background scheduler surfaces a
+>   reconnect message rather than opening a browser.
+> * **`tests/test_google_client_rotation.py`** pins the precedence chain the
+>   whole procedure depends on. Without that order the procedure is fiction, and
+>   nothing previously stopped a refactor from removing it.
+>
+> ```bash
+> pytest tests/test_google_client_rotation.py -q
+> ```
+>
+> **Still true, and deliberately not addressed:** per-user Cloud clients. That is
+> the "if the repo goes public" escape hatch and a product decision, not a defect
+> fix. Reopen this as a new finding if the repo is published.
+
+### Original finding
 
 `chitragupta/data/google_client.json` holds a real `client_id`, `project_id` and
 `client_secret` for the Chitragupta Google Cloud project.
@@ -58,6 +93,8 @@ verification screen check. If the repo goes public, treat the id as burned and
 plan for per-user clients as the escape hatch.
 
 **Severity:** medium · **Cost:** low (documentation + a rehearsed procedure)
+
+*Done as prescribed — see the closing note above.*
 
 ---
 
@@ -545,7 +582,48 @@ those 93 functions.
 
 ---
 
-## A12 — `scheduler.py` runs unattended on every machine at 30% coverage
+## A12 — ~~`scheduler.py` runs unattended on every machine at 30% coverage~~ · **CLOSED**
+
+> **Closed 2026-09-16.** `tests/test_scheduler_loop.py` — 27 tests, no real
+> clock and no real connector, the whole file under a second. Coverage of
+> `scheduler.py` from that file alone: **30% → 72%**; the remainder is the
+> files/MCP/custom-app loops, which `tests/connectors/` already drives.
+>
+> ```bash
+> pytest --cov=lodestone.scheduler --cov-report=term-missing tests/test_scheduler_loop.py
+> ```
+>
+> The suite is driven rather than waited on: `DrivenStop` answers `wait()` from
+> a script instead of a timer, which is what makes the 20-second settle and the
+> 60-second tick testable at all. That they were not is most of how 99 unattended
+> lines reached 30%.
+>
+> **One real defect, found by writing the test and watched red before it was
+> fixed.** `_stop` was a single `threading.Event` for the life of the process, so
+> `stop()` set it permanently: the next `start()` spawned a thread that returned
+> immediately from its first wait. `running` read `True`, the UI showed a healthy
+> scheduler, and nothing ever synced again — the failure mode this entry is about,
+> sitting in the lifecycle itself. It bites on a `--dev` reload and after the
+> shutdown hook in `api/app.py`. Each thread now carries the token it was started
+> with, which also rules out the obvious wrong fix: clearing the shared event
+> would have revived a previous thread still inside its 60-second wait, leaving
+> two loops on one timer.
+>
+> **Two other suspicions were investigated and are not defects**, recorded so
+> nobody re-opens them:
+>
+> * `last_run` advancing after a pass where every connector failed is *not* a
+>   scheduler bug — the per-connector errors are in `last_result`, which
+>   `/api/sync/status` already returns. Nothing consumes them: `web/brain.js`
+>   renders `last_run` alone, so the UI says "Last synced 12:34" after a sweep
+>   that synced nothing. **That is a frontend gap, not this one**, and it is worth
+>   fixing where the roadmap's sync-feedback work lands.
+> * `routines.sweep()` being called from both `_fire_reminders` and the end of
+>   `_sync_all` is redundant but harmless: schedule routines are interval-gated on
+>   their own `last_run`, and `new_email` routines need a non-zero count, which
+>   only the `_sync_all` call passes.
+
+### Original finding
 
 The background sync loop is the least-protected code in the repository, and it
 is code no user ever watches run.
@@ -571,6 +649,8 @@ and two scheduler instances never running at once after a reload.
 
 **Severity: medium** (silent, unattended, user-visible only long after the fact)
 · **Owner: Connectors + API** · **Cost: medium**
+
+*Closed as prescribed — a fake connector and a driven clock; see above.*
 
 > Found while measuring coverage during the complexity-reduction pass, not while
 > working on the scheduler. Recorded rather than fixed because it is a testing

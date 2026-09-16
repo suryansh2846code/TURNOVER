@@ -228,8 +228,28 @@ Dedup makes re-import idempotent.
 
 ### H12 — Bundled Google Desktop OAuth client is committed
 Installed-app client secrets are non-confidential (PKCE + localhost redirect), so the
-Desktop client ships in-repo → testers get one-click sign-in on a fresh clone. Regenerate
-if secret-scanning ever revokes it.
+Desktop client ships in-repo → a stranger who installs the `.dmg` presses *Sign in with
+Google* and it works, with no Cloud Console setup. That is the decision and it stands.
+
+**What it costs, which the original entry did not say.** The `client_id` is public, so
+anyone can stand up a consent screen branded "Chitragupta" with it. Abuse attributed to the
+project lands on our quota: a rate-limit or suspension takes Gmail, Calendar **and** Drive
+down for *every* user at once, and nothing shippable from our side fixes it except a new
+client. A secret scanner revoking it has the same effect, unilaterally, on a day we did
+not choose.
+
+**Why that is survivable.** `config.py::google_client_secrets` resolves in precedence
+order — `$GOOGLE_CLIENT_SECRETS`, then `~/Library/Chitragupta/google_client_secret.json`,
+then the bundled file. So a replacement is verified against a real account *before* it is
+committed, and one affected user is unblocked by dropping a file rather than by a release.
+That order is pinned by `tests/test_google_client_rotation.py`; if it breaks, the rotation
+procedure stops being executable.
+
+Procedure, and what users experience during it:
+[`development/google-client-rotation.md`](development/google-client-rotation.md).
+
+**If the repo goes public**, treat the id as burned rather than waiting for evidence, and
+per-user clients become the escape hatch — a product decision, deliberately not taken here.
 
 ### H13 — First-run onboarding flow
 A "connect your data" screen with four real choices (Sign in with Google · local Mac

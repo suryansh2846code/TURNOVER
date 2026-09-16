@@ -202,7 +202,12 @@ class Scheduler:
         return summary
 
     # ── background loop ──────────────────────────────────────────────────
-    def _loop(self) -> None:
+    def _loop(self, stop: threading.Event) -> None:
+        """One background pass-maker. `stop` is *this thread's* token.
+
+        It is a parameter rather than `self._stop` so that a thread can only
+        ever be stopped by the token it was started with — see `start()`.
+        """
         settings = get_settings()
         interval = max(1, settings.sync_interval_minutes) * 60
         # startup self-heal: auto-migrate derived data (re-embed / rebuild graph
@@ -217,10 +222,10 @@ class Scheduler:
             import sys
             print(f"[chitragupta] startup migration skipped: {exc}", file=sys.stderr)
         # small initial delay, then an immediate first sync (no manual CLI needed)
-        if self._stop.wait(20):
+        if stop.wait(20):
             return
         next_sync = 0.0
-        while not self._stop.is_set():
+        while not stop.is_set():
             # fire due reminders often (every minute); sync on the longer interval
             self._fire_reminders()
             if time.time() >= next_sync:
@@ -229,7 +234,7 @@ class Scheduler:
                 except Exception:
                     log.exception("background sync_all failed")
                 next_sync = time.time() + interval
-            if self._stop.wait(60):
+            if stop.wait(60):
                 return
 
     def _fire_reminders(self) -> None:
@@ -274,8 +279,22 @@ class Scheduler:
         settings = get_settings()
         if not settings.sync_enabled or self.running:
             return
+        # A fresh token per thread. `_stop` used to be one `Event` for the life
+        # of the process, and `stop()` set it forever: the next `start()` — a
+        # `--dev` reload, or the shutdown hook in `api/app.py` followed by
+        # anything restarting us — spawned a thread that returned immediately
+        # from its first `stop.wait(20)`. `running` read True, the UI showed a
+        # healthy scheduler, and nothing ever synced again. Exactly the silent
+        # failure this module is prone to.
+        #
+        # Clearing the old event instead would have un-stopped a previous thread
+        # still inside its 60-second wait, leaving two loops on one timer. A new
+        # event cannot: the old thread keeps a reference to the old, set one and
+        # exits on its next check, without anyone having to wait for it here.
+        self._stop = threading.Event()
         self.running = True
-        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread = threading.Thread(
+            target=self._loop, args=(self._stop,), daemon=True)
         self._thread.start()
 
     def stop(self) -> None:

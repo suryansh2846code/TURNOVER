@@ -966,6 +966,42 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   color: var(--text); border: 1px solid var(--line2); border-radius: 9px;
   padding: 8px 11px; font: inherit; font-size: 13.5px; }
 .set-input-num { min-width: 0; width: 86px; }
+/* An address and the button that grants it read as one control, because they
+   are one decision. */
+.allow-add { display: flex; align-items: center; gap: 8px; }
+/* A sweep that finished with a source still failing. Not danger — syncing is
+   working, one source is not — but it must not read like a clean run. */
+.sync-trouble { color: var(--warn, #e0a45e); }
+
+/* ── "What just happened": the log, read-only ─────────────────────────── */
+.log-ctl { display: flex; align-items: center; gap: 8px; }
+/* Bounded height, its own scroll. The tail is up to 500 lines and the settings
+   screen must not grow a second page because something went wrong. */
+.log-box { max-height: 300px; overflow: auto; margin: 0; width: 100%;
+  background: var(--panel-2); border: 1px solid var(--line2); border-radius: 9px;
+  padding: 10px 12px; font-family: var(--mono); font-size: 11.5px;
+  line-height: 1.55; color: var(--muted); white-space: pre-wrap;
+  overflow-wrap: anywhere; }
+.log-box:focus { outline: none; border-color: var(--accent); }
+.log-box:empty { display: none; }
+
+/* ── websites agents may read, on the Connectors screen ──────────────── */
+.cn-web { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line2); }
+.cn-web-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px; }
+.cn-web-title { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.cn-web-sub { font-size: 12px; color: var(--muted); margin-top: 3px; max-width: 46ch; }
+.cn-web-setup { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.cn-web-list { display: flex; flex-direction: column; gap: 6px; }
+.cn-web-row { display: flex; align-items: center; gap: 10px; padding: 8px 11px;
+  background: var(--panel-2); border: 1px solid var(--line2); border-radius: 9px; }
+.cn-web-host { flex: 1; font-size: 13px; }
+/* The capability, said every time rather than implied by its absence. */
+.cn-web-cap { font-size: 11px; color: var(--muted); }
+.cn-web-empty { font-size: 12px; color: var(--muted); padding: 8px 2px; }
+.cn-web-add { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.cn-web-add .set-input { flex: 1; min-width: 0; }
+.cn-web-err { font-size: 12px; color: var(--danger, #ff6b6b); margin-top: 8px; }
 .set-select:focus, .set-input:focus { outline: none; border-color: var(--accent); }
 .set-select:disabled { opacity: .5; }
 

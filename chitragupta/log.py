@@ -8,10 +8,18 @@ invisible afterwards — which is how a user's "it just doesn't work" becomes
 unfalsifiable, because the one place that knew what went wrong threw it away.
 
 `suppressed()` keeps the runtime behaviour exactly (the failure is still not
-raised) and keeps the evidence. Debug output is off by default and costs
-nothing; `CHITRAGUPTA_DEBUG=1` turns it on, and a rotating file in the Chitragupta
-home means a bug report has something in it even when nobody was watching a
-terminal.
+raised) and keeps the evidence. A rotating file in the app's home means a bug
+report has something in it even when nobody was watching a terminal, and
+`CHITRAGUPTA_DEBUG=1` additionally mirrors everything to stdout for whoever is.
+
+**The logger is permissive; the handlers decide.** That order is load-bearing:
+a logger discards a record below its own level before any handler sees it, so a
+root at INFO threw away every `suppressed()` line — which is to say all of the
+evidence this module was written to keep. See `configure()`.
+
+What reaches the user is `api/routes/diagnostics.py`, because a log nobody can
+read is the same as no log: "it just doesn't work" stays unfalsifiable if the
+answer is in a file the user would need a terminal to open.
 """
 from __future__ import annotations
 
@@ -23,6 +31,17 @@ from pathlib import Path
 
 _ROOT = "chitragupta"
 _configured = False
+
+#: The file `configure()` writes to. Named once, because two places now need it
+#: — the handler that writes it and the endpoint that reads it back — and a
+#: second spelling of a path is a bug that only shows up as an empty panel.
+LOG_FILENAME = "chitragupta.log"
+
+
+def log_file() -> Path | None:
+    """The current log file, or None if this machine has nowhere to write one."""
+    directory = _log_dir()
+    return None if directory is None else directory / LOG_FILENAME
 
 
 def _log_dir() -> Path | None:
@@ -53,7 +72,17 @@ def configure(force: bool = False) -> None:
     _configured = True
 
     root = logging.getLogger(_ROOT)
-    root.setLevel(logging.DEBUG if os.environ.get("CHITRAGUPTA_DEBUG") else logging.INFO)
+    # **The logger is permissive and the handlers are selective**, which is the
+    # way round that makes the promise in this module's docstring true.
+    #
+    # It used to be the other way: the root sat at INFO unless the debug
+    # environment variable was set, and a logger drops a record below its own
+    # level *before any handler sees it*. `suppressed()` logs at DEBUG. So every
+    # swallowed failure — 107 call sites, the entire reason this module exists —
+    # was discarded on the machine of every user who had not set an environment
+    # variable they have never heard of. The file said nothing precisely when a
+    # bug report needed it to say something.
+    root.setLevel(logging.DEBUG)
     root.propagate = False
     if root.handlers and not force:
         return
@@ -61,9 +90,12 @@ def configure(force: bool = False) -> None:
     fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s: %(message)s")
 
     # Only real problems reach the terminal — the desktop app's stdout is not a
-    # log viewer, and noise there trains people to ignore it.
+    # log viewer, and noise there trains people to ignore it. `CHITRAGUPTA_DEBUG`
+    # now means "show me everything *here*", which is what a developer setting
+    # it actually wants; it no longer decides what is recorded at all.
     stream = logging.StreamHandler()
-    stream.setLevel(logging.WARNING)
+    stream.setLevel(logging.DEBUG if os.environ.get("CHITRAGUPTA_DEBUG")
+                    else logging.WARNING)
     stream.setFormatter(fmt)
     root.addHandler(stream)
 
@@ -73,7 +105,7 @@ def configure(force: bool = False) -> None:
             from logging.handlers import RotatingFileHandler
 
             handler = RotatingFileHandler(
-                directory / "chitragupta.log", maxBytes=2_000_000, backupCount=3,
+                directory / LOG_FILENAME, maxBytes=2_000_000, backupCount=3,
                 encoding="utf-8")
             handler.setLevel(logging.DEBUG)
             handler.setFormatter(fmt)

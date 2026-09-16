@@ -378,7 +378,7 @@ function workoutFields(blocks) {
 const MESSAGING_APPS = { telegram: "Telegram", slack: "Slack" };
 
 //: What each triage verb is called on screen. The server has the same table in
-//: `lodestone/mail_triage.py`; these are the words a person reads, and the ids
+//: `chitragupta/mail_triage.py`; these are the words a person reads, and the ids
 //: that cross the wire are the keys — never the other way round.
 const MAIL_VERBS = {
   archive: "Archive", mark_read: "Mark read", mark_unread: "Mark unread",

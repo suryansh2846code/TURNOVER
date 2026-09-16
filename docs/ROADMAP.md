@@ -28,11 +28,29 @@
        prompt can request it, and without an explanation the app simply looks
        broken on someone else's Mac. The largest gap between "the `.dmg` builds"
        and "the `.dmg` works for a stranger". See [`DISTRIBUTION.md`](DISTRIBUTION.md).
-2. [ ] **UI for effort, permissions and approvals** — the approvals queue has a
-       UI; effort is read from `localStorage` with no control that writes it,
-       and `GET/POST /api/agents/permissions` has no UI at all.
-3. [ ] **UI-based OAuth** — connect Gmail/Drive/Calendar from the workspace, no
-       terminal/CLI. Required for non-developer users.
+
+       **Shipped 2026-09-15** (`bcfd70d`). `connectors/permissions.py` is the one
+       place that sentence exists and the one place that knows which System
+       Settings pane clears it; `desktop.py::_AppBridge.open_privacy_settings`
+       opens it, and the connector row renders a button from the `fix` field
+       rather than telling anyone to find their terminal.
+2. [x] **UI for effort, permissions and approvals** — **shipped.** Effort is a
+       control in the Model screen reading and writing `GET/POST
+       /api/agents/effort` (`models.js::loadAgentDefaults`). The allow-list is
+       *Acting without asking* in the same screen, plus an **Always allow
+       &lt;address&gt;** button on the approval card itself — the grant is offered
+       where the user learns they want one, and reviewable where it can be taken
+       back. The card offers it only when `blocked` is non-empty, so it is never a
+       control that cannot work.
+3. [x] **UI-based OAuth** — **shipped.** `POST /api/google/reconnect` runs consent
+       on a background thread and `GET /api/google/status` reports the result;
+       `brain.js::connectGoogle` polls it behind one *Sign in with Google* button.
+       No terminal anywhere in the path.
+
+> **All three were stale when read on 2026-09-16** — two were already built and
+> this list still called for them, which sent a session to rebuild work that
+> existed. Tick an item in the commit that ships it; a roadmap nobody trusts is
+> worse than no roadmap.
 
 ## Agent gaps worth naming
 Detail in [`AGENTS.md`](AGENTS.md) → *What is still missing*.

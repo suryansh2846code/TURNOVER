@@ -36,6 +36,10 @@ async function loadBrain() {
   renderConnectors(connectors, staleAfterMin);
   loadSyncStatus();
   loadApprovals();
+  // The sites agents may read are part of the same answer as the connectors:
+  // what this app can reach on the user's behalf. Guarded because the list must
+  // never stop the rest of the panel rendering.
+  try { loadBrowserSites(); } catch (_) {}
   try { renderGoogleCard(await api("/api/google/status")); } catch (_) {}
 }
 
@@ -92,13 +96,39 @@ async function disconnectGoogle() {
 }
 
 let SYNC_INTERVAL_MIN = 30;
+/**
+ * Which sources failed on the last sweep, named.
+ *
+ * `last_result` has carried the per-connector errors all along and nothing read
+ * them, so the panel said "last 12:34" after a pass where every source failed.
+ * A timestamp on its own is a claim that it worked, and a user whose brain quietly
+ * stopped updating finds out days later — which is the failure the background
+ * loop is most prone to (see `scheduler.py`).
+ *
+ * Keys starting with `_` are the sweep's own bookkeeping (`_cancelled`,
+ * `_deduped`, `_graph`), not sources.
+ */
+function failedSources(result) {
+  return Object.entries(result || {})
+    .filter(([name, r]) => !name.startsWith("_") && r && r.errors && r.errors.length)
+    .map(([name]) => name);
+}
 async function loadSyncStatus() {
   try {
     const s = await api("/api/sync/status");
     if (s.interval_minutes) SYNC_INTERVAL_MIN = s.interval_minutes;
     const last = s.last_run ? new Date(s.last_run).toLocaleTimeString() : "not yet";
-    $("#syncStatus").textContent = s.syncing ? "syncing now…"
-      : (s.enabled ? `auto every ${s.interval_minutes}m · last ${last}` : "auto-sync off");
+    const failed = failedSources(s.last_result);
+    // Named, not counted: "1 source failed" sends the user looking, and the
+    // name is already on screen in the connector row that needs attention.
+    const trouble = failed.length
+      ? ` · ${failed.join(", ")} failed`
+      : "";
+    const el = $("#syncStatus");
+    el.textContent = s.syncing ? "syncing now…"
+      : (s.enabled ? `auto every ${s.interval_minutes}m · last ${last}${trouble}`
+                   : "auto-sync off");
+    el.classList.toggle("sync-trouble", !s.syncing && failed.length > 0);
     $("#syncAll").textContent = s.syncing ? "syncing…" : "sync all";
     $("#syncAll").disabled = !!s.syncing;
   } catch (_) {}

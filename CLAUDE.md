@@ -46,6 +46,7 @@ and that document is the one to update when the rule changes.
 | `brain/` | memories, graph, enrichment; `canonical/` is the curated layer |
 | `connectors/` | one class per source, registered in `__init__.py::REGISTRY` |
 | `core/` | SQLite store, schema, embeddings, chunking, dates |
+| `browser/` | the browser an agent drives, and the origin allow-list in front of it |
 | `web/` | the whole frontend. Vanilla JS, **no build step** |
 | `desktop.py` · `hud.py` | the native window and the floating sign-in card |
 | `metrics.py` · `training.py` | numbers over time — measurements and sets/reps/load, kept as numbers not prose |
@@ -172,6 +173,16 @@ even when every test is green. Reasoning and measurements:
 - Streaming is a callback on the same loop, never a second loop.
 - Delegation guards live in a `ContextVar`: one `copy_context()` **per call**,
   and the chain is left on every exit path.
+
+**Browser — `browser/`** · [`docs/BROWSER.md`](docs/BROWSER.md)
+- **The unit of consent is the origin**, and the check runs at the tool, never in
+  the model — a page naming another site is an injection, not a decision.
+- **Check where the browser landed, not where it was sent.** A granted page can
+  redirect anywhere; a refused landing drops the page rather than returning it.
+- **Page content must never be able to close its own quarantine fence**, or it
+  can make its next paragraph look like ours.
+- Reading only. A write tool joins `permissions.NEVER_UNATTENDED` in the same
+  commit that adds it.
 
 **Frontend — `web/`**
 - **Escape before applying inline markdown**, the way `md()` does. The link
@@ -321,6 +332,7 @@ The boundaries and what each must name:
 | what the Health agent still needs | [`docs/development/health-roadmap.md`](docs/development/health-roadmap.md) |
 | changing the user's inbox, and why it could not | [`docs/development/mail-triage.md`](docs/development/mail-triage.md) |
 | which messaging apps are actually reachable | [`docs/MESSAGING.md`](docs/MESSAGING.md) |
-| driving a real browser (planned) | [`docs/BROWSER.md`](docs/BROWSER.md) |
+| replacing the bundled Google OAuth client | [`docs/development/google-client-rotation.md`](docs/development/google-client-rotation.md) |
+| driving a real browser | [`docs/BROWSER.md`](docs/BROWSER.md) |
 | building and shipping | [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) |
 | known gaps | [`docs/AUDIT.md`](docs/AUDIT.md) |

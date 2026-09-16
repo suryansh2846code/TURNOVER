@@ -897,6 +897,13 @@ async function openModelScreen() {
   // nothing at all.
   try { await loadProviders(); } catch (_) {}
   try { await loadAgentDefaults(); } catch (_) {}
+  // Lives in workspace.js with the approvals queue it belongs to — the grant and
+  // the review of it are one subsystem, and splitting them would put the same
+  // endpoint in two files.
+  try { await loadAllowList(); } catch (_) {}
+  // Last, and never awaited into the others: a log that cannot be read must not
+  // stop the settings screen rendering the parts that can.
+  try { await loadDiagnosticsLog(); } catch (_) {}
 }
 function closeModelScreen() {
   const m = $("#modelScreen"); if (m) m.hidden = true;

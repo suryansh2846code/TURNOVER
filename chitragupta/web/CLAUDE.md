@@ -1,7 +1,7 @@
 # `chitragupta/web/` — the frontend
 
 Vanilla JS, **no build step**. The workspace is `index.html` + `styles.css` +
-twelve plain scripts; `onboarding.html` and `signin_hud.html` are self-contained
+fourteen plain scripts; `onboarding.html` and `signin_hud.html` are self-contained
 pages.
 
 **`index.html` declares the script order, and that is the only place it is
@@ -23,6 +23,8 @@ read before its definition is a temporal dead-zone `ReferenceError` that
 | `usage.js` | the token meter and enrichment progress |
 | `library.js` | the Agent Library screen — templates, shelves, the roster |
 | `tools.js` | the Tools & skills panel |
+| `diagnostics.js` | *What just happened* — the log, read-only |
+| `browser.js` | websites agents may read, on the Connectors screen |
 | `app.js` | the shell: state, chrome, agent rail, drawers, keyboard, boot |
 
 **Before moving code between them**, read the five checks in

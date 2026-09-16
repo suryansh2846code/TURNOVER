@@ -33,7 +33,12 @@ notion = ["notion-client>=2.2"]
 # entry: it is the official Web API over httpx, already a base dependency.
 telegram = ["telethon>=1.36"]
 desktop = ["pywebview>=5.0"]
+# Driving a real browser for the sites a user allows. Optional because the
+# browser itself is a separate ~150 MB download managed at runtime
+# (browser/chromium.py), and the app is fully usable without it.
+browser = ["playwright>=1.49"]
 all = [
+    "playwright>=1.49",
     "sentence-transformers>=2.7",
     "google-api-python-client>=2.0",
     "google-auth-oauthlib>=1.2",
