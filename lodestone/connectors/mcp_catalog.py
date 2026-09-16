@@ -71,6 +71,11 @@ class CatalogEntry:
 
     id: str
     name: str
+    #: Which shelf this sits on in the browser. A flat list of two dozen
+    #: connectors is a wall; the same list in six groups is a decision. Kept on
+    #: the entry rather than in the UI so the two cannot disagree about where
+    #: something belongs.
+    category: str = "Other"
     transport: str = "stdio"
     #: stdio: how it is launched. The version is part of the package spec.
     command: str = ""
@@ -145,6 +150,18 @@ class BlockedSource:
     reason: str
 
 
+#: The shelves, in the order they are shown. Explicit rather than derived from
+#: the entries, because "the order categories happen to appear in the tuple" is
+#: not a decision anybody made, and the first shelf is the one most people need.
+CATEGORIES: tuple[str, ...] = (
+    "Work & tasks",
+    "Notes, files & meetings",
+    "Design & web",
+    "Code & infrastructure",
+    "Money & customers",
+    "Reference",
+)
+
 #: Vetted connectors.
 #:
 #: Every remote endpoint here was checked to exist and to answer an
@@ -153,56 +170,151 @@ class BlockedSource:
 #: replaces listed a package that had never existed on npm and two that were
 #: deprecated upstream, and every row of it failed.
 CATALOG: tuple[CatalogEntry, ...] = (
+    # ── Work & tasks ─────────────────────────────────────────────
     CatalogEntry(
-        id="linear", name="Linear", transport="http",
-        url="https://mcp.linear.app/mcp",
-        notes="Issues, projects and cycles. Reading and, with your approval, "
-              "creating or updating issues.",
+        id="linear", name="Linear", category="Work & tasks",
+        transport="http", url="https://mcp.linear.app/mcp",
+        notes="Issues, projects and cycles. Reading and, with your approval, creating or updating issues.",
     ),
     CatalogEntry(
-        id="notion", name="Notion", transport="http",
-        url="https://mcp.notion.com/mcp",
-        notes="Pages and databases you have access to.",
-    ),
-    CatalogEntry(
-        id="sentry", name="Sentry", transport="http",
-        url="https://mcp.sentry.dev/mcp",
-        notes="Issues and events for the projects in your organisation.",
-    ),
-    CatalogEntry(
-        id="asana", name="Asana", transport="http",
-        url="https://mcp.asana.com/sse",
+        id="asana", name="Asana", category="Work & tasks",
+        transport="http", url="https://mcp.asana.com/sse",
         notes="Tasks and projects in your workspaces.",
     ),
     CatalogEntry(
-        id="atlassian", name="Jira & Confluence", transport="http",
-        url="https://mcp.atlassian.com/v1/sse",
-        notes="Atlassian's own server, covering both Jira issues and "
-              "Confluence pages.",
+        id="atlassian", name="Jira & Confluence", category="Work & tasks",
+        transport="http", url="https://mcp.atlassian.com/v1/sse",
+        notes="Atlassian's own server, covering both Jira issues and Confluence pages.",
     ),
     CatalogEntry(
-        id="stripe", name="Stripe", transport="http",
-        url="https://mcp.stripe.com",
-        notes="Customers, payments and subscriptions. Anything that moves "
-              "money always asks you first.",
+        id="todoist", name="Todoist", category="Work & tasks",
+        transport="http", url="https://ai.todoist.net/mcp",
+        notes="Your tasks, projects and labels.",
     ),
     CatalogEntry(
-        id="paypal", name="PayPal", transport="http",
-        url="https://mcp.paypal.com/mcp",
+        id="clickup", name="ClickUp", category="Work & tasks",
+        transport="http", url="https://mcp.clickup.com/mcp",
+        notes="Tasks, docs and spaces in your workspace.",
+    ),
+    CatalogEntry(
+        id="zapier", name="Zapier", category="Work & tasks",
+        transport="http", url="https://mcp.zapier.com/api/mcp/mcp",
+        notes="The automations you have already built, callable by your agents.",
+    ),
+
+    # ── Notes, files & meetings ──────────────────────────────────
+    CatalogEntry(
+        id="notion", name="Notion", category="Notes, files & meetings",
+        transport="http", url="https://mcp.notion.com/mcp",
+        notes="Pages and databases you have access to.",
+    ),
+    CatalogEntry(
+        id="fireflies", name="Fireflies", category="Notes, files & meetings",
+        transport="http", url="https://api.fireflies.ai/mcp",
+        notes="Transcripts and summaries of the meetings it recorded.",
+    ),
+    CatalogEntry(
+        id="airtable", name="Airtable", category="Notes, files & meetings",
+        transport="http", url="https://mcp.airtable.com/mcp",
+        notes="Bases, tables and records you can reach.",
+    ),
+
+    # ── Design & web ─────────────────────────────────────────────
+    CatalogEntry(
+        id="figma", name="Figma", category="Design & web",
+        transport="http", url="https://mcp.figma.com/mcp",
+        notes="Design files and the components in them.",
+    ),
+    CatalogEntry(
+        id="canva", name="Canva", category="Design & web",
+        transport="http", url="https://mcp.canva.com/mcp",
+        notes="Your designs, folders and brand assets.",
+    ),
+    CatalogEntry(
+        id="webflow", name="Webflow", category="Design & web",
+        transport="http", url="https://mcp.webflow.com/sse",
+        notes="Sites, pages and CMS collections.",
+    ),
+
+    # ── Code & infrastructure ────────────────────────────────────
+    CatalogEntry(
+        id="github", name="GitHub", category="Code & infrastructure",
+        transport="http", url="https://api.githubcopilot.com/mcp/",
+        auth="token",
+        needs_env=(NeededValue(
+            "GITHUB_TOKEN", "Personal access token",
+            "Create one at github.com → Settings → Developer settings. It only needs access to the repositories you want Lodestone to see."),),
+        notes="GitHub's own hosted server. Issues, pull requests, code and discussions.",
+    ),
+    CatalogEntry(
+        id="sentry", name="Sentry", category="Code & infrastructure",
+        transport="http", url="https://mcp.sentry.dev/mcp",
+        notes="Issues and events for the projects in your organisation.",
+    ),
+    CatalogEntry(
+        id="vercel", name="Vercel", category="Code & infrastructure",
+        transport="http", url="https://mcp.vercel.com",
+        notes="Projects, deployments and their logs.",
+    ),
+    CatalogEntry(
+        id="cloudflare", name="Cloudflare", category="Code & infrastructure",
+        transport="http", url="https://observability.mcp.cloudflare.com/mcp",
+        notes="Workers, logs and analytics for your account.",
+    ),
+    CatalogEntry(
+        id="neon", name="Neon", category="Code & infrastructure",
+        transport="http", url="https://mcp.neon.tech/mcp",
+        notes="Postgres databases, branches and queries.",
+    ),
+    CatalogEntry(
+        id="datadog", name="Datadog", category="Code & infrastructure",
+        transport="http", url="https://mcp.datadoghq.com/api/unstable/mcp-server/mcp",
+        notes="Monitors, dashboards and incidents.",
+    ),
+
+    # ── Money & customers ────────────────────────────────────────
+    CatalogEntry(
+        id="stripe", name="Stripe", category="Money & customers",
+        transport="http", url="https://mcp.stripe.com",
+        notes="Customers, payments and subscriptions. Anything that moves money always asks you first.",
+    ),
+    CatalogEntry(
+        id="paypal", name="PayPal", category="Money & customers",
+        transport="http", url="https://mcp.paypal.com/mcp",
         notes="Invoices, orders and transactions.",
     ),
     CatalogEntry(
-        id="github", name="GitHub", transport="http", auth="token",
-        url="https://api.githubcopilot.com/mcp/",
-        needs_env=(NeededValue(
-            "GITHUB_TOKEN", "Personal access token",
-            "Create one at github.com → Settings → Developer settings. It only "
-            "needs access to the repositories you want Lodestone to see."),),
-        notes="GitHub's own hosted server. Issues, pull requests, code and "
-              "discussions.",
+        id="square", name="Square", category="Money & customers",
+        transport="http", url="https://mcp.squareup.com/mcp",
+        notes="Payments, catalogue and customers.",
     ),
     CatalogEntry(
-        id="filesystem", name="A folder on this Mac", transport="stdio", auth="none",
+        id="intercom", name="Intercom", category="Money & customers",
+        transport="http", url="https://mcp.intercom.com/mcp",
+        notes="Conversations, contacts and help articles.",
+    ),
+
+    # ── Reference ────────────────────────────────────────────────
+    # Open endpoints: no account, no sign-in, nothing to store. Worth
+    # offering because an agent that can look a library up stops
+    # guessing at an API it half-remembers.
+    CatalogEntry(
+        id="deepwiki", name="DeepWiki", category="Reference",
+        transport="http", url="https://mcp.deepwiki.com/mcp",
+        auth="none",
+        notes="Ask questions about any public GitHub repository. No sign-in needed.",
+    ),
+    CatalogEntry(
+        id="context7", name="Context7", category="Reference",
+        transport="http", url="https://mcp.context7.com/mcp",
+        auth="none",
+        notes="Up-to-date documentation for thousands of libraries. No sign-in needed.",
+    ),
+
+    # ── this Mac ─────────────────────────────────────────────────
+    CatalogEntry(
+        id="filesystem", name="A folder on this Mac",
+        category="Notes, files & meetings", transport="stdio", auth="none",
         command="npx", args=("-y", "@modelcontextprotocol/server-filesystem@0.6.2"),
         needs_args=(NeededValue(
             "root", "Folder", "The folder this connector may read. Nothing "
