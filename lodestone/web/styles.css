@@ -969,6 +969,9 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 /* An address and the button that grants it read as one control, because they
    are one decision. */
 .allow-add { display: flex; align-items: center; gap: 8px; }
+/* A sweep that finished with a source still failing. Not danger — syncing is
+   working, one source is not — but it must not read like a clean run. */
+.sync-trouble { color: var(--warn, #e0a45e); }
 .set-select:focus, .set-input:focus { outline: none; border-color: var(--accent); }
 .set-select:disabled { opacity: .5; }
 
