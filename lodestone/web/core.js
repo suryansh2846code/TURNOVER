@@ -42,12 +42,44 @@ function orbStyle(id) { const [a, b] = orbPair(id); return `background:radial-gr
 
 // ── minimal line icons (no emoji) ───────────────────────────────────────────
 const _S = (p, s = 16) => `<svg viewBox="0 0 16 16" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+// Copy text, and say so.
+//
+// navigator.clipboard is the right API and http://127.0.0.1 counts as a secure
+// context, so it is available — but it rejects without a user gesture and is
+// absent in some webview configurations, and a copy button that silently does
+// nothing is worse than no button. The execCommand path is the fallback: a
+// throwaway textarea, off-screen rather than hidden, because a display:none
+// element cannot hold a selection.
+async function copyToClipboard(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) { /* fall through — the gesture may have been lost */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch (_) { return false; }
+}
+
 const IC = {
   brain: _S('<path d="M8 1.6l6.4 6.4L8 14.4 1.6 8z"/>'),
   connectors: _S('<rect x="2.5" y="3" width="11" height="2.6" rx="1"/><rect x="2.5" y="6.7" width="11" height="2.6" rx="1"/><rect x="2.5" y="10.4" width="8" height="2.4" rx="1"/>'),
   tasks: _S('<rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M5.4 8l1.7 1.7L11 5.9"/>'),
   tools: _S('<path d="M2 5h6M11 5h3M2 11h3M8 11h6"/><circle cx="9.3" cy="5" r="1.5"/><circle cx="6" cy="11" r="1.5"/>'),
   model: _S('<circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/>'),
+  copy: _S('<rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 5.5v-1a1.5 1.5 0 0 0-1.5-1.5H4a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 4 11h1"/>', 14),
+  tick: _S('<path d="M3.5 8.5l3 3 6-6.5"/>', 14),
   inbox: _S('<path d="M2.2 9h3.4l1 2h6.8l1-2h3.4"/><path d="M2.2 9 4.6 3.3h6.8L13.8 9v3.6a1.2 1.2 0 0 1-1.2 1.2H3.4a1.2 1.2 0 0 1-1.2-1.2z"/>'),
   help: _S('<circle cx="8" cy="8" r="6"/><path d="M6.2 6.2a1.9 1.9 0 0 1 3.6.7c0 1.3-1.8 1.5-1.8 2.7"/><circle cx="8" cy="11.4" r=".55" fill="currentColor" stroke="none"/>'),
   message: _S('<path d="M2.5 4.5h11v6.5H7l-3 2v-2H2.5z"/>'),

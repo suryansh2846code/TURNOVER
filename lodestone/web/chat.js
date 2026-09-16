@@ -319,7 +319,25 @@ function addMsg(role, text, images) {
     // No avatar on each turn. Which agent is answering is already said by the
     // chat header and the rail; repeating it beside every message spent a
     // 34px column on it and pushed the prose off the column's left edge.
-    el.innerHTML = `<div class="a-body">${md(clean)}</div>`;
+    // The MARKDOWN is what gets copied, not the rendered text: pasting a
+    // reply into a note or an issue should keep its lists and its code, and
+    // innerText would flatten all of it.
+    el.innerHTML = `<div class="a-body">${md(clean)}</div>
+      <div class="msg-tools"><button type="button" class="msg-copy" title="Copy reply"
+        aria-label="Copy reply">${IC.copy}<span>Copy</span></button></div>`;
+    const copyBtn = el.querySelector(".msg-copy");
+    if (copyBtn) copyBtn.onclick = async () => {
+      const ok = await copyToClipboard(clean);
+      if (!ok) { toast("Could not copy that"); return; }
+      // Confirm on the button itself. A toast says "something happened";
+      // the button saying it says "this is the thing that happened".
+      copyBtn.innerHTML = `${IC.tick}<span>Copied</span>`;
+      copyBtn.classList.add("is-done");
+      setTimeout(() => {
+        copyBtn.innerHTML = `${IC.copy}<span>Copy</span>`;
+        copyBtn.classList.remove("is-done");
+      }, 1400);
+    };
     box.appendChild(el);
     for (const a of actions) box.appendChild(actionCard(a));
     box.scrollTop = 1e9; return el;

@@ -61,6 +61,68 @@ def _reserve_port(host: str) -> tuple[int, socket.socket]:
     return port, sock
 
 
+def _install_edit_menu_now() -> None:
+    """Main-thread half of `_install_edit_menu`.
+
+    macOS delivers ⌘C, ⌘V, ⌘A and friends through the Edit menu's key
+    equivalents, walking the responder chain until something answers. pywebview
+    builds no menu bar at all, so there was no Edit menu, no key equivalents,
+    and nothing answered: text in the conversation selected fine and then could
+    not be copied, and the composer could not be pasted into.
+
+    The items use the standard AppKit selectors with a nil target, which is
+    what sends them down the responder chain to whatever has focus — the
+    WKWebView for the conversation, the text field for the composer. A Python
+    callback (what `webview.menu.MenuAction` offers) cannot do this: it takes
+    no key equivalent, and it would have to guess which view to act on.
+    """
+    import AppKit
+
+    app = AppKit.NSApplication.sharedApplication()
+    main = app.mainMenu()
+    if main is None:
+        return
+    for i in range(main.numberOfItems()):
+        if main.itemAtIndex_(i).title() == "Edit":
+            return                      # already there — do not add a second
+
+    items = [
+        ("Undo", "undo:", "z"),
+        ("Redo", "redo:", "Z"),
+        (None, None, None),
+        ("Cut", "cut:", "x"),
+        ("Copy", "copy:", "c"),
+        ("Paste", "paste:", "v"),
+        (None, None, None),
+        ("Select All", "selectAll:", "a"),
+    ]
+    edit = AppKit.NSMenu.alloc().initWithTitle_("Edit")
+    for title, selector, key in items:
+        if title is None:
+            edit.addItem_(AppKit.NSMenuItem.separatorItem())
+            continue
+        item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            title, selector, key)
+        edit.addItem_(item)
+
+    holder = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Edit", None, "")
+    holder.setSubmenu_(edit)
+    main.addItem_(holder)
+
+
+def _install_edit_menu() -> None:
+    """Give the app an Edit menu once AppKit is up.
+
+    Every Cocoa mutation in this app goes through AppHelper.callAfter: calling
+    these setters off the main thread hangs the process, and pywebview runs
+    this callback on a worker.
+    """
+    with suppressed("installing the Edit menu"):
+        from PyObjCTools import AppHelper
+
+        AppHelper.callAfter(_install_edit_menu_now)
+
+
 def run_app(dev: bool = False) -> None:
     try:
         import webview
@@ -144,7 +206,9 @@ def run_app(dev: bool = False) -> None:
     hud.prepare(webview.create_window)
 
     try:
-        webview.start()          # blocks until the window is closed
+        # `func` runs once the GUI loop is up, which is the earliest point an
+        # NSApplication exists to hang a menu on.
+        webview.start(_install_edit_menu)   # blocks until the window is closed
     finally:
         # Quitting must not leave a login process waiting for a callback that
         # will never come — that is how 158 of them piled up on one machine.
