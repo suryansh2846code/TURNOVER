@@ -91,8 +91,6 @@ class Template:
     works_with: list[str] = field(default_factory=list)
     #: Sources it genuinely cannot function without. A subset of `works_with`.
     needs: list[str] = field(default_factory=list)
-    #: Offered on the first run, before anybody has chosen anything.
-    starter: bool = False
 
     def to_agent(self) -> Agent:
         return Agent(
@@ -123,7 +121,6 @@ TEMPLATES: tuple[Template, ...] = (
         actions=_ALL_ACTIONS,
         recall_sources=["gmail", "gcal"],
         works_with=["gmail", "gcal"],
-        starter=True,
     ),
     Template(
         id="inbox",
@@ -144,7 +141,6 @@ TEMPLATES: tuple[Template, ...] = (
         recall_sources=["gmail", "gcal"],
         works_with=["gmail", "gcal"],
         needs=["gmail"],
-        starter=True,
     ),
     Template(
         id="research",
@@ -164,7 +160,6 @@ TEMPLATES: tuple[Template, ...] = (
         # be taught how, and then cannot claim it did.
         tools=[*BASE_TOOLS, *_FILES],
         works_with=[],
-        starter=True,
     ),
     Template(
         id="engineer",
@@ -264,7 +259,6 @@ TEMPLATES: tuple[Template, ...] = (
         actions=_ALL_ACTIONS,
         recall_sources=["gcal", "imessage", "notes"],
         works_with=["gcal", "imessage", "notes"],
-        starter=True,
     ),
     Template(
         id="files",
@@ -289,9 +283,18 @@ TEMPLATES: tuple[Template, ...] = (
 
 BY_ID: dict[str, Template] = {t.id: t for t in TEMPLATES}
 
-#: The roster somebody gets before they have chosen anything. Deliberately
-#: small: an agent nobody picked is an agent nobody has a reason to open.
-DEFAULT_ROSTER = [t.id for t in TEMPLATES if t.starter]
+#: Empty on purpose. Nothing is pre-added.
+#:
+#: Four agents used to arrive with onboarding, and an agent nobody picked is an
+#: agent nobody has a reason to open — a sidebar of strangers, three of which do
+#: not match the work this person does. The Agent Library exists so a team is
+#: assembled rather than issued, and shipping four anyway made the library look
+#: like a page of spares.
+#:
+#: A new install is not empty: onboarding still builds the user their own lead
+#: agent. So the first run is one agent that knows them, plus a library — which
+#: is a starting point, not a blank screen.
+DEFAULT_ROSTER: list[str] = []
 
 
 def _store():

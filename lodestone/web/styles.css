@@ -2161,3 +2161,8 @@ button.tiny.running:hover { background: linear-gradient(to right,
   border-top: 1px solid var(--line, #1e232b);
   color: var(--muted, #8a94a3); font-size: .92em; line-height: 1.5;
 }
+
+/* A first run has no agents — nothing is pre-added — so the rail explains
+   itself and points at the library instead of sitting blank. */
+.agents-empty { padding: 14px 12px; color: var(--muted, #8a94a3); }
+.agents-empty p { margin: 0 0 10px; font-size: .9rem; }

@@ -35,21 +35,20 @@ def test_brain_recall_fuses_graph_and_memories():
     assert "sokoarena" in res["context"].lower() or res["memory_hits"]
 
 
-def test_the_starter_roster_is_what_a_new_user_gets():
-    """Not the whole library: an agent nobody picked is one nobody opens.
+def test_nothing_is_pre_added_and_the_library_is_where_a_team_comes_from():
+    """This asserted four shipped agents, then a smaller starter set, and now
+    none — because an agent nobody picked is an agent nobody opens, and four
+    strangers in a sidebar made the library look like a page of spares.
 
-    This used to assert the four that shipped, because the four that shipped
-    WERE the roster. Now the library offers more than anyone starts with, and
-    what matters is that a fresh install begins with a small, useful team.
+    A fresh install is not empty: onboarding builds the user their own lead
+    agent. What must be true is that no *template* arrives unasked.
     """
     from lodestone.agents.library import BY_ID, DEFAULT_ROSTER
 
-    ids = {a.id for a in list_agents()}
-    assert set(DEFAULT_ROSTER) <= ids, "the starter roster is not all present"
-    assert 2 <= len(DEFAULT_ROSTER) < len(BY_ID), (
-        "a starter roster should be a choice, not the whole catalogue")
-    for tid in DEFAULT_ROSTER:
-        assert tid in BY_ID
+    assert DEFAULT_ROSTER == [], "a template is still being pre-added"
+    assert len(BY_ID) >= 8, "the library people choose from is thin"
+    assert not ({a.id for a in list_agents()} & set(BY_ID)), (
+        "a library template is in the roster without anybody adding it")
 
 
 def test_agent_tool_loop_uses_brain():

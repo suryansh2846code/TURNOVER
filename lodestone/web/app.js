@@ -79,6 +79,18 @@ async function loadAgents() {
   // pin the lead agent (created at welcome) to the top
   const leadId = localStorage.getItem("lodestone_lead_agent");
   agents.sort((a, b) => (b.id === leadId ? 1 : 0) - (a.id === leadId ? 1 : 0));
+  if (!agents.length) {
+    // Nothing ships pre-added, so an empty rail is a real first run — not an
+    // error. It has to lead somewhere rather than just being blank.
+    $("#agentList").innerHTML =
+      `<div class="agents-empty">
+         <p>No agents yet.</p>
+         <button type="button" id="emptyToLibrary" class="tiny">Browse the Agent Library</button>
+       </div>`;
+    const go = $("#emptyToLibrary");
+    if (go) go.onclick = () => { if (typeof openLibrary === "function") openLibrary(); };
+    return;
+  }
   $("#agentList").innerHTML = agents.map((a) => {
     const lead = a.id === leadId;
     return `

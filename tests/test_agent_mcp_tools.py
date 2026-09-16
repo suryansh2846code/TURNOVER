@@ -94,6 +94,20 @@ class FakeSupplier:
 
 
 @pytest.fixture(autouse=True)
+def _someone_to_ask():
+    """`ask_agent` is not offered when there is nobody to ask — correct, and
+    since nothing is pre-added any more these tests have to put someone there
+    or they are measuring a different tool list than they mean to."""
+    from lodestone.agents.library import add_to_roster, remove_from_roster
+
+    add_to_roster("inbox")
+    add_to_roster("research")
+    yield
+    remove_from_roster("inbox")
+    remove_from_roster("research")
+
+
+@pytest.fixture(autouse=True)
 def _no_stale_discovery():
     """Discovery is cached for seconds; a test must never inherit another's."""
     mcp_tools.clear_cache()

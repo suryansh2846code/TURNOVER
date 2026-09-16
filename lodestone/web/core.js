@@ -84,6 +84,9 @@ const IC = {
   brain: _S('<path d="M8 1.6l6.4 6.4L8 14.4 1.6 8z"/>'),
   connectors: _S('<rect x="2.5" y="3" width="11" height="2.6" rx="1"/><rect x="2.5" y="6.7" width="11" height="2.6" rx="1"/><rect x="2.5" y="10.4" width="8" height="2.4" rx="1"/>'),
   tasks: _S('<rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M5.4 8l1.7 1.7L11 5.9"/>'),
+  // Three books on a shelf, the third leaning — a library of agents to pick
+  // from. `applyIcons` keys off data-nav, so this name must stay "library".
+  library: _S('<rect x="2.4" y="2.8" width="2.7" height="10.4" rx="0.8"/><rect x="6" y="4.4" width="2.7" height="8.8" rx="0.8"/><path d="M10.2 5.1l2.5.7-2 7.6-2.5-.7z"/>'),
   tools: _S('<path d="M2 5h6M11 5h3M2 11h3M8 11h6"/><circle cx="9.3" cy="5" r="1.5"/><circle cx="6" cy="11" r="1.5"/>'),
   model: _S('<circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/>'),
   copy: _S('<rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 5.5v-1a1.5 1.5 0 0 0-1.5-1.5H4a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 4 11h1"/>', 14),

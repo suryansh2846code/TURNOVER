@@ -579,16 +579,19 @@ def create_lead_agent(body: LeadIn):
         f"You are {name}, the user's lead agent — the head of their Lodestone team "
         "and their personal chief of staff. You are their first point of contact and "
         "you help with everything: you know their whole world from the shared brain, "
-        "you coordinate the specialist agents (Inbox, Launch, Research, Personal), and "
-        "you hand off or pull them in when useful. Be warm, concise, and proactive; "
+        "you coordinate whichever specialist agents they have added from the Agent "
+        "Library, and you hand off or pull them in when useful — `ask_agent` names "
+        "the ones they actually have. Be warm, concise, and proactive; "
         "when you don't know something, use your tools (search the brain, the web, "
         "tasks, Gmail).\n\n"
         + (f"WHAT YOU ALREADY KNOW ABOUT THE USER:\n{persona}\n" if persona else "")
     )
-    a = get_custom_store().create(
-        name, "lead agent · chief of staff", system,
-        ["search_brain", "remember", "list_entities", "web_search",
-         "add_task", "list_tasks", "complete_task", "gmail_search"], [])
+    # No hardcoded tool list. This one used to name eight tools with no
+    # connector access, which is how the user's own lead agent sat next to a
+    # connected Notion it could not read — the agent was built before Notion
+    # existed and nothing ever went back. `create` defaults to the same base
+    # every library agent gets, and the category keeps up on its own.
+    a = get_custom_store().create(name, "lead agent · chief of staff", system)
     return {"id": a.id, "name": a.name, "role": a.role}
 
 

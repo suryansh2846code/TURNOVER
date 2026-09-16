@@ -36,6 +36,21 @@ def scripted(monkeypatch):
 
 # ── it works ─────────────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def _a_team_to_delegate_to():
+    """Delegation needs somebody to delegate TO, and nothing is pre-added any
+    more — an empty roster means `ask_agent` is correctly never offered, which
+    would make these tests pass for the wrong reason."""
+    from lodestone.agents.library import add_to_roster, remove_from_roster
+
+    team = ("inbox", "research", "personal", "writer")
+    for tid in team:
+        add_to_roster(tid)
+    yield
+    for tid in team:
+        remove_from_roster(tid)
+
+
 def test_an_agent_can_ask_another_and_gets_its_answer(scripted):
     scripted([[("ask_agent", {"agent_id": "research",
                               "question": "what is the harbour plan?"})],

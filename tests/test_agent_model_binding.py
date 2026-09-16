@@ -53,6 +53,19 @@ def test_agent_model_crud():
     assert get_agent_model("inbox") == (None, None)
 
 
+@pytest.fixture(autouse=True)
+def _rostered():
+    """Templates are not pre-added any more, so a test about the roster has to
+    put them in it."""
+    from lodestone.agents.library import add_to_roster, remove_from_roster
+
+    for tid in ("inbox", "personal", "research"):
+        add_to_roster(tid)
+    yield
+    for tid in ("inbox", "personal", "research"):
+        remove_from_roster(tid)
+
+
 def test_agent_instance_overlay():
     """Verify get_agent() and list_agents() reflect the bound model."""
     set_agent_model("inbox", "claude", "claude-3-7-sonnet-latest")

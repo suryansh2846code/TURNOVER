@@ -91,6 +91,11 @@ def _no_leaked_overrides():
     yield
     for agent_id in ("research", "chief-of-staff", "chotu-under-test"):
         get_tool_overrides().clear(agent_id)
+    # The roster is persisted, so a test that adds to it and walks away leaks
+    # into every later test that asks what a fresh install looks like.
+    from lodestone.agents.library import remove_from_roster
+    for agent_id in ("chief-of-staff", "inbox"):
+        remove_from_roster(agent_id)
 
 
 # ── the reproduction ─────────────────────────────────────────────────────
@@ -340,6 +345,9 @@ def test_asking_about_an_agent_that_does_not_exist_is_a_404():
 
 
 def test_the_agents_list_says_which_ones_cannot_reach_connectors(chotu, notion):
+    from lodestone.agents.library import add_to_roster
+
+    add_to_roster("chief-of-staff")          # nothing is pre-added any more
     rows = {a["id"]: a for a in _client().get("/api/agents").json()["agents"]}
     assert rows[chotu.id]["reaches_connectors"] is False
     assert rows["chief-of-staff"]["reaches_connectors"] is True
