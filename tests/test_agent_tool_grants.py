@@ -20,13 +20,13 @@ from typing import Any
 
 import pytest
 
-from lodestone.agents import grants, mcp_tools
-from lodestone.agents.agent import AgentMemory
-from lodestone.agents.custom import get_custom_store
-from lodestone.agents.library import BASE_TOOLS
-from lodestone.agents.mcp_tools import SENTINEL
-from lodestone.agents.presets import PRESETS
-from lodestone.agents.tool_overrides import get_tool_overrides
+from chitragupta.agents import grants, mcp_tools
+from chitragupta.agents.agent import AgentMemory
+from chitragupta.agents.custom import get_custom_store
+from chitragupta.agents.library import BASE_TOOLS
+from chitragupta.agents.mcp_tools import SENTINEL
+from chitragupta.agents.presets import PRESETS
+from chitragupta.agents.tool_overrides import get_tool_overrides
 
 #: The agent from the report, exactly as it was stored.
 CHOTU_TOOLS = ["search_brain", "remember", "list_entities", "web_search",
@@ -93,7 +93,7 @@ def _no_leaked_overrides():
         get_tool_overrides().clear(agent_id)
     # The roster is persisted, so a test that adds to it and walks away leaks
     # into every later test that asks what a fresh install looks like.
-    from lodestone.agents.library import remove_from_roster
+    from chitragupta.agents.library import remove_from_roster
     for agent_id in ("chief-of-staff", "inbox"):
         remove_from_roster(agent_id)
 
@@ -175,8 +175,8 @@ def test_choosing_no_tools_is_still_respected():
 def test_a_change_keeps_the_conversation_and_the_model(chotu):
     """Recorded as an override, so nothing is recreated — which is why the chat
     history and the model binding, both keyed by the agent id, survive."""
-    from lodestone.agents.agent_models import get_agent_model, set_agent_model
-    from lodestone.agents.presets import get_agent
+    from chitragupta.agents.agent_models import get_agent_model, set_agent_model
+    from chitragupta.agents.presets import get_agent
 
     AgentMemory().append(chotu.id, "user", "something worth keeping")
     set_agent_model(chotu.id, "openai", "gpt-5.5")
@@ -192,7 +192,7 @@ def test_a_change_keeps_the_conversation_and_the_model(chotu):
 def test_a_preset_can_be_changed_and_put_back(notion):
     """The reversal: everything is editable, because a change is an override —
     so the shipped definition is still there to return to."""
-    from lodestone.agents.presets import PRESETS, get_agent
+    from chitragupta.agents.presets import PRESETS, get_agent
 
     shipped = list(PRESETS["research"].tools)
     try:
@@ -224,7 +224,7 @@ def test_the_default_is_reported_so_reset_is_possible(chotu, notion):
 
 def test_stripping_every_tool_is_respected_and_is_not_untouched(chotu):
     """`None` and `[]` mean different things and must stay distinguishable."""
-    from lodestone.agents.presets import get_agent
+    from chitragupta.agents.presets import get_agent
 
     get_tool_overrides().set(chotu.id, [])
     assert get_agent(chotu.id).tools == []
@@ -273,7 +273,7 @@ def test_a_working_connector_is_never_reported_as_blocked(chotu, notion, monkeyp
 
 
 def test_every_builtin_is_accounted_for(chotu, no_connectors):
-    from lodestone.agents.tools import TOOL_DEFS
+    from chitragupta.agents.tools import TOOL_DEFS
 
     view = grants.for_agent(chotu.id)
     listed = {r["name"] for r in view["tools"] if r["source"] == "builtin"}
@@ -313,7 +313,7 @@ def test_a_signed_out_connectors_tools_are_not_stripped_from_an_agent(chotu, mon
     """Validating a saved list against the live catalogue would turn a Notion
     outage into a permanent edit. `build_tools()` already ignores what it
     cannot find, which is where that belongs."""
-    from lodestone.agents.presets import get_agent
+    from chitragupta.agents.presets import get_agent
 
     get_tool_overrides().set(chotu.id, ["search_brain", "notion_search"])
     monkeypatch.setattr(mcp_tools, "_supplier", lambda: None)   # Notion goes down
@@ -327,7 +327,7 @@ def test_a_signed_out_connectors_tools_are_not_stripped_from_an_agent(chotu, mon
 def _client():
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
     return TestClient(app)
 
 
@@ -345,7 +345,7 @@ def test_asking_about_an_agent_that_does_not_exist_is_a_404():
 
 
 def test_the_agents_list_says_which_ones_cannot_reach_connectors(chotu, notion):
-    from lodestone.agents.library import add_to_roster
+    from chitragupta.agents.library import add_to_roster
 
     add_to_roster("chief-of-staff")          # nothing is pre-added any more
     rows = {a["id"]: a for a in _client().get("/api/agents").json()["agents"]}
@@ -405,7 +405,7 @@ def _built_through_the_api(body: dict) -> dict:
     """Create an agent the way the builder does, and read back what it got."""
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
 
     client = TestClient(app)
     created = client.post("/api/agents/custom", json=body).json()
@@ -450,7 +450,7 @@ def test_asking_for_no_tools_is_still_honoured_through_the_api(notion):
 def test_deleting_an_agent_does_not_leave_its_tool_list_behind():
     """An id is a slug of the name, so it repeats. An override left behind
     would apply to an agent that never had it."""
-    from lodestone.agents.presets import get_agent
+    from chitragupta.agents.presets import get_agent
 
     store = get_custom_store()
     first = store.create("Recycled Name", tools=["search_brain"])

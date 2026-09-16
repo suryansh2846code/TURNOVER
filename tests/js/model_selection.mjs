@@ -20,7 +20,7 @@ import path from "node:path";
 
 import { appSource } from "./_app_source.mjs";
 
-const APP_JS = process.argv[2];   // a path inside lodestone/web/
+const APP_JS = process.argv[2];   // a path inside chitragupta/web/
 const scenario = JSON.parse(fs.readFileSync(0, "utf8"));
 
 const store = new Map();
@@ -148,7 +148,7 @@ new Function(
   "\nglobalThis.__pickerProvider = () => activePickerProvider;" +
   // The exact expression the composer uses to build a turn's request body.
   "\nglobalThis.__requestProvider = () => $(\"#provider\").value || undefined;" +
-  "\nglobalThis.__requestModel = () => localStorage.getItem(\"lodestone_model\") || undefined;"
+  "\nglobalThis.__requestModel = () => localStorage.getItem(\"chitragupta_model\") || undefined;"
 )();
 
 const result = { ok: true, error: null, posts };
@@ -175,8 +175,8 @@ try {
   // absent" is the answer these tests are checking for — so it is made explicit.
   result.requestProvider = globalThis.__requestProvider() ?? null;
   result.requestModel = globalThis.__requestModel() ?? null;
-  result.savedProvider = store.get("lodestone_provider") ?? null;
-  result.savedModel = store.get("lodestone_model") ?? null;
+  result.savedProvider = store.get("chitragupta_provider") ?? null;
+  result.savedModel = store.get("chitragupta_model") ?? null;
   result.selectValue = elFor("provider").value;
 } catch (e) {
   result.ok = false;

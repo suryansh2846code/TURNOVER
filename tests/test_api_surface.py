@@ -15,8 +15,8 @@ import pathlib
 
 from fastapi.testclient import TestClient
 
-from lodestone.api.app import app
-from lodestone.api.routes import ALL_ROUTERS
+from chitragupta.api.app import app
+from chitragupta.api.routes import ALL_ROUTERS
 
 FROZEN = pathlib.Path(__file__).parent / "api_surface.json"
 
@@ -41,7 +41,7 @@ def test_every_route_is_still_served():
 
 def test_every_router_is_mounted():
     """A module can define a perfectly good router and never be included."""
-    import lodestone.api.routes as pkg
+    import chitragupta.api.routes as pkg
 
     modules = [p.stem for p in pathlib.Path(pkg.__file__).parent.glob("*.py")
                if p.stem != "__init__"]
@@ -80,7 +80,7 @@ def test_the_composition_root_stays_a_composition_root():
     """The file was split because 105 routes in one module could not be read.
     Nothing stops the next route being added straight back into it."""
     source = pathlib.Path(app.__module__.replace(".", "/") + ".py")
-    source = pathlib.Path(__file__).parent.parent / "lodestone/api/app.py"
+    source = pathlib.Path(__file__).parent.parent / "chitragupta/api/app.py"
     text = source.read_text()
     for verb in ("@app.get(", "@app.post(", "@app.put(", "@app.delete(", "@app.patch("):
         assert verb not in text, (

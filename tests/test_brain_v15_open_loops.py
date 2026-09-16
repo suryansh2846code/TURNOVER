@@ -5,9 +5,9 @@ import tempfile
 
 import pytest
 
-from lodestone.brain import Brain
-from lodestone.core.models import OpenLoopPriority, OpenLoopStatus
-from lodestone.core.store import MemoryStore
+from chitragupta.brain import Brain
+from chitragupta.core.models import OpenLoopPriority, OpenLoopStatus
+from chitragupta.core.store import MemoryStore
 
 
 @pytest.fixture
@@ -75,8 +75,8 @@ def test_open_loops_injected_into_recall_context(brain):
 
 
 def test_open_loops_agent_tools(brain, monkeypatch):
-    from lodestone.agents.tools import _complete_open_loop, _create_open_loop, _list_open_loops
-    monkeypatch.setattr("lodestone.agents.tools.get_brain", lambda: brain)
+    from chitragupta.agents.tools import _complete_open_loop, _create_open_loop, _list_open_loops
+    monkeypatch.setattr("chitragupta.agents.tools.get_brain", lambda: brain)
 
     # 1. Create via tool
     res = _create_open_loop("Follow up with client about API keys", related_project="ClientX")

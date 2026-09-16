@@ -1,8 +1,8 @@
 """The floating sign-in card.
 
-A browser sign-in takes the user out of Lodestone, so the status has to follow
+A browser sign-in takes the user out of Chitragupta, so the status has to follow
 them: an always-on-top window that sits above the browser, reports success, and
-offers a way back. It exists only in the desktop app — `lodestone serve` has no
+offers a way back. It exists only in the desktop app — `chitragupta serve` has no
 window to create, so the in-app card must still handle it there.
 """
 import json
@@ -15,11 +15,11 @@ import pytest
 from fastapi.testclient import TestClient
 from web_sources import app_source
 
-from lodestone import hud
-from lodestone.api.app import app
+from chitragupta import hud
+from chitragupta.api.app import app
 
 ROOT = Path(__file__).parent.parent
-HUD_HTML = ROOT / "lodestone/web/signin_hud.html"
+HUD_HTML = ROOT / "chitragupta/web/signin_hud.html"
 HARNESS = ROOT / "tests/js/signin_hud.mjs"
 
 
@@ -37,20 +37,20 @@ def test_no_window_outside_the_desktop_app():
 
 
 def test_auth_start_publishes_the_timeout():
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value="/x/agent"), \
-         patch("lodestone.models.cursor.cursor_cli_auth_status",
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value="/x/agent"), \
+         patch("chitragupta.models.cursor.cursor_cli_auth_status",
                return_value={"installed": True, "authenticated": False}), \
-         patch("lodestone.models.cursor.start_cursor_cli_login", return_value=(True, "opened")):
+         patch("chitragupta.models.cursor.start_cursor_cli_login", return_value=(True, "opened")):
         body = TestClient(app).post("/api/providers/cursor/auth/start").json()
     assert body["started"] is True
     assert body["timeout_seconds"] == hud.SIGNIN_TIMEOUT_SECONDS
 
 
 def test_the_api_does_not_try_to_open_the_window():
-    """Under `lodestone app --dev` the backend is a separate uvicorn process
+    """Under `chitragupta app --dev` the backend is a separate uvicorn process
     with no handle on the webview, so a backend-raised window silently did
     nothing. The page raises it instead."""
-    src = (ROOT / "lodestone/api/app.py").read_text()
+    src = (ROOT / "chitragupta/api/app.py").read_text()
     assert "hud.open_signin(" not in src
 
 
@@ -127,7 +127,7 @@ def test_cancelling_stops_the_flow_and_hides_the_card():
     hud._hud_window = window
     cancelled = {}
     flow = MagicMock(cancel=lambda: cancelled.setdefault("called", True))
-    with patch("lodestone.models.auth_flows.get_flow", return_value=flow):
+    with patch("chitragupta.models.auth_flows.get_flow", return_value=flow):
         assert hud._Bridge().cancel_signin("cursor") is True
     assert cancelled.get("called") is True
     window.hide.assert_called_once()
@@ -147,7 +147,7 @@ def test_page_is_served():
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 @pytest.mark.parametrize("scenario,expect", [
-    ("success", {"title": "Grok is connected", "action": "Return to Lodestone", "cls": "is-ok"}),
+    ("success", {"title": "Grok is connected", "action": "Return to Chitragupta", "cls": "is-ok"}),
     ("timeout", {"title": "Couldn't connect Grok", "action": "Try again", "cls": "is-err"}),
 ])
 def test_states_render(scenario, expect):

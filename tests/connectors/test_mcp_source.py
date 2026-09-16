@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from lodestone.connectors.mcp_source import (
+from chitragupta.connectors.mcp_source import (
     MCPConnector,
     MCPServerSpec,
     classify_tools,
@@ -36,7 +36,7 @@ def spec_for(mode: str, **over) -> MCPServerSpec:
 
 
 def test_a_listing_server_is_synced_end_to_end():
-    from lodestone.core.store import get_store
+    from chitragupta.core.store import get_store
 
     conn = MCPConnector(spec_for("listing"))
     result = conn.sync(interactive=False)
@@ -49,7 +49,7 @@ def test_a_listing_server_is_synced_end_to_end():
 
 
 def test_records_keep_their_titles():
-    from lodestone.core.store import get_store
+    from chitragupta.core.store import get_store
 
     MCPConnector(spec_for("listing")).sync(interactive=False)
 
@@ -180,7 +180,7 @@ def test_a_failing_sync_returns_a_result_rather_than_raising():
 
 
 def test_an_error_never_carries_an_internal():
-    from lodestone.connectors.mcp_errors import explain
+    from chitragupta.connectors.mcp_errors import explain
 
     message = explain(RuntimeError("sk-proj-AAAABBBBCCCCDDDDEEEEFFFFGGGG failed"),
                       "Some Source")
@@ -213,7 +213,7 @@ def test_it_honours_cancel_and_progress():
 
 
 def test_a_second_sync_stores_nothing_new():
-    from lodestone.core.store import get_store
+    from chitragupta.core.store import get_store
 
     conn = MCPConnector(spec_for("listing"))
     conn.sync(interactive=False)
@@ -249,7 +249,7 @@ def test_servers_round_trip_through_disk():
 
 
 def test_get_connector_resolves_an_mcp_name():
-    from lodestone.connectors import get_connector
+    from chitragupta.connectors import get_connector
 
     upsert_server(spec_for("listing", id="wired"))
 
@@ -260,14 +260,14 @@ def test_get_connector_resolves_an_mcp_name():
 
 
 def test_an_unknown_mcp_name_is_a_clear_error():
-    from lodestone.connectors import get_connector
+    from chitragupta.connectors import get_connector
 
     with pytest.raises(KeyError):
         get_connector("mcp:never-configured")
 
 
 def test_the_scheduler_picks_up_configured_servers():
-    from lodestone.scheduler import _mcp_servers
+    from chitragupta.scheduler import _mcp_servers
 
     upsert_server(spec_for("listing", id="scheduled"))
 

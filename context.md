@@ -1,4 +1,4 @@
-# Lodestone — Product Context & Direction
+# Chitragupta — Product Context & Direction
 
 > The living context doc: what we're building, the real Turnstone vision we're
 > matching, where we are, the gaps, the plan, and the bug watch-list.
@@ -8,7 +8,7 @@
 
 ## 1. What we're building
 
-**Lodestone** = a private, local-first AI workspace for everyday knowledge work.
+**Chitragupta** = a private, local-first AI workspace for everyday knowledge work.
 Connect your apps and files → they become a **second brain** on your own machine
 → specialized **agents** answer *and act* using that brain, on **any model you
 bring**. An open, faithful "same-to-same" build of **Turnstone (myturnstone.ai,
@@ -41,7 +41,7 @@ Turnstone extends the "one-prompt" productivity of AI coding to **all** work.
 
 ---
 
-## 3. Where Lodestone is today (built & working)
+## 3. Where Chitragupta is today (built & working)
 
 - **Brain**: SQLite store, semantic embeddings (local sentence-transformer,
   offline), knowledge graph (typed entities + facts), fused recall. Offline by
@@ -64,7 +64,7 @@ Turnstone extends the "one-prompt" productivity of AI coding to **all** work.
 
 ## 4. Gap analysis vs the real vision
 
-| Turnstone pillar | Lodestone now | Gap |
+| Turnstone pillar | Chitragupta now | Gap |
 |---|---|---|
 | Brain from ALL daily apps | files/notes/gmail/notion/gdrive | **+ Calendar, iMessage, browser, Slack, Linear, transcripts** |
 | Agents that **take action** | agents draft/answer; can't *do* | **biggest gap — execution (send email, create event, etc.)** |
@@ -91,7 +91,7 @@ Turnstone extends the "one-prompt" productivity of AI coding to **all** work.
 
 **Next: action-taking (the "handle it for me" leap).**
 - Agents propose an action (draft email / calendar event / task) → **user
-  confirms** → Lodestone executes via the connector's write scope.
+  confirms** → Chitragupta executes via the connector's write scope.
 - Start with the safest: create calendar events, create tasks (done), draft (not
   send) email; then gated send with explicit confirmation.
 
@@ -114,7 +114,7 @@ Turnstone extends the "one-prompt" productivity of AI coding to **all** work.
   MCP (`--mcp-config`) so it executes for real. TODO.
 - ⚠️ WATCH: small local models (3B) sometimes narrate fake tool success or pick
   wrong tools; mitigated by grounding + low temp, not eliminated.
-- ⚠️ WATCH: huge folder syncs bloat the brain — capped at LODESTONE_MAX_FILES
+- ⚠️ WATCH: huge folder syncs bloat the brain — capped at CHITRAGUPTA_MAX_FILES
   (default 2000) with junk filters; raise deliberately.
 - ⚠️ WATCH: first model/embedder load is a slow cold start (torch import);
   subsequent loads are offline/fast.

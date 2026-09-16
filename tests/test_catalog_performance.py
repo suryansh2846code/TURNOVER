@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 import pytest
 
-from lodestone.config import forget_cached_secrets, get_settings
-from lodestone.models import cache
+from chitragupta.config import forget_cached_secrets, get_settings
+from chitragupta.models import cache
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +53,7 @@ def test_writing_a_secret_invalidates_the_cache():
 
 def test_account_detection_is_not_repeated_within_one_drawer_open():
     """Both endpoints call it, and it shells out to `claude auth status`."""
-    from lodestone.models import accounts
+    from chitragupta.models import accounts
 
     calls = {"n": 0}
 
@@ -75,7 +75,7 @@ def test_account_detection_is_not_repeated_within_one_drawer_open():
 def test_cli_model_listing_is_cached():
     """`agent --list-models` is a subprocess returning 223 rows; it measured
     3.1s and is hit on every catalog build."""
-    from lodestone.models import cursor
+    from chitragupta.models import cursor
 
     calls = {"n": 0}
 
@@ -85,7 +85,7 @@ def test_cli_model_listing_is_cached():
         return subprocess.CompletedProcess(cmd, 0, "auto - Auto\ncomposer-2.5 - Composer", "")
 
     cursor.cursor_cli_models.cache_clear()
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value="/x/agent"), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value="/x/agent"), \
          patch("subprocess.run", side_effect=counting):
         first = cursor.cursor_cli_models()
         for _ in range(5):
@@ -97,8 +97,8 @@ def test_cli_model_listing_is_cached():
 
 def test_a_credential_change_flushes_every_probe_cache():
     """Connecting an account must be visible at once, not after a TTL."""
-    from lodestone.models import accounts
-    from lodestone.models.registry import clear_provider_cache
+    from chitragupta.models import accounts
+    from chitragupta.models.registry import clear_provider_cache
 
     with patch.object(accounts, "detect_claude_account", lambda: {"x": 1}), \
          patch.object(accounts, "detect_cursor_account", dict), \
@@ -122,7 +122,7 @@ def test_a_warm_drawer_open_is_fast():
     """Guards the regression that made the app need force-quitting."""
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
 
     client = TestClient(app)
     client.get("/api/providers")                 # warm

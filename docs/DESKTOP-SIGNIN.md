@@ -12,20 +12,20 @@
 
 ## The shape of it
 
-A browser sign-in takes the user out of Lodestone, so the status follows them: a
+A browser sign-in takes the user out of Chitragupta, so the status follows them: a
 small always-on-top card in the top-right of the screen, like a system
 notification. It reports progress, offers **Cancel**, and says so when it works.
 
 | piece | file | job |
 |---|---|---|
-| the window | `lodestone/hud.py` | create once, configure, place, raise, resize, hide |
-| the card | `lodestone/web/signin_hud.html` | the UI, the poll loop, self-measurement |
-| the bridge | `lodestone/desktop.py` (`_AppBridge`) | what the page can call |
-| the flows | `lodestone/models/auth_flows.py` | per-provider sign-in, unchanged by any of this |
-| the cleanup | `lodestone/models/login_processes.py` | reap CLI logins we spawned |
+| the window | `chitragupta/hud.py` | create once, configure, place, raise, resize, hide |
+| the card | `chitragupta/web/signin_hud.html` | the UI, the poll loop, self-measurement |
+| the bridge | `chitragupta/desktop.py` (`_AppBridge`) | what the page can call |
+| the flows | `chitragupta/models/auth_flows.py` | per-provider sign-in, unchanged by any of this |
+| the cleanup | `chitragupta/models/login_processes.py` | reap CLI logins we spawned |
 
 **The window is raised by the page, never by the API.** Under
-`lodestone app --dev` the backend is a separate uvicorn process with no handle on
+`chitragupta app --dev` the backend is a separate uvicorn process with no handle on
 the webview, so a backend-initiated window silently does nothing. The frontend
 always runs inside the webview, so it calls
 `window.pywebview.api.open_signin_hud(...)`.
@@ -97,7 +97,7 @@ Measured, not assumed. With a full-screen browser frontmost:
 The collection behaviour *was* applied (read back as 257 / 273 / 1). macOS simply
 will not place the window there. Apps that manage it (Alfred, Raycast) are
 `LSUIElement` accessory apps using a non-activating `NSPanel`; pywebview creates a
-plain `NSWindow`, and making Lodestone dockless is not a trade worth this.
+plain `NSWindow`, and making Chitragupta dockless is not a trade worth this.
 
 **This is why the in-app row in the Models panel stays on screen either way.**
 

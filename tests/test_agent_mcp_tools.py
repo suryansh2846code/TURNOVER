@@ -9,7 +9,7 @@ somewhere in this repo's history:
 - an agent that did not ask for connector tools gets exactly the built-ins it
   always got — thirteen of them, no more.
 
-The supplying half (`lodestone.connectors.mcp_tools`) is the Connectors lane's
+The supplying half (`chitragupta.connectors.mcp_tools`) is the Connectors lane's
 and may not exist in this checkout, so these tests install a stand-in that
 matches the agreed `MCPToolRef` shape exactly. That is the contract being
 tested: if the real module drifts from it, this file is where it shows.
@@ -23,9 +23,9 @@ from typing import Any
 import pytest
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import mcp_tools, runtime
-from lodestone.agents.effort import HIGH
-from lodestone.agents.tools import (
+from chitragupta.agents import mcp_tools, runtime
+from chitragupta.agents.effort import HIGH
+from chitragupta.agents.tools import (
     TOOL_DEFS,
     build_tools,
     describe_tools,
@@ -101,8 +101,8 @@ def _connectors_allowed():
     they would measure the refusal instead of the thing they name. Granted the
     way `@` grants it — for the turn, never stored.
     """
-    from lodestone.agents import connector_grants
-    from lodestone.agents.mcp_tools import connector_ids
+    from chitragupta.agents import connector_grants
+    from chitragupta.agents.mcp_tools import connector_ids
 
     token = connector_grants.allow_for_this_turn(
         ["notion", "linear", "demo", *connector_ids()])
@@ -115,7 +115,7 @@ def _someone_to_ask():
     """`ask_agent` is not offered when there is nobody to ask — correct, and
     since nothing is pre-added any more these tests have to put someone there
     or they are measuring a different tool list than they mean to."""
-    from lodestone.agents.library import add_to_roster, remove_from_roster
+    from chitragupta.agents.library import add_to_roster, remove_from_roster
 
     add_to_roster("inbox")
     add_to_roster("research")
@@ -326,7 +326,7 @@ def test_the_category_is_not_offered_when_there_is_nothing_behind_it(connectors)
 
 def test_connector_writes_still_wait_for_a_tap():
     """`mcp_action` is unattended-forbidden, and reading tools does not change it."""
-    from lodestone.agents import permissions
+    from chitragupta.agents import permissions
 
     assert "mcp_action" in permissions.NEVER_UNATTENDED
     verdict = permissions.check("mcp_action", {"tool": "create_issue"})
@@ -348,8 +348,8 @@ def test_connector_calls_are_bounded_below_the_loops_parallel_width(monkeypatch)
     import threading
     import time
 
-    from lodestone.agents.loop import ToolRunner
-    from lodestone.models.base import ToolCall
+    from chitragupta.agents.loop import ToolRunner
+    from chitragupta.models.base import ToolCall
 
     state = {"live": 0, "peak": 0}
     guard = threading.Lock()

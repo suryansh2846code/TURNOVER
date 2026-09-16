@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from lodestone.agents.library import (
+from chitragupta.agents.library import (
     BY_ID,
     EVERYTHING,
     add_to_roster,
@@ -24,9 +24,9 @@ from lodestone.agents.library import (
     expand_tools,
     remove_from_roster,
 )
-from lodestone.agents.mcp_tools import SENTINEL
-from lodestone.agents.presets import get_agent
-from lodestone.agents.tools import TOOL_DEFS
+from chitragupta.agents.mcp_tools import SENTINEL
+from chitragupta.agents.presets import get_agent
+from chitragupta.agents.tools import TOOL_DEFS
 
 CHIEF = "chief-of-staff"
 
@@ -34,10 +34,10 @@ CHIEF = "chief-of-staff"
 @pytest.fixture
 def alone():
     """A roster holding only the Chief, so "nobody else" is reachable."""
-    from lodestone.agents import library
-    from lodestone.agents.custom import get_custom_store
-    from lodestone.agents.library import roster
-    from lodestone.core.store import get_store
+    from chitragupta.agents import library
+    from chitragupta.agents.custom import get_custom_store
+    from chitragupta.agents.library import roster
+    from chitragupta.core.store import get_store
 
     before = get_store().get_meta(library.ROSTER_KEY)
     hidden = get_custom_store().list()
@@ -88,7 +88,7 @@ def test_it_is_a_marker_not_a_list():
 def test_a_tool_added_tomorrow_reaches_it_without_an_edit():
     grown = dict(TOOL_DEFS)
     grown["a_brand_new_tool"] = object()
-    import lodestone.agents.tools as tools_mod
+    import chitragupta.agents.tools as tools_mod
 
     saved = tools_mod.TOOL_DEFS
     tools_mod.TOOL_DEFS = grown
@@ -116,8 +116,8 @@ def test_connector_access_needs_no_configuration(monkeypatch):
     """If the user connected it, this agent can use it."""
     from types import SimpleNamespace
 
-    from lodestone.agents import mcp_tools
-    from lodestone.agents.tools import build_tools
+    from chitragupta.agents import mcp_tools
+    from chitragupta.agents.tools import build_tools
 
     ref = SimpleNamespace(qualified_name="notion:search", server_id="notion",
                           server_label="Notion", tool="search",
@@ -159,7 +159,7 @@ def test_the_roster_is_read_per_turn_not_stored(team):
 
 
 def test_an_agent_that_cannot_delegate_is_not_given_a_roster():
-    from lodestone.agents.prompt import build
+    from chitragupta.agents.prompt import build
 
     assert build(name="X", role="y", system_prompt="z",
                  tools=["search_brain"], agent_id="x").count("YOUR TEAM") == 0
@@ -168,7 +168,7 @@ def test_an_agent_that_cannot_delegate_is_not_given_a_roster():
 # ── what it still will not do without a tap ──────────────────────────────
 def test_acting_on_the_world_still_goes_through_the_user():
     """Having every tool is not the same as acting unattended."""
-    from lodestone.agents.permissions import NEVER_UNATTENDED
+    from chitragupta.agents.permissions import NEVER_UNATTENDED
 
     assert "mcp_action" in NEVER_UNATTENDED
     assert "create_routine" in NEVER_UNATTENDED

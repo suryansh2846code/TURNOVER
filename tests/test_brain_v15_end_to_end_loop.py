@@ -12,9 +12,9 @@ Also validates:
 """
 import pytest
 
-from lodestone.agents.runtime import run_turn
-from lodestone.config import get_settings
-from lodestone.core.models import MemoryStatus, MemoryType, OpenLoopPriority
+from chitragupta.agents.runtime import run_turn
+from chitragupta.config import get_settings
+from chitragupta.core.models import MemoryStatus, MemoryType, OpenLoopPriority
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def clean_env(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "home", tmp_path)
     monkeypatch.setattr(settings, "model_provider", "mock")
     monkeypatch.setattr(settings, "model_name", "mock-v1")
-    from lodestone.brain.brain import get_brain
+    from chitragupta.brain.brain import get_brain
     get_brain.cache_clear()
     yield tmp_path
     get_brain.cache_clear()
@@ -41,11 +41,11 @@ def test_end_to_end_agent_brain_loop(clean_env):
     # Learning from a turn is deliberately off the critical path — the reply
     # arrives, then the brain catches up. Wait for it before reading the brain;
     # the loop being tested is the same one, just not blocking the answer.
-    from lodestone.agents import background
+    from chitragupta.agents import background
     assert background.wait_for_idle(timeout=30), "background learning did not finish"
 
     # 2. Verify Brain ingested the fact and created entities in graph
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
     memories = b.store.list()
     assert len(memories) >= 1
@@ -69,7 +69,7 @@ def test_connector_sync_idempotency(clean_env):
     """Verify Section 61:
     Same connector sync runs multiple times -> zero duplicate explosion.
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     # Sync message 1 from Gmail
@@ -102,7 +102,7 @@ def test_secret_redaction_in_loop(clean_env):
     """Verify Section 43/44:
     Secrets do not enter long-term semantic memory in plain text.
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     res = b.remember(
@@ -124,7 +124,7 @@ def test_historical_preference_contradiction_flow(clean_env):
     - old preference is preserved as superseded
     - history survives
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     # Old preference
@@ -175,7 +175,7 @@ def test_open_loops_full_lifecycle(clean_env):
     """Verify Section 17 & 18:
     Open loop creation, recall integration, and completion.
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     loop = b.create_open_loop(

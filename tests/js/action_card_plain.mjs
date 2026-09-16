@@ -7,7 +7,7 @@
  * threw on a non-string, so the TypeError replaced the message it was escaping:
  * a successful action rendered as a red crash.
  *
- * argv: <a path inside lodestone/web/>   stdin: {action, result}
+ * argv: <a path inside chitragupta/web/>   stdin: {action, result}
  */
 import fs from "node:fs";
 import path from "node:path";

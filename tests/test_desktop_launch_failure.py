@@ -1,6 +1,6 @@
 """A launch that fails must say so, in the bundle where there is no terminal.
 
-`run_app` reported a dead server with `print("Lodestone server failed to start.")`
+`run_app` reported a dead server with `print("Chitragupta server failed to start.")`
 and returned. That is fine in a checkout and worthless in a shipped `.app`: a
 bundle is not launched from a shell, so stdout goes nowhere at all. The user
 double-clicked the icon and *nothing happened* — no window, no dialog, not even
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lodestone import desktop
+from chitragupta import desktop
 
 
 def test_a_bundled_app_does_not_fail_silently(monkeypatch):
@@ -33,7 +33,7 @@ def test_a_bundled_app_does_not_fail_silently(monkeypatch):
 
 def test_a_source_checkout_keeps_the_terminal_report(monkeypatch):
     """There IS a terminal here, and it already has the traceback. Popping a
-    modal alert in front of a developer running `lodestone app` is noise."""
+    modal alert in front of a developer running `chitragupta app` is noise."""
     monkeypatch.delattr(desktop.sys, "frozen", raising=False)
 
     shown: list[Path] = []
@@ -60,7 +60,7 @@ def test_the_alert_never_replaces_one_silence_with_another(monkeypatch, capsys):
 
 def test_the_message_tells_the_user_what_to_do_next():
     """"Failed to start" alone is the same dead end, only louder."""
-    log = Path("/Users/someone/Library/Lodestone/logs/lodestone.log")
+    log = Path("/Users/someone/Library/Chitragupta/logs/chitragupta.log")
     text = desktop.launch_failure_message(log)
 
     assert str(log) in text, "the message does not name the log file"

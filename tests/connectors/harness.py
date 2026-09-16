@@ -83,7 +83,7 @@ def install_google(monkeypatch, fake_module, service) -> None:
     """Make the lazy `googleapiclient` import resolve, and skip real consent."""
     fake_module("googleapiclient.discovery", build=lambda *a, **k: service)
     for mod in ("gmail", "gcal", "gdrive"):
-        target = f"lodestone.connectors.{mod}"
+        target = f"chitragupta.connectors.{mod}"
         monkeypatch.setattr(f"{target}.get_credentials", lambda **_: object(),
                             raising=False)
 
@@ -100,7 +100,7 @@ def install_urlopen(monkeypatch, payload) -> None:
 
 
 def _gmail(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors.gmail import GmailConnector
+    from chitragupta.connectors.gmail import GmailConnector
 
     messages = [{
         "id": f"msg{i}",
@@ -116,7 +116,7 @@ def _gmail(monkeypatch, fake_module, tmp_path, n):
 
 
 def _gcal(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors.gcal import GoogleCalendarConnector
+    from chitragupta.connectors.gcal import GoogleCalendarConnector
 
     events = [{
         "id": f"evt{i}",
@@ -131,7 +131,7 @@ def _gcal(monkeypatch, fake_module, tmp_path, n):
 
 
 def _github(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors.github import GitHubConnector
+    from chitragupta.connectors.github import GitHubConnector
 
     items = [{
         "number": i,
@@ -148,7 +148,7 @@ def _github(monkeypatch, fake_module, tmp_path, n):
 
 
 def _linear(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors.linear import LinearConnector
+    from chitragupta.connectors.linear import LinearConnector
 
     nodes = [{
         "identifier": f"ENG-{i}",
@@ -166,7 +166,7 @@ def _linear(monkeypatch, fake_module, tmp_path, n):
 
 
 def _notion(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors.notion import NotionConnector
+    from chitragupta.connectors.notion import NotionConnector
 
     pages = [{
         "id": f"page{i}",
@@ -195,7 +195,7 @@ def _notion(monkeypatch, fake_module, tmp_path, n):
 
 
 def _files(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors.files import FilesConnector
+    from chitragupta.connectors.files import FilesConnector
 
     folder = tmp_path / "docs"
     folder.mkdir(exist_ok=True)
@@ -209,7 +209,7 @@ def _files(monkeypatch, fake_module, tmp_path, n):
 
 
 def _notes(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors.notes import NotesConnector
+    from chitragupta.connectors.notes import NotesConnector
 
     conn = NotesConnector()
     conn._test_kwargs = {"text": "Dev's birthday is on the 31st of August."}
@@ -218,7 +218,7 @@ def _notes(monkeypatch, fake_module, tmp_path, n):
 
 
 def _imessage(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors import imessage
+    from chitragupta.connectors import imessage
 
     db = tmp_path / "chat.db"
     con = sqlite3.connect(db)
@@ -246,7 +246,7 @@ def _imessage(monkeypatch, fake_module, tmp_path, n):
 
 
 def _apple_mail(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors import apple_mail
+    from chitragupta.connectors import apple_mail
 
     root = tmp_path / "Mail"
     (root / "V10" / "Inbox.mbox").mkdir(parents=True, exist_ok=True)
@@ -259,7 +259,7 @@ def _apple_mail(monkeypatch, fake_module, tmp_path, n):
 
 
 def _apple_calendar(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors import apple_calendar
+    from chitragupta.connectors import apple_calendar
 
     root = tmp_path / "Calendars"
     root.mkdir(exist_ok=True)
@@ -276,7 +276,7 @@ def _apple_calendar(monkeypatch, fake_module, tmp_path, n):
 
 
 def _custom_api(monkeypatch, fake_module, tmp_path, n):
-    from lodestone.connectors.custom_api import CustomAPIConnector
+    from chitragupta.connectors.custom_api import CustomAPIConnector
 
     records = [{"id": i, "name": f"Record {i}",
                 "note": f"Free-text body for custom record {i}."} for i in range(n)]
@@ -290,7 +290,7 @@ def _custom_api(monkeypatch, fake_module, tmp_path, n):
 
 
 def _set_secret(key: str, value: str) -> None:
-    from lodestone.config import get_settings
+    from chitragupta.config import get_settings
 
     get_settings().set_secret(key, value)
 

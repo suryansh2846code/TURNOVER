@@ -13,8 +13,8 @@ configured `F,E9` · 475 test functions, 1,421 assertions over ~19k lines of
 Python and 5.9k of frontend.
 
 **Re-reviewed 2026-09-13 (QA, MODE: TEST) against `223610c`.** Current state:
-**1345 passed, 18 skipped, 5 xfailed in 44s** · `ruff check lodestone tests`
-clean · `mypy lodestone` clean over 111 files. **A2 and A3 are now closed** — see
+**1345 passed, 18 skipped, 5 xfailed in 44s** · `ruff check chitragupta tests`
+clean · `mypy chitragupta` clean over 111 files. **A2 and A3 are now closed** — see
 their entries. **A8 is new and is the most serious item in this file.**
 
 **Re-reviewed 2026-09-14 after the complexity-reduction pass.** CI on `main`:
@@ -34,11 +34,11 @@ consumer), A10 (the extractors disagree).
 
 ## A1 — A live Google OAuth client secret is committed
 
-`lodestone/data/google_client.json` holds a real `client_id`, `project_id` and
-`client_secret` for the Lodestone Google Cloud project.
+`chitragupta/data/google_client.json` holds a real `client_id`, `project_id` and
+`client_secret` for the Chitragupta Google Cloud project.
 
 ```bash
-head -c 200 lodestone/data/google_client.json
+head -c 200 chitragupta/data/google_client.json
 ```
 
 This is **not** a credential compromise on its own — Google classifies installed
@@ -47,7 +47,7 @@ already a conscious decision (`DECISIONS.md` → H12), taken so the app works on
 first launch without asking the user to create a Cloud project.
 
 What the existing decision does not cover is the **abuse path**: anyone can stand
-up a consent screen branded "Lodestone" using this client id, and abuse
+up a consent screen branded "Chitragupta" using this client id, and abuse
 attributed to the project gets it rate-limited or suspended — which takes Gmail,
 Calendar and Drive sync down for *every* user at once, with no fix shippable from
 our side.
@@ -68,10 +68,10 @@ plan for per-user clients as the escape hatch.
 > a server bound on `127.0.0.1:8787`. Re-verified:
 >
 > ```bash
-> python -c "from lodestone.api import security as s; print(s.refusal('POST', \
+> python -c "from chitragupta.api import security as s; print(s.refusal('POST', \
 >   {'host':'127.0.0.1:8787','origin':'http://localhost:3000', \
 >    'sec-fetch-site':'same-site'}))"
-> # Lodestone ignores requests that come from a website.
+> # Chitragupta ignores requests that come from a website.
 > ```
 >
 > The original text is kept below for the reasoning, which is still worth
@@ -83,7 +83,7 @@ plan for per-user clients as the escape hatch.
 foreign `Origin` (CSRF). It does not refuse *another local web origin*:
 
 ```python
->>> from lodestone.api import security as s
+>>> from chitragupta.api import security as s
 >>> s.refusal("POST", {"host": "127.0.0.1:8787",
 ...                    "origin": "http://localhost:3000",
 ...                    "sec-fetch-site": "same-site"})
@@ -112,12 +112,12 @@ The second is cheaper and covers the realistic case.
 
 > **Closed 2026-09-13.** The duplicated condition is gone; `refusal()` now has a
 > single `is_local_origin` / `same_origin` path and the comment sits with the
-> check it describes. `grep -n is_local_origin lodestone/api/security.py` shows
+> check it describes. `grep -n is_local_origin chitragupta/api/security.py` shows
 > two sites, both live.
 
 ### Original finding
 
-`lodestone/api/security.py:105`:
+`chitragupta/api/security.py:105`:
 
 ```python
 origin = headers.get("origin") or ""
@@ -164,8 +164,8 @@ comment and believes a check exists that never runs.
 module boundaries, no type checking.
 
 ```bash
-wc -l lodestone/web/app.js
-grep -c innerHTML lodestone/web/app.js
+wc -l chitragupta/web/app.js
+grep -c innerHTML chitragupta/web/app.js
 ```
 
 `renderProviderConnectBox` alone spans lines 477–992. Test coverage is the three
@@ -195,7 +195,7 @@ sound and should hold.
 > point, not the percentage.
 >
 > ```bash
-> ruff check lodestone tests && mypy lodestone
+> ruff check chitragupta tests && mypy chitragupta
 > ```
 
 ### Original finding
@@ -205,7 +205,7 @@ sound and should hold.
 full ruleset now reports ~2,300:
 
 ```bash
-./.venv/bin/python -m ruff check --select ALL --statistics lodestone | head -20
+./.venv/bin/python -m ruff check --select ALL --statistics chitragupta | head -20
 ```
 
 Two entries there are substance rather than style: **132 `BLE001`** blind excepts
@@ -215,8 +215,8 @@ own as `log.suppressed()` adoption completes.
 Meanwhile 637 of 871 defs (73%) are already annotated — enough that mypy would
 pay for itself now rather than being a migration.
 
-**To close:** add mypy in non-strict mode over `lodestone/models` and
-`lodestone/api` first (the layers with the most invariants and the most
+**To close:** add mypy in non-strict mode over `chitragupta/models` and
+`chitragupta/api` first (the layers with the most invariants and the most
 provider-shaped dict passing), then widen. Enable ruff rule families in waves,
 as the existing comment intends.
 
@@ -249,7 +249,7 @@ sentence — `suppressed("reading the saved port")` → *"failed while reading t
 saved port: …"*. All ~60 adopted sites pass a truncated code fragment instead:
 
 ```bash
-grep -rho 'suppressed("[^"]*"' --include='*.py' lodestone | head
+grep -rho 'suppressed("[^"]*"' --include='*.py' chitragupta | head
 # suppressed("path.chmod(0o600)")
 # suppressed("from .capabilities import get_capabilities …")
 # suppressed("claims = _decode_jwt_payload(token) …")
@@ -293,7 +293,7 @@ to `check()` as one recipient — the permitted one. The stranger is never judge
 
 ```bash
 python - <<'EOF'
-from lodestone.agents.permissions import recipients_of
+from chitragupta.agents.permissions import recipients_of
 for sep in ("\n", " ", "\t"):
     raw = f"colleague@work.test{sep}attacker@evil.test"
     print(repr(raw), "->", recipients_of("send_email", {"to": raw}))
@@ -368,7 +368,7 @@ accidental `send_email` defence so it is not removed as redundant).
 works — `curate.py` queues correctly — but **no UI ever drains it**:
 
 ```bash
-grep -rn "canonical\|open-loops\|contradiction" lodestone/web/*.js lodestone/web/*.html
+grep -rn "canonical\|open-loops\|contradiction" chitragupta/web/*.js chitragupta/web/*.html
 # (no output)
 ```
 
@@ -381,8 +381,8 @@ queues on "uncertain person identity" and "would override a confirmed fact":
 
 ```bash
 python - <<'EOF'
-import os, tempfile; os.environ['LODESTONE_HOME'] = tempfile.mkdtemp()
-from lodestone.brain.canonical.service import get_canonical
+import os, tempfile; os.environ['CHITRAGUPTA_HOME'] = tempfile.mkdtemp()
+from chitragupta.brain.canonical.service import get_canonical
 c = get_canonical(); cur = c.curator
 cur.apply_candidate({"kind":"claim","type":"role","value":"Staff Engineer",
   "confidence":"confirmed","section":"about_you"}, source_type="chat",
@@ -424,8 +424,8 @@ correct one:
 
 ```bash
 python - <<'EOF'
-import os, tempfile; os.environ['LODESTONE_HOME'] = tempfile.mkdtemp()
-from lodestone.brain.canonical.service import get_canonical
+import os, tempfile; os.environ['CHITRAGUPTA_HOME'] = tempfile.mkdtemp()
+from chitragupta.brain.canonical.service import get_canonical
 c = get_canonical(); cur = c.curator
 for t in ("location", "preference"):
     for v, ts in (("Lisbon","2026-01-01T00:00:00Z"), ("Berlin","2026-06-01T00:00:00Z")):
@@ -477,9 +477,9 @@ only memory routes are `GET /api/brain/memories/{id}` and `…/explain`, and no
 
 ```bash
 python - <<'EOF'
-import os, tempfile; os.environ['LODESTONE_HOME'] = tempfile.mkdtemp()
+import os, tempfile; os.environ['CHITRAGUPTA_HOME'] = tempfile.mkdtemp()
 from fastapi.testclient import TestClient
-from lodestone.api.app import app
+from chitragupta.api.app import app
 H = {'host':'127.0.0.1:8000','origin':'http://127.0.0.1:8000','sec-fetch-site':'same-origin'}
 print(TestClient(app).request('DELETE', '/api/memories/abc', headers=H).status_code)
 EOF
@@ -504,13 +504,13 @@ Recorded so they are not re-audited:
   regex is scheme-constrained; `href="$2"` cannot break out because `"` is
   already `&quot;`. (A4 notes the invariant to preserve.)
 - **Secrets in source.** No `sk-`, `xai-` or `AIza` literals anywhere in
-  `lodestone/`. Secrets go through `settings.get_secret` → env → Keychain.
+  `chitragupta/`. Secrets go through `settings.get_secret` → env → Keychain.
 - **Dependency pinning.** `uv.lock` present, 409 packages.
 - **DB migrations.** `core/db.py::_migrate` is additive `ALTER TABLE` only and
   idempotent, so no backup step is required for the current shape. Revisit if a
   destructive migration is ever needed.
 - **Test hygiene.** `conftest.py` neutralises real vendor `login` spawns, forces
-  `mock`/`hash` providers, and redirects `LODESTONE_HOME` to a temp dir.
+  `mock`/`hash` providers, and redirects `CHITRAGUPTA_HOME` to a temp dir.
 
 Added 2026-09-13 (QA), each checked directly rather than assumed:
 
@@ -535,7 +535,7 @@ Added 2026-09-13 (QA), each checked directly rather than assumed:
 - **The agent tool surface is a closed allow-list.** `build_tools` only emits
   names present in `TOOL_DEFS`, and `run_tool` refuses anything else — so no MCP
   tool is callable mid-turn today.
-- **No TODO/FIXME/HACK markers** anywhere in `lodestone/`, `tests/` or
+- **No TODO/FIXME/HACK markers** anywhere in `chitragupta/`, `tests/` or
   `scripts/`.
 
 **Still open and getting worse:** A4 — `app.js` is now **3,462 lines** (3,007 at
@@ -552,7 +552,7 @@ is code no user ever watches run.
 
 ```bash
 pytest -q --cov --cov-report=term-missing | grep scheduler
-# lodestone/scheduler.py   184   129   30%   41-45, 54, 72-75, 79-88, 91-188, ...
+# chitragupta/scheduler.py   184   129   30%   41-45, 54, 72-75, 79-88, 91-188, ...
 ```
 
 `_sync_all` — 99 lines, the function that drives every connector, decides what

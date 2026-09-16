@@ -11,10 +11,10 @@ import re
 import pytest
 from web_sources import app_source
 
-from lodestone.models import discovery, entitlements
-from lodestone.models.discovery import DiscoveredModel, clear_model_cache, get_discovered_models
-from lodestone.models.entitlements import evaluate_model_entitlement
-from lodestone.models.registry import _LOCALITY, MODEL_CATALOG, PRIMARY_PROVIDERS
+from chitragupta.models import discovery, entitlements
+from chitragupta.models.discovery import DiscoveredModel, clear_model_cache, get_discovered_models
+from chitragupta.models.entitlements import evaluate_model_entitlement
+from chitragupta.models.registry import _LOCALITY, MODEL_CATALOG, PRIMARY_PROVIDERS
 
 
 @pytest.fixture(autouse=True)

@@ -1,4 +1,4 @@
-# Lodestone — Roadmap / Backlog
+# Chitragupta — Roadmap / Backlog
 
 > What's left to build, recorded so we can revisit after each item ships.
 > Reviewed 13 Sep 2026. See [`JOURNEY.md`](JOURNEY.md) for how we got here,
@@ -127,7 +127,7 @@ and `referrer=opencode` — **not ours**. That OAuth flow is unreachable now
   Measured across levels 3/25/101, with and without `Stationary`, and with an
   accessory activation policy — none reach it. Apps that manage this (Alfred,
   Raycast) are `LSUIElement` accessory apps using a non-activating `NSPanel`;
-  pywebview creates a plain `NSWindow`, and making Lodestone dockless is not a
+  pywebview creates a plain `NSWindow`, and making Chitragupta dockless is not a
   trade worth it. The in-app row in the Models panel is the fallback, which is
   why it stays on screen even when the card is up. See
   [`DESKTOP-SIGNIN.md`](DESKTOP-SIGNIN.md).

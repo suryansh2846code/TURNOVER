@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parent.parent
-WEB = ROOT / "lodestone/web"
+WEB = ROOT / "chitragupta/web"
 
 
 @pytest.fixture(scope="module")

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from lodestone.brain.canonical import freshness, redact
-from lodestone.brain.canonical.service import CanonicalBrain
-from lodestone.brain.canonical.store import CanonicalStore
+from chitragupta.brain.canonical import freshness, redact
+from chitragupta.brain.canonical.service import CanonicalBrain
+from chitragupta.brain.canonical.store import CanonicalStore
 
 
 class MockProvider:
@@ -181,7 +181,7 @@ def test_recall_block_leads_and_cites(cb):
     assert r["claim_id"] in block["claim_ids"]
 
 def test_recall_marks_stale(cb):
-    cb.curator.apply_candidate(_claim(type="project_status", value="building lodestone",
+    cb.curator.apply_candidate(_claim(type="project_status", value="building chitragupta",
                                       ts="2020-01-01"),
                                source_type="chat", source_timestamp="2020-01-01")
     cb.maintain()

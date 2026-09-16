@@ -19,7 +19,7 @@ import subprocess
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-APP_JS = ROOT / "lodestone" / "web" / "app.js"
+APP_JS = ROOT / "chitragupta" / "web" / "app.js"
 HARNESS = ROOT / "tests" / "js" / "action_card.mjs"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,
@@ -160,7 +160,7 @@ def test_the_live_entity_chip_type_is_constrained_server_side():
     Fixed on both sides: the type is constrained where it is produced, and the
     template escapes it. This test pins the server half.
     """
-    from lodestone.brain.graph import ENTITY_TYPES
+    from chitragupta.brain.graph import ENTITY_TYPES
 
     assert '"><img' not in str(ENTITY_TYPES)
     for candidate, expected in [

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build a distributable Lodestone.dmg: bundle → sign → notarise → staple → dmg.
+# Build a distributable Chitragupta.dmg: bundle → sign → notarise → staple → dmg.
 #
 # This is the "give it to somebody else" path. `scripts/build-macos-app.sh` is
 # the other one, and it is NOT this: that writes a shim whose launcher runs this
@@ -30,7 +30,7 @@
 #   * Apple Developer Program membership ($99/yr)
 #   * A "Developer ID Application" certificate in the login keychain
 #   * A notarytool keychain profile:
-#       xcrun notarytool store-credentials lodestone-notary \
+#       xcrun notarytool store-credentials chitragupta-notary \
 #         --apple-id you@example.com --team-id TEAMID --password <app-specific-password>
 #
 # Without those, run with --unsigned to get a .dmg you can install yourself and
@@ -42,20 +42,20 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-APP_NAME="Lodestone"
+APP_NAME="Chitragupta"
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
 DIST="$PROJECT_DIR/dist"
 APP="$DIST/$APP_NAME.app"
 # The architecture is in the filename because this build is whatever machine
 # made it (arm64 here) and an Intel Mac cannot run it at all. Two files named
-# `Lodestone-0.1.0.dmg` on a download page is a support problem you cannot undo
+# `Chitragupta-0.1.0.dmg` on a download page is a support problem you cannot undo
 # after the fact, so the name carries the answer from the first release.
 ARCH="$(uname -m)"
 DMG="$DIST/$APP_NAME-$VERSION-$ARCH.dmg"
 STAGE="$DIST/dmg-stage"
 
-SIGN_IDENTITY="${LODESTONE_SIGN_IDENTITY:-Developer ID Application}"
-NOTARY_PROFILE="${LODESTONE_NOTARY_PROFILE:-lodestone-notary}"
+SIGN_IDENTITY="${CHITRAGUPTA_SIGN_IDENTITY:-Developer ID Application}"
+NOTARY_PROFILE="${CHITRAGUPTA_NOTARY_PROFILE:-chitragupta-notary}"
 UNSIGNED=0
 [ "${1:-}" = "--unsigned" ] && UNSIGNED=1
 
@@ -94,7 +94,7 @@ fi
 # ── 1. Bundle ───────────────────────────────────────────────────────────────
 step "Building $APP_NAME.app (PyInstaller)"
 rm -rf "$APP" "$DIST/$APP_NAME" "$STAGE" "$DMG"
-( cd packaging && "$PROJECT_DIR/.venv/bin/python" -m PyInstaller Lodestone.spec \
+( cd packaging && "$PROJECT_DIR/.venv/bin/python" -m PyInstaller Chitragupta.spec \
     --noconfirm --distpath "$DIST" --workpath "$PROJECT_DIR/build" --log-level WARN )
 [ -d "$APP" ] || die "PyInstaller produced no $APP_NAME.app"
 echo "  size: $(du -sh "$APP" | cut -f1)"
@@ -122,7 +122,7 @@ fi
 # mode this catches, and it costs fifteen seconds.
 step "Smoke test: does it start and serve?"
 SMOKE_HOME="$(mktemp -d)"
-LODESTONE_HOME="$SMOKE_HOME" "$APP/Contents/MacOS/$APP_NAME" >"$SMOKE_HOME/out.log" 2>&1 &
+CHITRAGUPTA_HOME="$SMOKE_HOME" "$APP/Contents/MacOS/$APP_NAME" >"$SMOKE_HOME/out.log" 2>&1 &
 SMOKE_PID=$!
 for _ in $(seq 1 30); do
   sleep 1
@@ -154,7 +154,7 @@ if [ "$UNSIGNED" = "0" ]; then
 else
   # PyInstaller ad-hoc signs the bundle on Apple Silicon, and an ad-hoc
   # signature that is broken or incomplete does NOT produce the "unverified
-  # developer" dialog — it produces "Lodestone is damaged and can't be opened",
+  # developer" dialog — it produces "Chitragupta is damaged and can't be opened",
   # which no Open Anyway sequence rescues and which reads to the user as a
   # corrupt download. Skipping the whole signing block used to skip this check
   # with it, so the build could not tell "will warn" from "will not open".
@@ -177,10 +177,10 @@ ln -s /Applications "$STAGE/Applications"    # the drag-to-install gesture
 # context and a single "Done" button.
 if [ "$UNSIGNED" = "1" ]; then
   cat > "$STAGE/READ ME FIRST.txt" <<'README'
-Opening Lodestone the first time
+Opening Chitragupta the first time
 ================================
 
-Lodestone is not yet signed with an Apple Developer certificate, so the first
+Chitragupta is not yet signed with an Apple Developer certificate, so the first
 time you open it macOS will say it "cannot be opened because Apple cannot check
 it for malicious software". That is macOS telling you it does not recognise the
 developer — it is not a virus warning, and it happens to every app distributed
@@ -188,13 +188,13 @@ outside the App Store without a paid certificate.
 
 Here is how to open it. It only has to be done once.
 
-  1. Drag Lodestone to the Applications folder in this window.
-  2. Open Applications and double-click Lodestone. You will see the warning.
+  1. Drag Chitragupta to the Applications folder in this window.
+  2. Open Applications and double-click Chitragupta. You will see the warning.
      Click Done.
   3. Open System Settings -> Privacy & Security.
-  4. Scroll down. There is a line saying "Lodestone was blocked", with an
+  4. Scroll down. There is a line saying "Chitragupta was blocked", with an
      "Open Anyway" button next to it. Click it.
-  5. Double-click Lodestone again and click Open.
+  5. Double-click Chitragupta again and click Open.
 
 From then on it opens normally, like any other app.
 
@@ -208,7 +208,7 @@ Requirements
     supported.
   * macOS 11 or later.
 
-Everything Lodestone stores stays on this Mac, in your Library folder. It does
+Everything Chitragupta stores stays on this Mac, in your Library folder. It does
 not upload your data anywhere.
 README
 fi

@@ -1,6 +1,6 @@
 # Architecture
 
-> **What this document is:** the architecture Lodestone *has*, written down —
+> **What this document is:** the architecture Chitragupta *has*, written down —
 > who owns what, which direction dependencies are allowed to run, and where a
 > responsibility currently sits in the wrong place.
 >
@@ -20,8 +20,8 @@ A local-first agent workspace. A team of agents share one on-device brain built
 from the user's own connected sources, running on whatever model the user
 already pays for. Everything stays on the machine: one FastAPI server bound to
 loopback, one SQLite file for the raw index and another for curated facts, and
-either a browser tab (`lodestone serve`) or a native macOS window
-(`lodestone app`) in front of it.
+either a browser tab (`chitragupta serve`) or a native macOS window
+(`chitragupta app`) in front of it.
 
 Two consequences shape every boundary below:
 
@@ -39,14 +39,14 @@ where today's code does not yet match it.
 
 | subsystem | directory | owns | must not own |
 |---|---|---|---|
-| **storage** | `lodestone/core/` | SQLite connections, schema and migrations, the memory table, vectors and embeddings, chunking, date parsing | interpreting what a memory *means*; anything provider- or UI-specific |
-| **brain** | `lodestone/brain/` | memories, semantic + lexical search, the entity/relation graph, enrichment, and the curated canonical claims in `brain/canonical/` | HTTP, model selection, connector scheduling |
-| **agents** | `lodestone/agents/` | agent execution, the tool loop, conversation memory, effort, delegation, planning, approvals and the unattended-action gate | which model to *offer*; how a provider authenticates |
-| **models** | `lodestone/models/` | providers, model discovery and entitlements, provider configuration, authentication flows, the vendor-CLI manager, the error taxonomy, streaming wire formats | brain content, agent policy, HTTP routing |
-| **connectors** | `lodestone/connectors/` | external integrations, ingestion, sync lifecycle and cancellation, the MCP client | how ingested text is scored or recalled |
-| **api** | `lodestone/api/` | the HTTP boundary: routing, request/response translation, the origin guard, the concurrency lanes, static assets | business logic of any kind; native window behaviour |
+| **storage** | `chitragupta/core/` | SQLite connections, schema and migrations, the memory table, vectors and embeddings, chunking, date parsing | interpreting what a memory *means*; anything provider- or UI-specific |
+| **brain** | `chitragupta/brain/` | memories, semantic + lexical search, the entity/relation graph, enrichment, and the curated canonical claims in `brain/canonical/` | HTTP, model selection, connector scheduling |
+| **agents** | `chitragupta/agents/` | agent execution, the tool loop, conversation memory, effort, delegation, planning, approvals and the unattended-action gate | which model to *offer*; how a provider authenticates |
+| **models** | `chitragupta/models/` | providers, model discovery and entitlements, provider configuration, authentication flows, the vendor-CLI manager, the error taxonomy, streaming wire formats | brain content, agent policy, HTTP routing |
+| **connectors** | `chitragupta/connectors/` | external integrations, ingestion, sync lifecycle and cancellation, the MCP client | how ingested text is scored or recalled |
+| **api** | `chitragupta/api/` | the HTTP boundary: routing, request/response translation, the origin guard, the concurrency lanes, static assets | business logic of any kind; native window behaviour |
 | **desktop** | `desktop.py`, `hud.py` | the native macOS window, port reservation, the sign-in HUD, vendor-login process reaping | HTTP routes, provider logic |
-| **web** | `lodestone/web/` | browser UI, presentation, browser-side state | anything the server can decide |
+| **web** | `chitragupta/web/` | browser UI, presentation, browser-side state | anything the server can decide |
 | *(workspace features)* | `actions.py`, `routines.py`, `tasks.py`, `reminders.py`, `scheduled.py`, `scheduler.py`, `usage.py`, `notify.py` | the user-facing productivity layer and the background sync loop | — see §6.3, these have no package of their own yet |
 | *(leaf utilities)* | `config.py`, `log.py` | settings, paths, the secrets file, logging and `suppressed()` | everything else — these are imported by 45 modules each and must stay dependency-free |
 
@@ -145,7 +145,7 @@ First answer wins: **connection** → **the provider's own answer for this
 account** → **static tier tables**. Shipped model lists are fallbacks flagged
 `is_fallback=True`, which is exactly what tells the resolver it has no provider
 answer. A stored model id is a *request*, re-checked against the live catalog on
-every turn. Detail: the "Model availability" section of [`/CLAUDE.md`](../CLAUDE.md) and [`lodestone/models/CLAUDE.md`](../lodestone/models/CLAUDE.md).
+every turn. Detail: the "Model availability" section of [`/CLAUDE.md`](../CLAUDE.md) and [`chitragupta/models/CLAUDE.md`](../chitragupta/models/CLAUDE.md).
 
 ### 5.2 Detection is not consent
 Finding a CLI, a config file or a session on the machine means we may *offer*
@@ -158,7 +158,7 @@ official headless CLI, and that is how a paid plan is reached. "Support
 provider X's subscription" almost always means "shell out to X's CLI".
 
 ### 5.4 A native window is raised by the page, never by the API
-Under `lodestone app --dev` the backend is a separate uvicorn process with no
+Under `chitragupta app --dev` the backend is a separate uvicorn process with no
 handle on the webview, so a backend-initiated window silently does nothing. The
 frontend always runs inside the webview. Detail:
 [`docs/DESKTOP-SIGNIN.md`](DESKTOP-SIGNIN.md).
@@ -217,7 +217,7 @@ change.** Not scheduled.
 
 > **Closed 2026-09-14.** `app.js` is 208 lines; the frontend is eleven plain
 > scripts, each with one responsibility, listed in
-> [`lodestone/web/CLAUDE.md`](../lodestone/web/CLAUDE.md). `index.html` declares
+> [`chitragupta/web/CLAUDE.md`](../chitragupta/web/CLAUDE.md). `index.html` declares
 > the load order and is the only place it is written down — the browser and the
 > harnesses both read it from there.
 >

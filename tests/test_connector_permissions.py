@@ -14,11 +14,11 @@ from types import SimpleNamespace
 import pytest
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import connector_grants, mcp_tools, runtime
-from lodestone.agents.effort import get_effort
-from lodestone.agents.library import BY_ID
-from lodestone.agents.loop import NEEDS_PERMISSION, ToolRunner
-from lodestone.models.base import ToolCall
+from chitragupta.agents import connector_grants, mcp_tools, runtime
+from chitragupta.agents.effort import get_effort
+from chitragupta.agents.library import BY_ID
+from chitragupta.agents.loop import NEEDS_PERMISSION, ToolRunner
+from chitragupta.models.base import ToolCall
 
 NOTION = SimpleNamespace(
     qualified_name="notion:search", server_id="notion", server_label="Notion",
@@ -69,7 +69,7 @@ def test_the_refusal_tells_the_model_what_to_do_with_it():
 def test_the_gate_is_at_execution_not_in_the_prompt():
     """A model told "ask first" will sometimes not."""
     ran = {"n": 0}
-    import lodestone.agents.loop as loop_mod
+    import chitragupta.agents.loop as loop_mod
 
     saved = loop_mod.run_tool
     loop_mod.run_tool = lambda *a, **k: ran.__setitem__("n", ran["n"] + 1)
@@ -142,7 +142,7 @@ def test_it_is_the_only_one():
 
 
 def test_the_card_says_which_agent_that_is():
-    from lodestone.agents.library import describe
+    from chitragupta.agents.library import describe
 
     cards = {c["id"]: c for c in describe(include_status=False)}
     assert cards["chief-of-staff"]["unrestricted_connectors"] is True
@@ -153,7 +153,7 @@ def test_the_card_says_which_agent_that_is():
 def test_a_deleted_agent_leaves_no_permission_behind():
     """Ids are slugs of names, so they repeat — a grant left behind would apply
     to an agent nobody gave it to."""
-    from lodestone.agents.custom import get_custom_store
+    from chitragupta.agents.custom import get_custom_store
 
     store = get_custom_store()
     made = store.create("Grant Test Agent", tools=["search_brain"])

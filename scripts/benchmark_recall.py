@@ -15,10 +15,10 @@ import sys
 import tempfile
 import time
 
-os.environ.setdefault("LODESTONE_EMBEDDING_PROVIDER", "hash")
-os.environ.setdefault("LODESTONE_HOME", tempfile.mkdtemp(prefix="lodestone-bench-"))
+os.environ.setdefault("CHITRAGUPTA_EMBEDDING_PROVIDER", "hash")
+os.environ.setdefault("CHITRAGUPTA_HOME", tempfile.mkdtemp(prefix="chitragupta-bench-"))
 
-from lodestone.core.store import MemoryStore  # noqa: E402
+from chitragupta.core.store import MemoryStore  # noqa: E402
 
 WORDS = ("project launch deadline invoice meeting notes review client budget travel "
          "design api database migration release feedback roadmap hiring contract "

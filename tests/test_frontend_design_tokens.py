@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-WEB = Path(__file__).parent.parent / "lodestone/web"
+WEB = Path(__file__).parent.parent / "chitragupta/web"
 CSS = (WEB / "styles.css").read_text()
 INDEX = (WEB / "index.html").read_text()
 ONBOARDING = (WEB / "onboarding.html").read_text()

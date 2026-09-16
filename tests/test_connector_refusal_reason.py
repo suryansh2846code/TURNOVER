@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from lodestone.connectors.mcp_source import MAX_REFUSAL_CHARS, _refusal
+from chitragupta.connectors.mcp_source import MAX_REFUSAL_CHARS, _refusal
 
 
 def _answer(*texts):
@@ -46,7 +46,7 @@ def test_a_wall_of_text_is_cut_rather_than_becoming_the_card():
 
 def test_the_reason_travels_all_the_way_to_the_action_result(monkeypatch):
     """End to end: what perform() returns is what the card shows."""
-    from lodestone.connectors import mcp_source
+    from chitragupta.connectors import mcp_source
 
     spec = SimpleNamespace(id="notion", name="Notion", is_remote=True,
                            url="https://example.test/mcp", command="",
@@ -70,7 +70,7 @@ def test_a_missing_tool_names_what_the_connector_can_do_instead(monkeypatch):
     """"Notion has no `x` to run." reads as a glitch. It is a limit, and an
     agent that learns the limit can tell the user instead of guessing at a
     different spelling of the same wrong call."""
-    from lodestone.connectors import mcp_source
+    from chitragupta.connectors import mcp_source
 
     monkeypatch.setattr(
         mcp_source, "probe",
@@ -87,7 +87,7 @@ def test_a_missing_tool_names_what_the_connector_can_do_instead(monkeypatch):
 
 
 def test_it_prefers_tools_that_look_related(monkeypatch):
-    from lodestone.connectors import mcp_source
+    from chitragupta.connectors import mcp_source
 
     monkeypatch.setattr(
         mcp_source, "probe",
@@ -101,7 +101,7 @@ def test_it_prefers_tools_that_look_related(monkeypatch):
 
 
 def test_a_connector_that_answers_nothing_still_gets_a_sentence(monkeypatch):
-    from lodestone.connectors import mcp_source
+    from chitragupta.connectors import mcp_source
 
     monkeypatch.setattr(mcp_source, "probe", lambda spec, **kw: (None, "down"))
     out = mcp_source._no_such_tool(SimpleNamespace(id="x"), "Thing", "t")

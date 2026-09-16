@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-from lodestone.agents import brain_tools
-from lodestone.agents.presets import PRESETS
-from lodestone.agents.tools import TOOL_DEFS, TOOL_IMPLS, build_tools, run_tool
-from lodestone.brain import get_brain
+from chitragupta.agents import brain_tools
+from chitragupta.agents.presets import PRESETS
+from chitragupta.agents.tools import TOOL_DEFS, TOOL_IMPLS, build_tools, run_tool
+from chitragupta.brain import get_brain
 
 
 @pytest.fixture
@@ -121,7 +121,7 @@ def test_only_the_declared_generalist_can_forget():
     is what it is. Every other agent must not, and the library card has to say
     so before it is added, because adding it is the consent.
     """
-    from lodestone.agents.library import describe
+    from chitragupta.agents.library import describe
 
     cards = {c["id"]: c for c in describe(include_status=False)}
     with_it = {a.id for a in PRESETS.values() if "forget_fact" in a.tools}

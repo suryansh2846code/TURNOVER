@@ -1,4 +1,4 @@
-# Lodestone — The Complete Project Explainer
+# Chitragupta — The Complete Project Explainer
 
 > A from-scratch, plain-English walkthrough of **what** we built, **how** it
 > works, and **why** every decision was made. Read this top to bottom and you
@@ -11,7 +11,7 @@ Status: v0.2, runs locally, agents reason on a free local model.
 
 ## 0. The one-sentence version
 
-**Lodestone is a private AI workspace that lives on your computer. It reads your
+**Chitragupta is a private AI workspace that lives on your computer. It reads your
 own data into a "brain," and lets specialized AI agents answer and act using
 that brain — so the AI already knows you and you never have to re-explain
 yourself.**
@@ -41,7 +41,7 @@ each vendor's cloud.
 | The **model** (the reasoning engine) | Swappable vendor | Anywhere |
 
 If your context is yours and local, and the model is a swappable part, then any
-AI can plug into your context. That's the whole thesis. Lodestone is the layer
+AI can plug into your context. That's the whole thesis. Chitragupta is the layer
 that owns your context and feeds it to whatever model you bring.
 
 ---
@@ -52,7 +52,7 @@ We initially misread Turnstone as a *passive memory box* that other apps query.
 After deeper research (their site, YC page, founders) we corrected it:
 
 **Turnstone is an active AI workspace — a Mac app you live inside.** It has three
-pillars, and Lodestone mirrors all three:
+pillars, and Chitragupta mirrors all three:
 
 1. **A Brain** — connect your apps (Gmail, Drive, Notion, iMessage, browser,
    local folders); it continuously indexes them into one local knowledge base.
@@ -172,7 +172,7 @@ let you *browse and click*. We added a read-only filesystem browser + modal.
 Folder map:
 
 ```
-lodestone/
+chitragupta/
   config.py            # settings from env/.env, local defaults
   core/                # low-level plumbing
     db.py              #   SQLite schema (memories, entities, relations)
@@ -258,7 +258,7 @@ result (text + any tool calls). Consequences:
 - **mock** provider = deterministic, offline; lets us test the entire agent loop
   with no network and no keys.
 
-Pick the backend with one env var: `LODESTONE_MODEL_PROVIDER`.
+Pick the backend with one env var: `CHITRAGUPTA_MODEL_PROVIDER`.
 
 ---
 
@@ -306,10 +306,10 @@ does the rest.
 ## 9. How to run it
 
 ```bash
-cd ~/workspace/lodestone
+cd ~/workspace/chitragupta
 ollama serve &                 # start the free local model server
 source .venv/bin/activate
-lodestone serve                # workspace → http://127.0.0.1:8787
+chitragupta serve                # workspace → http://127.0.0.1:8787
 ```
 
 Then: pick an agent, chat; use the right panel to add facts, browse the knowledge
@@ -317,17 +317,17 @@ graph, and sync a folder via the picker.
 
 CLI shortcuts:
 ```bash
-lodestone agents               # list the 4 agents
-lodestone chat research "what do I build?"
-lodestone ingest --path /Users/you/notes
-lodestone stats                # brain + graph counts
-lodestone providers            # model backends + readiness
+chitragupta agents               # list the 4 agents
+chitragupta chat research "what do I build?"
+chitragupta ingest --path /Users/you/notes
+chitragupta stats                # brain + graph counts
+chitragupta providers            # model backends + readiness
 ```
 
 Switch models via `.env`:
 ```
-LODESTONE_MODEL_PROVIDER=ollama     # or anthropic / openai / openrouter
-LODESTONE_MODEL_NAME=llama3.2
+CHITRAGUPTA_MODEL_PROVIDER=ollama     # or anthropic / openai / openrouter
+CHITRAGUPTA_MODEL_NAME=llama3.2
 ```
 
 ---

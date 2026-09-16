@@ -1,4 +1,4 @@
-# Lodestone — Full Scope / Backlog
+# Chitragupta — Full Scope / Backlog
 
 > The complete picture of what's built, what's left, and the order we'll do it.
 > **Sequence (your call):** ① harden what we have → ② add new features →

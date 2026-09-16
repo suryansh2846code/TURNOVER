@@ -13,9 +13,9 @@ import time
 import tempfile
 import numpy as np
 from pathlib import Path
-from lodestone.brain.brain import Brain
-from lodestone.core.store import MemoryStore
-from lodestone.core.embeddings import HashEmbedder
+from chitragupta.brain.brain import Brain
+from chitragupta.core.store import MemoryStore
+from chitragupta.core.embeddings import HashEmbedder
 
 def percentile(vals, p):
     return float(np.percentile(vals, p))

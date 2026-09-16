@@ -19,8 +19,8 @@ What is deliberately NOT editable matters as much as what is:
 """
 import pytest
 
-from lodestone.reminders import get_reminders
-from lodestone.routines import get_routines
+from chitragupta.reminders import get_reminders
+from chitragupta.routines import get_routines
 
 
 @pytest.fixture()
@@ -99,7 +99,7 @@ def test_editing_a_reminder_that_is_gone_says_so():
 def client():
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
     return TestClient(app)
 
 

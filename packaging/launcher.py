@@ -1,7 +1,7 @@
 """The .app's entry point.
 
 A bundled app is not started from a shell, so it inherits no PATH, no
-environment and no working directory worth having. `lodestone app` assumes the
+environment and no working directory worth having. `chitragupta app` assumes the
 opposite in a few places — most visibly when it looks for vendor CLIs — so the
 launcher restores the pieces that matter before handing over.
 """
@@ -18,12 +18,12 @@ def _restore_path() -> None:
     A GUI process on macOS gets PATH from launchd (`/usr/bin:/bin:/usr/sbin:/sbin`),
     not from the user's shell profile — so Homebrew, and anything the user
     installed themselves, is simply invisible. `find_*_cli()` prefers our own
-    pinned copies in ~/Library/Lodestone/bin, but it also falls back to PATH,
+    pinned copies in ~/Library/Chitragupta/bin, but it also falls back to PATH,
     and a CLI the user already had should still be found.
     """
     home = Path.home()
     extra = [
-        str(home / "Library" / "Lodestone" / "bin"),   # the CLIs we manage
+        str(home / "Library" / "Chitragupta" / "bin"),   # the CLIs we manage
         "/opt/homebrew/bin", "/usr/local/bin",
         str(home / ".local" / "bin"), str(home / ".bun" / "bin"),
         str(home / ".npm-global" / "bin"),
@@ -38,7 +38,7 @@ def main() -> None:
     # A bundled app's cwd is "/", which makes any relative path a surprise.
     os.chdir(str(Path.home()))
 
-    from lodestone.desktop import run_app
+    from chitragupta.desktop import run_app
     run_app(dev=False)
 
 

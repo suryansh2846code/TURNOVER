@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import pytest
 
-from lodestone.agents.permissions import NEVER_UNATTENDED
-from lodestone.agents.presets import PRESETS
-from lodestone.agents.tools import TOOL_DEFS, TOOL_IMPLS, build_tools, run_tool
-from lodestone.routines import get_routines
+from chitragupta.agents.permissions import NEVER_UNATTENDED
+from chitragupta.agents.presets import PRESETS
+from chitragupta.agents.tools import TOOL_DEFS, TOOL_IMPLS, build_tools, run_tool
+from chitragupta.routines import get_routines
 
 
 @pytest.fixture

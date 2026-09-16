@@ -7,10 +7,10 @@ from unittest.mock import patch
 
 import pytest
 
-from lodestone.models.accounts import connect_local_account, detect_google_account
-from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
-from lodestone.models.entitlements import is_provider_connected
-from lodestone.models.gemini import (
+from chitragupta.models.accounts import connect_local_account, detect_google_account
+from chitragupta.models.connections import ConnectionStatus, get_connection, save_connection
+from chitragupta.models.entitlements import is_provider_connected
+from chitragupta.models.gemini import (
     GeminiCredentialSource,
     GeminiErrorCode,
     GeminiProvider,
@@ -25,7 +25,7 @@ def clean_gemini_env(monkeypatch, tmp_path):
     """Ensure environment is isolated for Gemini tests."""
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    monkeypatch.setattr("lodestone.config.Settings.get_secret", lambda self, key: os.environ.get(key))
+    monkeypatch.setattr("chitragupta.config.Settings.get_secret", lambda self, key: os.environ.get(key))
 
     conn = get_connection("gemini")
     conn.connection_status = ConnectionStatus.NOT_CONNECTED
@@ -35,7 +35,7 @@ def clean_gemini_env(monkeypatch, tmp_path):
 
     # Point google auth token path to empty tmp path
     fake_token = tmp_path / "google_token.json"
-    with patch("lodestone.connectors.google_auth._token_path", return_value=fake_token):
+    with patch("chitragupta.connectors.google_auth._token_path", return_value=fake_token):
         yield fake_token
 
 
@@ -145,7 +145,7 @@ def test_error_classification_and_redaction():
 
 def test_gemini_provider_is_ready_and_chat_safety():
     """GeminiProvider.is_ready() must accurately reflect credential state without making erroneous chat calls."""
-    from lodestone.models.base import Message
+    from chitragupta.models.base import Message
     prov = GeminiProvider(model="gemini-2.5-flash")
     ready, reason = prov.is_ready()
     assert ready is False

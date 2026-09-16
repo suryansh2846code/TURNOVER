@@ -2,17 +2,17 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from lodestone.models.anthropic import AnthropicProvider
-from lodestone.models.base import Message, Tool
-from lodestone.models.cursor import CursorProvider
-from lodestone.models.deepseek import DeepSeekProvider
-from lodestone.models.gemini import GeminiProvider
-from lodestone.models.registry import (
+from chitragupta.models.anthropic import AnthropicProvider
+from chitragupta.models.base import Message, Tool
+from chitragupta.models.cursor import CursorProvider
+from chitragupta.models.deepseek import DeepSeekProvider
+from chitragupta.models.gemini import GeminiProvider
+from chitragupta.models.registry import (
     context_window,
     get_model_catalog,
     get_provider,
 )
-from lodestone.models.xai import XAIProvider
+from chitragupta.models.xai import XAIProvider
 
 
 def test_provider_registration_and_aliases():
@@ -197,7 +197,7 @@ def test_cursor_provider_runs_through_the_cli():
     Models run through the headless CLI (`agent -p`) instead."""
     from unittest.mock import patch
 
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=None):
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=None):
         p = CursorProvider()
         assert p.model == "auto"
         ready, reason = p.is_ready()
@@ -205,7 +205,7 @@ def test_cursor_provider_runs_through_the_cli():
         assert ready is False
         assert "CLI" in reason
 
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value="/usr/bin/agent"):
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value="/usr/bin/agent"):
         assert CursorProvider().is_ready() == (True, "")
 
     assert not hasattr(CursorProvider(), "base_url"), \
@@ -229,7 +229,7 @@ def test_provider_test_endpoint():
     """Verify POST /api/providers/{name}/test endpoint."""
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
 
     client = TestClient(app)
 
@@ -253,7 +253,7 @@ def test_unknown_provider_id_does_not_silently_become_the_mock():
     your brain: …") while the picker still showed a real vendor. Nothing told
     the user, and token usage sat at zero in a way that read as a broken meter.
     """
-    from lodestone.models.registry import MockProvider, UnknownProvider
+    from chitragupta.models.registry import MockProvider, UnknownProvider
 
     p = get_provider("not-a-real-provider")
     assert not isinstance(p, MockProvider)
@@ -264,7 +264,7 @@ def test_unknown_provider_id_does_not_silently_become_the_mock():
     # The message names what the user picked, so it is repairable rather than
     # mysterious — and says nothing about our internals.
     assert "not-a-real-provider" in why
-    assert "Lodestone" in why
+    assert "Chitragupta" in why
 
     # Asked by name, the mock is still exactly itself. It is a real backend for
     # a first launch with no keys; it just stops being what a typo resolves to.
@@ -273,7 +273,7 @@ def test_unknown_provider_id_does_not_silently_become_the_mock():
 
 def test_a_turn_on_an_unknown_provider_says_so_instead_of_answering():
     """The user-visible half: the turn stops, it does not produce a canned reply."""
-    from lodestone.agents.runtime import run_turn
+    from chitragupta.agents.runtime import run_turn
 
     result = run_turn("research", "who is divyansh",
                       provider_name="not-a-real-provider")

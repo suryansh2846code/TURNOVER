@@ -3,7 +3,7 @@
 > **Why this file exists:** the single most important fact about `app.js` is not
 > in the code and was not written down anywhere — *the test harnesses can only
 > load it as one whole file.* That is what makes splitting it a test-architecture
-> change rather than a code change. Read this before touching `lodestone/web/`.
+> change rather than a code change. Read this before touching `chitragupta/web/`.
 
 ---
 
@@ -22,7 +22,7 @@ tests/js/render_provider_box.mjs            the harness
         │  fs.readFileSync(APP_JS)
         │  new Function(src + "globalThis.__render = renderProviderConnectBox;")()
         ▼
-lodestone/web/app.js                        evaluated as ONE script body
+chitragupta/web/app.js                        evaluated as ONE script body
         │  writes into the stub DOM
         ▼
    JSON on stdout  ──────────────────────►  assertions in the driver
@@ -87,7 +87,7 @@ the stub the whole script throws before the function under test is reached.
 
 ### 1.5 `signin_hud.mjs` is not an `app.js` harness
 
-It slices the inline `<script>` out of `lodestone/web/signin_hud.html` and
+It slices the inline `<script>` out of `chitragupta/web/signin_hud.html` and
 evaluates that. It shares the technique and none of the constraint, so nothing
 in a future `app.js` split affects it.
 
@@ -132,7 +132,7 @@ Keep everything that works. Change one thing: *where the harness gets its
 source*.
 
 ```
-lodestone/web/index.html
+chitragupta/web/index.html
     <script src="/static/core.js"></script>      ← load order is declared here,
     <script src="/static/providers.js"></script>    once, and nowhere else
     <script src="/static/app.js"></script>

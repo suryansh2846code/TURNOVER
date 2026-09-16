@@ -9,9 +9,9 @@ from unittest.mock import patch
 
 import pytest
 
-from lodestone.models import discovery, entitlements
-from lodestone.models.discovery import DiscoveredModel, clear_model_cache
-from lodestone.models.entitlements import resolve_usable_model
+from chitragupta.models import discovery, entitlements
+from chitragupta.models.discovery import DiscoveredModel, clear_model_cache
+from chitragupta.models.entitlements import resolve_usable_model
 
 LIVE = [DiscoveredModel("grok-4.6", "Grok 4.6", ""),
         DiscoveredModel("grok-4.5", "Grok 4.5", ""),
@@ -89,13 +89,13 @@ def test_nothing_usable_falls_back_to_the_provider_default(monkeypatch):
 
 # ── the binding repairs itself ───────────────────────────────────────────
 def test_a_stale_agent_binding_is_repaired(connected, monkeypatch):
-    from lodestone.agents.agent_models import get_agent_model, set_agent_model
-    from lodestone.agents.runtime import run_turn
+    from chitragupta.agents.agent_models import get_agent_model, set_agent_model
+    from chitragupta.agents.runtime import run_turn
 
     set_agent_model("inbox", "xai", "grok-2-latest")
     assert get_agent_model("inbox") == ("xai", "grok-2-latest")
 
-    with patch("lodestone.agents.runtime.get_provider") as gp:
+    with patch("chitragupta.agents.runtime.get_provider") as gp:
         gp.return_value.is_ready.return_value = (False, "stop here")
         run_turn("inbox", "hello")
 
@@ -103,11 +103,11 @@ def test_a_stale_agent_binding_is_repaired(connected, monkeypatch):
 
 
 def test_a_per_request_override_does_not_rewrite_the_binding(connected):
-    from lodestone.agents.agent_models import get_agent_model, set_agent_model
-    from lodestone.agents.runtime import run_turn
+    from chitragupta.agents.agent_models import get_agent_model, set_agent_model
+    from chitragupta.agents.runtime import run_turn
 
     set_agent_model("inbox", "xai", "grok-4.5")
-    with patch("lodestone.agents.runtime.get_provider") as gp:
+    with patch("chitragupta.agents.runtime.get_provider") as gp:
         gp.return_value.is_ready.return_value = (False, "stop here")
         run_turn("inbox", "hello", provider_name="xai", model_name="grok-2-1212")
 

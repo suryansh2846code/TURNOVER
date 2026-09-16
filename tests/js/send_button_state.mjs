@@ -10,7 +10,7 @@
  * Neither shows up in a source-order check: both states assign something, and
  * both look like code that works. So the turn is actually run.
  *
- * argv: <a path inside lodestone/web/>   stdout: one JSON array of snapshots
+ * argv: <a path inside chitragupta/web/>   stdout: one JSON array of snapshots
  */
 import path from "node:path";
 

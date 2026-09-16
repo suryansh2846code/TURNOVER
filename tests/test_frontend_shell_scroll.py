@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-WEB = Path(__file__).parent.parent / "lodestone/web"
+WEB = Path(__file__).parent.parent / "chitragupta/web"
 
 CHROME_CANDIDATES = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",

@@ -6,10 +6,10 @@ No auto-routing. User chooses agent. Model is infrastructure underneath.
 """
 from __future__ import annotations
 
-from lodestone.agents.presets import get_agent
-from lodestone.agents.runtime import run_turn
-from lodestone.agents.tools import run_tool, validate_tool_arguments
-from lodestone.brain import get_brain
+from chitragupta.agents.presets import get_agent
+from chitragupta.agents.runtime import run_turn
+from chitragupta.agents.tools import run_tool, validate_tool_arguments
+from chitragupta.brain import get_brain
 
 
 def test_one_agent_with_multiple_models():

@@ -13,8 +13,8 @@ Everything else exists so that one cannot pass by accident.
 import pytest
 from fastapi.testclient import TestClient
 
-from lodestone.agents import approvals, permissions
-from lodestone.api.app import app
+from chitragupta.agents import approvals, permissions
+from chitragupta.api.app import app
 
 client = TestClient(app)
 
@@ -38,9 +38,9 @@ def routine(monkeypatch):
     """A `new_email` routine whose agent returns whatever text we give it."""
     def make(reply):
         def _run_turn(agent_id, prompt, **kw):
-            from lodestone.agents.runtime import TurnResult
+            from chitragupta.agents.runtime import TurnResult
             return TurnResult(agent_id=agent_id, reply=reply)
-        monkeypatch.setattr("lodestone.agents.run_turn", _run_turn)
+        monkeypatch.setattr("chitragupta.agents.run_turn", _run_turn)
         return {"id": "r1", "name": "Inbox watcher", "agent_id": "inbox",
                 "instruction": "summarise new mail", "trigger": "new_email"}
     return make
@@ -68,14 +68,14 @@ def _capture_sends(monkeypatch):
                 return {"ok": True, "detail": "created"}
         return _C()
 
-    monkeypatch.setattr("lodestone.actions._writer", fake_writer)
+    monkeypatch.setattr("chitragupta.actions._writer", fake_writer)
 
 
 # ── the attack ───────────────────────────────────────────────────────────────
 
 def test_an_injected_instruction_cannot_send_mail_on_its_own(routine):
     """The whole reason this module exists."""
-    from lodestone.routines import run_routine
+    from chitragupta.routines import run_routine
 
     result = run_routine(routine(f"Here is your summary.\n{INJECTED}"))
 
@@ -90,7 +90,7 @@ def test_an_injected_instruction_cannot_send_mail_on_its_own(routine):
 def test_the_blocked_action_is_kept_not_dropped(routine):
     """Dropping is worse than it sounds: a routine that quietly declines to
     send looks exactly like one that is working."""
-    from lodestone.routines import run_routine
+    from chitragupta.routines import run_routine
 
     run_routine(routine(INJECTED))
     waiting = approvals.pending()
@@ -99,7 +99,7 @@ def test_the_blocked_action_is_kept_not_dropped(routine):
 
 
 def test_approving_runs_the_action_exactly_as_proposed(routine):
-    from lodestone.routines import run_routine
+    from chitragupta.routines import run_routine
 
     run_routine(routine(INJECTED))
     approval_id = approvals.pending()[0]["id"]
@@ -111,7 +111,7 @@ def test_approving_runs_the_action_exactly_as_proposed(routine):
 
 
 def test_rejecting_never_runs_it(routine):
-    from lodestone.routines import run_routine
+    from chitragupta.routines import run_routine
 
     run_routine(routine(INJECTED))
     approvals.reject(approvals.pending()[0]["id"])
@@ -120,7 +120,7 @@ def test_rejecting_never_runs_it(routine):
 
 
 def test_deciding_twice_is_refused(routine):
-    from lodestone.routines import run_routine
+    from chitragupta.routines import run_routine
 
     run_routine(routine(INJECTED))
     approval_id = approvals.pending()[0]["id"]
@@ -132,7 +132,7 @@ def test_deciding_twice_is_refused(routine):
 
 def test_a_permitted_recipient_goes_through_unattended(routine):
     """The automation has to keep working, or the guard is just a blocker."""
-    from lodestone.routines import run_routine
+    from chitragupta.routines import run_routine
 
     permissions.grant("dana@example.com", note="co-founder")
     run_routine(routine(
@@ -187,7 +187,7 @@ def test_a_calendar_invite_with_attendees_is_outbound():
 # ── the surface the UI uses ──────────────────────────────────────────────────
 
 def test_the_api_exposes_permissions_and_approvals(routine):
-    from lodestone.routines import run_routine
+    from chitragupta.routines import run_routine
 
     assert client.get("/api/agents/permissions").json()["permissions"] == []
     assert client.post("/api/agents/permissions",
@@ -216,9 +216,9 @@ def test_the_effort_level_is_readable_and_settable():
 def test_interactive_chat_is_not_gated(monkeypatch):
     """Confirm-before-acting is a stronger signal than any stored list, so the
     interactive path must not start asking twice."""
-    from lodestone import actions
+    from chitragupta import actions
 
-    monkeypatch.setattr("lodestone.agents.permissions.check",
+    monkeypatch.setattr("chitragupta.agents.permissions.check",
                         lambda *a, **k: pytest.fail("interactive chat was gated"))
     out = actions.execute("send_email", {"to": "anyone@example.com",
                                          "subject": "s", "body": "b"})

@@ -22,7 +22,7 @@ import subprocess
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-APP_JS = ROOT / "lodestone" / "web" / "app.js"
+APP_JS = ROOT / "chitragupta" / "web" / "app.js"
 HARNESS = ROOT / "tests" / "js" / "tool_result_injection.mjs"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,

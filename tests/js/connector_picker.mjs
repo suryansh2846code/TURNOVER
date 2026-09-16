@@ -6,7 +6,7 @@
  * cannot see at the moment you grant it is not one you granted — so this reads
  * the composer back rather than trusting the array behind it.
  *
- * argv: <a path inside lodestone/web/>   stdin: {typed, caret, choose, labels}
+ * argv: <a path inside chitragupta/web/>   stdin: {typed, caret, choose, labels}
  */
 import fs from "node:fs";
 import path from "node:path";

@@ -13,9 +13,9 @@ from __future__ import annotations
 import pytest
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import outcomes, runtime
-from lodestone.agents.agent import AgentMemory
-from lodestone.agents.outcomes import PREFIX, describe, record, settle
+from chitragupta.agents import outcomes, runtime
+from chitragupta.agents.agent import AgentMemory
+from chitragupta.agents.outcomes import PREFIX, describe, record, settle
 
 FAILED = {"ok": False, "error": "Notion refused that: body.in_trash should be defined."}
 WORKED = {"ok": True, "detail": "Archived."}
@@ -127,7 +127,7 @@ def test_nothing_happens_without_an_agent_to_tell(scripted):
 
 
 def test_connector_writes_are_still_never_unattended():
-    from lodestone.agents.permissions import NEVER_UNATTENDED
+    from chitragupta.agents.permissions import NEVER_UNATTENDED
 
     assert "mcp_action" in NEVER_UNATTENDED
     assert "create_routine" in NEVER_UNATTENDED

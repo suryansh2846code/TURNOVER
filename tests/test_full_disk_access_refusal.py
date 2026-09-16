@@ -7,7 +7,7 @@ said a slightly different version of:
 
     grant Full Disk Access to your terminal/app
 
-A shipped `.app` has no terminal. The user is looking at an app called Lodestone
+A shipped `.app` has no terminal. The user is looking at an app called Chitragupta
 and being told to find something else, in a System Settings list of dozens of
 applications, with no hint which one. Three spellings in three files also meant
 the copy could be fixed in one place and still be wrong in two.
@@ -17,17 +17,17 @@ security property that makes opening that pane safe at all.
 """
 from __future__ import annotations
 
-from lodestone.connectors import permissions
-from lodestone.connectors.apple_calendar import AppleCalendarConnector
-from lodestone.connectors.apple_mail import AppleMailConnector
-from lodestone.connectors.imessage import IMessageConnector
+from chitragupta.connectors import permissions
+from chitragupta.connectors.apple_calendar import AppleCalendarConnector
+from chitragupta.connectors.apple_mail import AppleMailConnector
+from chitragupta.connectors.imessage import IMessageConnector
 
 BLOCKED = [IMessageConnector, AppleMailConnector, AppleCalendarConnector]
 
 
-def test_the_sentence_names_lodestone_and_not_a_terminal():
+def test_the_sentence_names_chitragupta_and_not_a_terminal():
     text = permissions.full_disk_access_reason("Messages")
-    assert "Lodestone" in text, "it does not say which app to switch on"
+    assert "Chitragupta" in text, "it does not say which app to switch on"
     assert "terminal" not in text.lower(), (
         "a shipped .app has no terminal — this sends the user looking for "
         "something that is not on their screen")
@@ -51,7 +51,7 @@ def test_a_blocked_connector_offers_a_one_click_fix(monkeypatch, tmp_path):
     conn = IMessageConnector.__new__(IMessageConnector)
     conn.fix = None
 
-    monkeypatch.setattr("lodestone.connectors.imessage.CHAT_DB",
+    monkeypatch.setattr("chitragupta.connectors.imessage.CHAT_DB",
                         tmp_path / "chat.db")
     (tmp_path / "chat.db").write_text("not a database")   # exists, unreadable
 
@@ -60,7 +60,7 @@ def test_a_blocked_connector_offers_a_one_click_fix(monkeypatch, tmp_path):
     assert ready is False
     assert conn.fix == permissions.FULL_DISK_ACCESS, (
         "the refusal is clearable by the user but says so to nobody")
-    assert "Lodestone" in reason
+    assert "Chitragupta" in reason
 
 
 def test_a_connector_that_is_merely_absent_offers_no_button(monkeypatch, tmp_path):
@@ -69,7 +69,7 @@ def test_a_connector_that_is_merely_absent_offers_no_button(monkeypatch, tmp_pat
     cannot help."""
     conn = IMessageConnector.__new__(IMessageConnector)
     conn.fix = None
-    monkeypatch.setattr("lodestone.connectors.imessage.CHAT_DB",
+    monkeypatch.setattr("chitragupta.connectors.imessage.CHAT_DB",
                         tmp_path / "absent.db")
 
     ready, _ = conn.is_configured()
@@ -90,7 +90,7 @@ def test_the_settings_pane_is_a_constant_not_a_parameter():
     assert permissions.FULL_DISK_ACCESS_PANE.startswith("x-apple.systempreferences:")
     assert "Privacy_AllFiles" in permissions.FULL_DISK_ACCESS_PANE
 
-    from lodestone.api.security import is_safe_external_url
+    from chitragupta.api.security import is_safe_external_url
     assert not is_safe_external_url(permissions.FULL_DISK_ACCESS_PANE), (
         "this URL must still be refused by the open-browser guard — if it "
         "passes, that guard has been widened and every custom scheme is open")
@@ -100,7 +100,7 @@ def test_the_bridge_method_takes_no_url(monkeypatch):
     """A bridge that accepted a URL would be the widened guard, moved."""
     import inspect
 
-    from lodestone import desktop
+    from chitragupta import desktop
 
     src = inspect.getsource(desktop.run_app)
     assert "def open_privacy_settings(self) -> bool:" in src, (

@@ -17,8 +17,8 @@ from __future__ import annotations
 import pytest
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import grounding, runtime
-from lodestone.core.dateparse import parse_date_range
+from chitragupta.agents import grounding, runtime
+from chitragupta.core.dateparse import parse_date_range
 
 DATE_LINE = "Tuesday, September 15, 2026"
 
@@ -27,9 +27,9 @@ DATE_LINE = "Tuesday, September 15, 2026"
 def scripted(monkeypatch):
     def make(script, **kw):
         provider = ScriptedProvider(script=list(script), **kw)
-        monkeypatch.setattr("lodestone.agents.runtime.get_provider",
+        monkeypatch.setattr("chitragupta.agents.runtime.get_provider",
                             lambda p, m: provider)
-        monkeypatch.setattr("lodestone.agents.runtime.resolve_usable_model",
+        monkeypatch.setattr("chitragupta.agents.runtime.resolve_usable_model",
                             lambda p, m: (m or "scripted-1", None))
         return provider
     return make
@@ -73,7 +73,7 @@ def test_a_turn_never_lets_the_note_reach_a_tool(scripted, monkeypatch):
     The mock provider ships exactly this behaviour — it copies the user turn
     into `search_brain`'s query — so this is not a hypothetical model.
     """
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
 
     captured: dict = {}
 

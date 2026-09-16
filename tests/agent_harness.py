@@ -12,7 +12,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from lodestone.models.base import ChatResult, LLMProvider, ToolCall
+from chitragupta.models.base import ChatResult, LLMProvider, ToolCall
 
 
 @dataclass

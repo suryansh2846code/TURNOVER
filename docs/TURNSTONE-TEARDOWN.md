@@ -1,16 +1,16 @@
 # Turnstone Teardown — competitive research (living doc)
 
 > First-hand notes from running the **real Turnstone app** (v0.5.21, macOS) to
-> find gaps and inform Lodestone's design. Updated as we walk more screens.
+> find gaps and inform Chitragupta's design. Updated as we walk more screens.
 > Started 3 Sep 2026. Screens captured by the user; analysis by us.
 
 ---
 
 ## Why this doc
-We built Lodestone by reverse-engineering Turnstone's *website*. Now we have the
+We built Chitragupta by reverse-engineering Turnstone's *website*. Now we have the
 actual app, so we can validate assumptions, find real gaps, and — critically —
 decide where to **match** Turnstone and where to **deliberately differ** (our
-local-first privacy edge). Every observation here should end in a Lodestone
+local-first privacy edge). Every observation here should end in a Chitragupta
 implication.
 
 ---
@@ -76,12 +76,12 @@ update when the connection is ready."*
 
 ---
 
-## Gap analysis — Turnstone vs Lodestone
+## Gap analysis — Turnstone vs Chitragupta
 
-| Dimension | Turnstone | Lodestone (us) | Verdict |
+| Dimension | Turnstone | Chitragupta (us) | Verdict |
 |---|---|---|---|
 | Account required | ✅ Must sign in (myturnstone.ai) | ❌ **No account, works offline** | **Our edge** |
-| Where data lives | ☁️ Cloud (Turnstone + Composio) | 🔒 **Local (`~/Library/Lodestone`)** | **Our edge** |
+| Where data lives | ☁️ Cloud (Turnstone + Composio) | 🔒 **Local (`~/Library/Chitragupta`)** | **Our edge** |
 | Connector breadth | ✅ 250+ via Composio | ⚠️ ~11 + custom-API | Their edge |
 | Connect setup | ✅ Zero (Composio clients) | ⚠️ Gmail test-user list | Their edge |
 | Connect UX polish | ✅ Very polished cards | ✅ Now matched (local card) | Even |
@@ -96,7 +96,7 @@ the ground we should own.
 
 ---
 
-## Implications for Lodestone's FIRST screen
+## Implications for Chitragupta's FIRST screen
 - **Do NOT copy their sign-in wall.** Our superpower is *no account, instant, local*.
   Forcing a sign-in would throw away our biggest differentiator.
 - Lead the first screen with **trust + instant value**: "Private AI that knows your
@@ -106,7 +106,7 @@ the ground we should own.
   agent avatars as a teaser; the "waiting to connect… updates when ready" card
   (already built, locally).
 - Net: **same premium feel, opposite trust model.** "Turnstone in the cloud →
-  Lodestone on your Mac."
+  Chitragupta on your Mac."
 
 ---
 
@@ -159,7 +159,7 @@ so that read starts over."* Turnstone rebuilds the brain in RAM every session by
 re-reading your (cloud-connected) accounts.
 - **Their angle:** privacy (nothing persisted).
 - **Cost:** no long-term accumulated memory; slow re-read every launch.
-- **Lodestone contrast (our win):** we **persist locally** → instant startup AND a
+- **Chitragupta contrast (our win):** we **persist locally** → instant startup AND a
   brain that **grows over time** — essential for a depth-first "knows your work"
   product — while still private (on-device). We can claim **private *and*
   persistent**; they can't.
@@ -169,7 +169,7 @@ Turnstone **auto-detects existing paid AI subs** (ChatGPT Go, Claude Pro) and le
 you use them with **no API key** via the vendor's own sign-in (Codex "Sign in with
 ChatGPT", `localhost:1455`). Supports OpenAI, Claude, Grok, Cursor, API keys, free
 model.
-- **Lodestone status:** we already use the **Claude** subscription via `claude-code`
+- **Chitragupta status:** we already use the **Claude** subscription via `claude-code`
   (the CLI). We do **not** yet have **"Sign in with ChatGPT" (Codex flow)** to use a
   ChatGPT subscription keylessly. **← biggest model-path gap.**
 
@@ -199,7 +199,7 @@ app polls; ends with "✅ Connected as <email>". We already mirror this locally
 
 ## Updated gap analysis (what to steal / what we win)
 
-| Area | Turnstone | Lodestone | Action |
+| Area | Turnstone | Chitragupta | Action |
 |---|---|---|---|
 | Brain persistence | ❌ In-memory, re-read each session | ✅ **Local + persistent** | **Own it in messaging** |
 | Account required | ✅ myturnstone.ai | ❌ none | Own it |
@@ -239,7 +239,7 @@ everything Turnstone learned."
   (actionable next steps with deadlines).
 - **Work** → *"Empty for now. Turnstone fills this as you work."*
 - **Why it matters:** transparent, genuinely insightful, and it's the "it really
-  knows me" moment. **Lodestone gap:** our Brain panel is stats + a graph; we lack
+  knows me" moment. **Chitragupta gap:** our Brain panel is stats + a graph; we lack
   this **narrative, categorized digest** (incl. communication style). **Build it —
   and ours accumulates (persistent), theirs can't (in-memory).**
 
@@ -279,7 +279,7 @@ Safety: *"Only add connectors you trust. Turnstone asks before every custom tool
 call."*
 - **Validates our direction:** we built the MCP **server** (external agents use our
   brain); Turnstone shows the MCP **client** (consume any remote MCP server). Both
-  matter. **Lodestone gap: build the MCP client** (add-remote-MCP-server) — mirror
+  matter. **Chitragupta gap: build the MCP client** (add-remote-MCP-server) — mirror
   of this modal, with confirm-before-tool-call. Our custom-API connector is the
   no-MCP cousin; MCP client is the standards path.
 
@@ -287,7 +287,7 @@ call."*
 
 ## Updated gap analysis (batch 3)
 
-| Capability | Turnstone | Lodestone | Action |
+| Capability | Turnstone | Chitragupta | Action |
 |---|---|---|---|
 | **Brain viewer** (About you/People/Timeline/Work + style) | ✅ signature | ⚠️ stats+graph only | **BUILD — big wow, ours persists** |
 | Learn communication/writing style | ✅ surfaced | ⚠️ TODO | **BUILD** |
@@ -375,7 +375,7 @@ Turnstone power, likely out of local-first scope.
 5. **Onboarding is the product demo**: founder FaceTime, "sneak peek of your brain",
    plan-then-Go. Warm, transparent, high-touch.
 
-### Where Lodestone should land (design direction for the redesign)
+### Where Chitragupta should land (design direction for the redesign)
 - **Keep our wedge:** local + persistent + no account. Say it loudly.
 - **Borrow the shape, not the cloud:**
   - Make the **Brain a first-class destination** — a categorized digest (About you /
@@ -456,7 +456,7 @@ data; files outside Turnstone stay where they are").
 
 ---
 
-## Settings takeaways for Lodestone
+## Settings takeaways for Chitragupta
 **Build (fits us):**
 - A real **Settings panel** (we have none): Appearance (theme/accent/font), Models,
   Connected apps, Agent defaults, Shortcuts.

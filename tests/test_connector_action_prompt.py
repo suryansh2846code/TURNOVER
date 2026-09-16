@@ -22,9 +22,9 @@ from typing import Any
 
 import pytest
 
-from lodestone.agents import mcp_tools, prompt
-from lodestone.agents.mcp_tools import SENTINEL
-from lodestone.agents.prompt import (
+from chitragupta.agents import mcp_tools, prompt
+from chitragupta.agents.mcp_tools import SENTINEL
+from chitragupta.agents.prompt import (
     MAX_ARGS_SHOWN,
     _argument_names,
     _connector_actions,
@@ -59,7 +59,7 @@ UPDATE_PAGE = WriteRef(
 def notion(monkeypatch):
     monkeypatch.setattr(prompt, "_connector_actions", prompt._connector_actions)
     monkeypatch.setattr(
-        "lodestone.connectors.mcp_tools.write_tools", lambda: [UPDATE_PAGE],
+        "chitragupta.connectors.mcp_tools.write_tools", lambda: [UPDATE_PAGE],
         raising=False)
     monkeypatch.setattr(mcp_tools, "_supplier",
                         lambda: SimpleNamespace(list_tools=lambda: [UPDATE_PAGE],

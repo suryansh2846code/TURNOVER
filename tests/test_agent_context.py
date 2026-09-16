@@ -9,11 +9,11 @@ staff that has forgotten what you said four messages ago is not one.
 import pytest
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import runtime
-from lodestone.agents.agent import AgentMemory
-from lodestone.agents.context import MIN_TO_COMPACT, build_history
-from lodestone.agents.effort import get_effort
-from lodestone.agents.presets import get_agent
+from chitragupta.agents import runtime
+from chitragupta.agents.agent import AgentMemory
+from chitragupta.agents.context import MIN_TO_COMPACT, build_history
+from chitragupta.agents.effort import get_effort
+from chitragupta.agents.presets import get_agent
 
 
 @pytest.fixture
@@ -118,8 +118,8 @@ def test_a_real_turn_carries_the_summary(monkeypatch, mem):
     """End to end: the compacted history reaches the model."""
     _converse(mem, 30)
     provider = ScriptedProvider(script=["ok"])
-    monkeypatch.setattr("lodestone.agents.runtime.get_provider", lambda p, m: provider)
-    monkeypatch.setattr("lodestone.agents.runtime.resolve_usable_model",
+    monkeypatch.setattr("chitragupta.agents.runtime.get_provider", lambda p, m: provider)
+    monkeypatch.setattr("chitragupta.agents.runtime.resolve_usable_model",
                         lambda p, m: (m or "scripted-1", None))
     runtime.run_turn("research", "what were we discussing?", effort="low")
     sent = "\n".join(m.content for m in provider.calls[0] if m.role == "system")

@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from lodestone.agents import file_tools
-from lodestone.agents.presets import PRESETS
-from lodestone.agents.tools import TOOL_DEFS, TOOL_IMPLS, build_tools, run_tool
+from chitragupta.agents import file_tools
+from chitragupta.agents.presets import PRESETS
+from chitragupta.agents.tools import TOOL_DEFS, TOOL_IMPLS, build_tools, run_tool
 
 
 @pytest.fixture
@@ -55,10 +55,10 @@ def test_dot_dot_cannot_climb_out(granted):
 
 
 def test_an_absolute_path_elsewhere_is_refused(granted):
-    out = run_tool("write_file", {"path": "/tmp/lodestone-escape.txt",
+    out = run_tool("write_file", {"path": "/tmp/chitragupta-escape.txt",
                                   "content": "should never be written"})
     assert not out.ok
-    assert not Path("/tmp/lodestone-escape.txt").exists()
+    assert not Path("/tmp/chitragupta-escape.txt").exists()
 
 
 def test_a_symlink_planted_inside_the_folder_does_not_escape(granted, tmp_path):
@@ -141,16 +141,16 @@ def test_a_snippet_that_prints_nothing_says_so():
 
 
 def test_an_endless_loop_is_stopped(monkeypatch):
-    monkeypatch.setattr("lodestone.agents.code_tools.TIMEOUT_SECONDS", 2)
+    monkeypatch.setattr("chitragupta.agents.code_tools.TIMEOUT_SECONDS", 2)
     out = run_tool("run_python", {"code": "while True: pass"})
     assert not out.ok
     assert "without finishing" in out
 
 
-def test_the_snippet_cannot_reach_lodestone_or_the_users_brain():
+def test_the_snippet_cannot_reach_chitragupta_or_the_users_brain():
     """-I and -S keep it out of this process's world."""
     out = run_tool("run_python", {
-        "code": "import lodestone; print('reached', lodestone.__file__)"})
+        "code": "import chitragupta; print('reached', chitragupta.__file__)"})
     assert not out.ok, "a snippet imported the app it is running inside"
     assert "ModuleNotFoundError" in out or "ImportError" in out
 
@@ -163,7 +163,7 @@ def test_empty_code_is_a_failure_not_a_run():
 def test_only_agents_whose_job_is_code_can_run_it_and_the_library_says_so():
     """Adding one of these from the library IS the consent — so the card must
     say what it does before the user adds it, not after."""
-    from lodestone.agents.library import describe
+    from chitragupta.agents.library import describe
 
     coders = {t["id"] for t in describe(include_status=False) if t["runs_code"]}
     assert coders, "no template declares that it runs code"

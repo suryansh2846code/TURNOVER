@@ -14,7 +14,7 @@ import sqlite3
 
 import pytest
 
-from lodestone.brain.graph import _num
+from chitragupta.brain.graph import _num
 
 
 def test_row_membership_tests_values_not_keys():
@@ -37,8 +37,8 @@ def test_num_reads_the_stored_value():
 
 @pytest.fixture
 def graph(tmp_path):
-    from lodestone.brain import Brain
-    from lodestone.core.store import MemoryStore
+    from chitragupta.brain import Brain
+    from chitragupta.core.store import MemoryStore
 
     return Brain(store=MemoryStore(db_path=str(tmp_path / "brain.db"))).graph
 

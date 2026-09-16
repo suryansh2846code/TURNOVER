@@ -12,8 +12,8 @@ import pytest
 from fastapi.testclient import TestClient
 from web_sources import app_source
 
-from lodestone.api.app import app
-from lodestone.models.auth_flows import (
+from chitragupta.api.app import app
+from chitragupta.models.auth_flows import (
     ApiKeyOnlyFlow,
     AuthStart,
     AuthStatus,
@@ -43,9 +43,9 @@ def _no_real_sign_in():
     protocol's shape, not about really authenticating.
     """
     with patch("webbrowser.open", return_value=True), \
-         patch("lodestone.models.claude_auth.start_claude_login_flow",
+         patch("chitragupta.models.claude_auth.start_claude_login_flow",
                return_value=(True, "https://claude.ai/oauth/authorize?x=1", "Opened Claude")), \
-         patch("lodestone.models.chatgpt_auth.start_chatgpt_oauth_flow",
+         patch("chitragupta.models.chatgpt_auth.start_chatgpt_oauth_flow",
                return_value=(True, "https://auth.openai.com/oauth/authorize?x=1", "waiting")):
         yield
 
@@ -82,7 +82,7 @@ def test_xai_signs_in_through_its_cli_not_oauth():
     """The OAuth flow in models/xai_auth.py authenticates at api.x.ai and is
     then refused for billing, so it can never yield a usable credential. The
     subscription path is xAI's own CLI."""
-    from lodestone.models.auth_flows import _FLOWS
+    from chitragupta.models.auth_flows import _FLOWS
 
     assert isinstance(_FLOWS["xai"], GrokFlow)
     start = get_flow("xai").start()
@@ -92,7 +92,7 @@ def test_xai_signs_in_through_its_cli_not_oauth():
 
 # ── code submission ──────────────────────────────────────────────────────
 def test_code_submission_reaches_the_flow(client):
-    with patch("lodestone.models.claude_auth.submit_claude_auth_code",
+    with patch("chitragupta.models.claude_auth.submit_claude_auth_code",
                return_value=(True, "Authenticated as a@b.com")) as sub:
         r = client.post("/api/providers/claude/auth/code", json={"code": "abc#state"})
     assert r.status_code == 200 and r.json()["ok"] is True
@@ -130,7 +130,7 @@ def test_legacy_signin_route_still_answers(client):
 
 
 def test_legacy_submit_code_route_still_answers(client):
-    with patch("lodestone.models.claude_auth.submit_claude_auth_code",
+    with patch("chitragupta.models.claude_auth.submit_claude_auth_code",
                return_value=(True, "ok")):
         assert client.post("/api/providers/claude/submit-code",
                            json={"code": "abc"}).status_code == 200
