@@ -1,7 +1,22 @@
-# A browser inside Lodestone
+# A browser inside Chitragupta
 
-> **Status: a plan, not a build.** Nothing in this document is implemented. It
-> exists so the first commit starts from a decision rather than a prototype.
+> **Status: steps 1–3 are built, reading only. The driver is not.** The rest of
+> this document is the plan it was built from; §8 records what the building
+> changed, because three of the decisions below did not survive contact and
+> pretending otherwise would make this file the wrong thing to read next.
+>
+> | | |
+> |---|---|
+> | `browser/origins.py` | **built** — which sites, for what. The boundary |
+> | `browser/page.py` | **built** — bounded, ref-based, quarantined page text |
+> | `browser/session.py` | **built** — navigation, and the landing check |
+> | `agents/browse_tools.py` | **built** — `browse_open` / `read` / `find` / `sites` |
+> | `browser/chromium.py` | **partly** — profile, install job, reaping. No fetch |
+> | the CDP driver | **not built** — `session.Driver` is the seam it plugs into |
+>
+> Acting — `browse_click` and friends — is untouched, and `may_act` is granted by
+> nothing. A test fails the day a write tool appears without being in
+> `permissions.NEVER_UNATTENDED`.
 
 ---
 
@@ -287,3 +302,79 @@ where the review effort belongs.
 * **What happens when a site changes?** A ref-based agent degrades into "I could
   not find that button", which is the right failure. Worth confirming it says so
   rather than clicking something nearby.
+
+---
+
+## 8. What the building changed
+
+Written after steps 1–3, against the plan above. Three of its decisions were
+wrong, two of its open questions are answered, and two defects were found by the
+tests before any of this could run.
+
+### Decisions that changed
+
+**"Navigating off a granted origin ends the session" — replaced.** The rule as
+written would break on the first payroll portal using SSO, because a session
+expiring redirects to an identity provider and a link in a feed resolves through
+two hops. But the fix is not to allow those: it is that **the rule was aimed at
+the wrong layer**. Manual sign-in (step 2) is user-driven and ungated — the
+person follows the redirect themselves, in the window. The agent only ever reads
+pages the user has already authenticated, so for *tools* a hard refusal is
+correct. What changed is the wording and the state: `session.py` refuses the
+**landing**, drops the page, names both ends (*"payroll.example.com redirected to
+login.microsoftonline.test … if you were signed out, sign in again"*), and clears
+the current page rather than ending anything.
+
+**Checking the requested URL is not the boundary.** The plan says the origin
+allow-list is "checked at the tool", which is true and insufficient: a granted
+page can redirect anywhere, so the address that decides is the one the browser
+**landed on**, known only afterwards. `Session._land` is that check, it runs on
+every navigation *including a plain re-read* — a page can move itself while
+nobody is looking — and removing it turns six tests red.
+
+**"A bounded, marked result" needed one more property.** Bounding was the easy
+half. The hard half is that page content must not be able to **close the
+quarantine fence from inside itself**: a page that can do that makes its next
+paragraph look like ours, and *"ignore previous instructions"* stops reading as
+something a stranger typed into a div. `page._defuse` neutralises fence-like
+decoration and fence phrasing separately — one clever combined pattern missed
+both spaced-out equals and a trailing marker.
+
+### Answered from the open questions
+
+**The effort ceiling — answered, and cheaper than a new budget.** A page is
+capped at 12,000 characters (`file_tools` allows 20,000 for a file the user
+pointed at; a page is worth less per character and is re-read far more often).
+The larger win is `browse_read(since=…)`: a fingerprint of what the page says, so
+an agent stepping through a flow is told *"nothing has changed"* for a few tokens
+instead of paying for the page again. No change to `Effort.max_tokens_per_turn`
+was needed.
+
+**A site that changes — confirmed.** `browse_find` returns *"Nothing on this page
+matches … it may have changed"*, and the tool description tells the agent to say
+so rather than reach for something nearby.
+
+### Defects the tests found
+
+* **`https://127.0.0.1` was grantable.** It has a dot in it, and the check was
+  only refusing bare labels — which would have put every router admin page, NAS,
+  printer and cloud metadata endpoint on the user's network behind an injected
+  link, in a browser that may hold a session cookie for it. Numeric addresses are
+  now refused as a class rather than by range.
+* **The invariant suite was checking the boundary with the boundary.** It called
+  `origins.covers()` to verify decisions that *used* `origins.covers()`, so
+  reintroducing the classic `endswith` bypass left all 170 of its tests green
+  while `evil-linkedin.com` counted as `linkedin.com`. It now splits labels
+  itself. The general lesson is worth keeping: an assertion borrowed from the
+  code under test agrees with its bugs.
+
+### Still open
+
+* **The CDP driver.** `session.Driver` is four methods and a fake satisfies it,
+  which is what let everything above be tested offline. The real one cannot be
+  verified without a downloaded Chromium and a network, so it was not written
+  blind — §7 step 1's download is a job with progress and no fetch behind it yet.
+* **Headless or visible** — unchanged, and still "visible, shown when an agent
+  starts driving".
+* **Downloads through `file_tools` grants** — unchanged, and still the answer:
+  one boundary, not two.
