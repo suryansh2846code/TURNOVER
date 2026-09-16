@@ -75,7 +75,7 @@ def connector_catalog() -> dict[str, Any]:
     truth is that no app can offer it. "Never show a control that cannot work"
     means saying so where the control would have been.
     """
-    from ...connectors.mcp_catalog import BLOCKED, CATALOG, _needed
+    from ...connectors.mcp_catalog import BLOCKED, CATALOG, CATEGORIES, _needed
     from ...connectors.mcp_source import list_servers
 
     added = {spec.id for spec in list_servers()}
@@ -83,11 +83,16 @@ def connector_catalog() -> dict[str, Any]:
         "available": [{"id": e.id, "name": e.name, "notes": e.notes,
                        "first_party": e.first_party, "added": e.id in added,
                        "remote": e.is_remote, "auth": e.auth,
+                       "category": e.category,
                        "needs_env": _needed(e.needs_env),
                        "needs_args": _needed(e.needs_args)}
                       for e in CATALOG],
         "blocked": [{"id": b.id, "name": b.name, "reason": b.reason}
                     for b in BLOCKED],
+        # The shelf order, sent rather than hardcoded in the page: the
+        # catalog decides what belongs where, and two lists that can
+        # disagree eventually will.
+        "categories": list(CATEGORIES),
     }
 
 

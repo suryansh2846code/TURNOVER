@@ -60,7 +60,15 @@ _BULK_HINTS = ("list", "recent", "all", "fetch", "export", "read", "get_many",
 _READ_STEMS = ("list", "get", "read", "search", "find", "query", "fetch",
                "view", "show", "describe", "lookup", "recent", "history",
                "export", "count", "summar", "stat", "info", "detail",
-               "browse", "diff", "resolve", "check", "inspect", "whoami")
+               "browse", "diff", "resolve", "check", "inspect", "whoami",
+               # Asking is not acting. `ask_question` on a documentation server
+               # landed in the write pile, which would have put an approval
+               # card in front of every question a reference connector exists
+               # to answer. Each of these produces an answer and changes
+               # nothing — kept deliberately short, because the point of
+               # failing closed is lost if it grows to cover every verb.
+               "ask", "explain", "analyz", "analys", "compare", "suggest",
+               "recommend", "estimate", "calculate", "translate", "preview")
 
 #: Words a tool named for its *contents* rather than its verb is made of —
 #: `entries`, `recent_items`, `my_issues`. A name built only from these has no

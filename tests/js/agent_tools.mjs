@@ -120,7 +120,7 @@ globalThis.__agents([input.agent]);
 globalThis.__spyConnectors(() => { openedConnectors += 1; });
 
 const agent = JSON.parse(JSON.stringify(input.agent));
-globalThis.__render(box, { agent, tools: input.tools, connectors: input.connectors });
+globalThis.__render(box, { agent, tools: input.tools, connectors: input.connectors, categories: input.categories });
 const firstHtml = box.innerHTML;
 buttons = parsedButtons();
 
@@ -128,7 +128,7 @@ buttons = parsedButtons();
 // first pass produced. Do NOT re-parse afterwards: fresh objects would be
 // unbound, which is the harness losing the handlers rather than the app
 // failing to set them.
-globalThis.__render(box, { agent, tools: input.tools, connectors: input.connectors });
+globalThis.__render(box, { agent, tools: input.tools, connectors: input.connectors, categories: input.categories });
 
 let toggled = null;
 let rowError = "";
@@ -155,7 +155,7 @@ if (input.clickFix && buttons["[data-tool-fix]"].length) {
 
 process.stdout.write(JSON.stringify({
   html: firstHtml,
-  groups: globalThis.__groups(input.tools, input.connectors, input.agent.tools)
+  groups: globalThis.__groups(input.tools, input.connectors, input.agent.tools, input.categories)
     .map((g) => ({ name: g.name, kind: g.kind, tools: g.tools.map((t) => t.row.name) })),
   toggled, rowError, openedConnectors,
   agentToolsAfter: agent.tools,

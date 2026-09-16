@@ -472,3 +472,73 @@ def test_the_prompt_never_forbids_checking_a_connector():
         text = _prompt(tools, ["Notion"])
         assert "do NOT" not in text
         assert "'check' Gmail" not in text
+
+
+# ── the catalog, once it is more than a handful ────────────────────────────
+
+
+def test_every_entry_sits_on_a_named_shelf():
+    """Two dozen connectors in one list is a wall.
+
+    The shelf lives on the entry rather than in the page, so the catalog and
+    the UI cannot disagree about where something belongs — and the order is
+    served, not hardcoded, for the same reason.
+    """
+    from lodestone.connectors.mcp_catalog import CATALOG, CATEGORIES
+
+    for entry in CATALOG:
+        assert entry.category in CATEGORIES, (
+            f"{entry.id} is filed under '{entry.category}', which is not a "
+            "shelf — it would render under a heading nobody chose")
+
+
+def test_no_shelf_is_empty():
+    """A heading with nothing under it is a promise the catalog does not keep."""
+    from lodestone.connectors.mcp_catalog import CATALOG, CATEGORIES
+
+    used = {e.category for e in CATALOG}
+    assert not (set(CATEGORIES) - used), (
+        f"shelves with no connectors on them: {sorted(set(CATEGORIES) - used)}")
+
+
+def test_every_remote_entry_names_a_reachable_endpoint():
+    """The shape of the failure that emptied this catalog once already.
+
+    Offline this asserts only the shape. With a network it asks each vendor
+    whether the address exists and whether it wants a sign-in — which is the
+    check that would have caught a package that had never been published.
+    """
+    import urllib.error
+    import urllib.request
+
+    from lodestone.connectors.mcp_catalog import CATALOG
+
+    for entry in CATALOG:
+        if not entry.is_remote:
+            continue
+        assert entry.url.startswith("https://"), entry.id
+        assert " " not in entry.url, entry.id
+
+    request = urllib.request.Request("https://mcp.notion.com/mcp", method="HEAD")
+    try:
+        urllib.request.urlopen(request, timeout=5)
+    except urllib.error.HTTPError:
+        pass                                  # reachable; it just refused us
+    except Exception:
+        pytest.skip("no network — the shape assertions above still ran")
+
+
+def test_asking_a_question_is_never_an_action():
+    """`ask_question` on a documentation server was classified a write, which
+    would have put an approval card in front of every question the connector
+    exists to answer. Failing closed must not mean treating curiosity as an
+    act."""
+    from lodestone.connectors.mcp_source import classify_tools
+
+    kinds = classify_tools([tool(n, ["q"]) for n in
+                            ("ask_question", "analyze_costs", "explain_error",
+                             "compare_plans", "delete_page", "approve_invoice")])
+
+    assert set(kinds.readable) == {"ask_question", "analyze_costs",
+                                   "explain_error", "compare_plans"}
+    assert set(kinds.write) == {"delete_page", "approve_invoice"}

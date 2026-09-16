@@ -40,6 +40,32 @@ function toolLabel(t) {
 // own connector.
 function isCategoryRow(t) { return !!t && t.source === "category"; }
 
+// One readable line about a tool.
+//
+// A connector's description is written FOR A MODEL by whoever wrote the
+// server: Notion's search tool ships four hundred words of instructions about
+// query_type and filter nesting. Rendered whole, twenty-seven of those are a
+// page of prose where a list of switches should be, and the labels disappear
+// into it.
+//
+// So: the first sentence, capped. Derived from what the API sent rather than
+// replaced by anything of ours — the full text is still what the model gets,
+// and truncating the display cannot change what the tool does.
+function toolBlurb(t) {
+  const full = ((t && t.description) || "").trim();
+  if (!full) return "";
+  // Stop at the first sentence end that is followed by a space — a bare "." is
+  // as likely to be inside `{"id":"self"}` or a version number.
+  const m = full.match(/^[\s\S]*?[.!?](?=\s)/);
+  let out = (m ? m[0] : full).trim();
+  if (out.length > 150) out = out.slice(0, 149).replace(/\s+\S*$/, "") + "…";
+  return out;
+}
+
+// The heading a built-in sits under. The API names it; a tool that arrives
+// without one lands in "Other", which is visible enough to get fixed.
+function toolCategory(t) { return ((t && t.category) || "").trim() || "Other"; }
+
 function toolConnector(t) {
   // Anything that is not explicitly a builtin came in with a connector —
   // including source kinds that do not exist yet, which is the whole point of
@@ -148,7 +174,7 @@ let AGENT_TOOLS_FOR = "";
 //: second click cannot race the first.
 const _toolSaving = new Set();
 
-function agentToolGroups(tools, connectors, agentTools) {
+function agentToolGroups(tools, connectors, agentTools, categories) {
   const rows = Array.isArray(tools) ? tools : [];
   const have = new Set(Array.isArray(agentTools) ? agentTools : []);
 
@@ -169,13 +195,17 @@ function agentToolGroups(tools, connectors, agentTools) {
 
   for (const t of rows) {
     const name = (t && t.name) || "";
-    // The category row is its own group: it grants everything the connectors
-    // can read and belongs to no single connector, so putting it under one
-    // would be a lie about what the switch does.
+    // Three kinds of group, and each is asked for by a different field:
+    //   the category switch  — source === "category"
+    //   a connector's tools  — connector
+    //   a built-in           — its own category, from the API
+    // Thirty-two built-ins under one heading is a wall; under nine short
+    // headings it is a list you can choose from.
     const group = isCategoryRow(t)
       ? groupFor("Your connectors", "category")
-      : groupFor(toolConnector(t) || BUILTIN_GROUP,
-                 toolConnector(t) ? "connector" : "builtin");
+      : toolConnector(t)
+        ? groupFor(toolConnector(t), "connector")
+        : groupFor(toolCategory(t), "builtin");
     group.tools.push({ row: t, on: have.has(name) });
   }
 
@@ -191,11 +221,20 @@ function agentToolGroups(tools, connectors, agentTools) {
     if (!g.connector) g.connector = health.get(g.name.toLowerCase()) || null;
   }
 
-  // Connectors first: this screen exists because of them. Built-ins last —
-  // they are the part that never needed explaining.
+  // Connectors first: this screen exists because of them. Built-ins after, in
+  // the order the API names — not alphabetical, because "Your Mac" belongs
+  // last whatever letter it starts with, and that is a judgement the layer
+  // that owns the categories already made.
+  const builtin = groups.filter((g) => g.kind === "builtin");
+  const order = Array.isArray(categories) ? categories : [];
+  const rank = (g) => {
+    const i = order.indexOf(g.name);
+    return i === -1 ? order.length : i;        // unnamed sinks to the bottom
+  };
+  builtin.sort((a, b) => rank(a) - rank(b));
   return [...groups.filter((g) => g.kind === "category"),
           ...groups.filter((g) => g.kind === "connector"),
-          ...groups.filter((g) => g.kind === "builtin")];
+          ...builtin];
 }
 
 //: Why this row cannot be switched, or "" if it can.
@@ -213,9 +252,9 @@ function toolBlockedReason(group) {
   return "";
 }
 
-function renderAgentTools(boxEl, { agent, tools, connectors }) {
+function renderAgentTools(boxEl, { agent, tools, connectors, categories }) {
   if (!boxEl) return;
-  const groups = agentToolGroups(tools, connectors, agent && agent.tools);
+  const groups = agentToolGroups(tools, connectors, agent && agent.tools, categories);
   const usable = groups.reduce((n, g) =>
     n + (toolBlockedReason(g) ? 0 : g.tools.filter((t) => t.on).length), 0);
 
@@ -252,7 +291,7 @@ function renderAgentTools(boxEl, { agent, tools, connectors }) {
       return `<div class="at-row" data-row="${esc(name)}">
         <span class="at-text">
           <span class="at-nm">${esc(toolLabel(row))}</span>
-          <span class="at-ds">${esc((row && row.description) || "")}</span>
+          <span class="at-ds">${esc(toolBlurb(row))}</span>
           <span class="at-err" hidden></span>
         </span>
         ${control}</div>`;
@@ -337,22 +376,22 @@ async function loadAgentTools(agentId) {
   const id = agentId || AGENT_TOOLS_FOR || current;
   AGENT_TOOLS_FOR = id;
   box.innerHTML = `<div class="at-empty">Loading…</div>`;
-  let tools = [];
-  try { ({ tools } = await api("/api/agents/tools")); }
+  let tools = [], categories = [];
+  try { ({ tools, categories } = await api("/api/agents/tools")); }
   catch (e) { box.innerHTML = `<div class="at-empty">Couldn't load the tool list.</div>`; return; }
   if (AGENT_TOOLS_FOR !== id) return;      // the user switched while we waited
 
   const agent = (agents || []).find((a) => a.id === id);
   if (!agent) { box.innerHTML = `<div class="at-empty">Pick an agent.</div>`; return; }
 
-  renderAgentTools(box, { agent, tools, connectors: CONNECTORS });
+  renderAgentTools(box, { agent, tools, connectors: CONNECTORS, categories });
   if (!CONNECTORS.length) {
     // /api/connectors starts every added server to answer honestly, so it is
     // far too slow to block a panel on. Render what we know, then sharpen.
     try {
       const { connectors } = await api("/api/connectors");
       CONNECTORS = connectors;
-      if (AGENT_TOOLS_FOR === id) renderAgentTools(box, { agent, tools, connectors });
+      if (AGENT_TOOLS_FOR === id) renderAgentTools(box, { agent, tools, connectors, categories });
     } catch (_) { /* the tools are on screen; health is a bonus */ }
   }
 }

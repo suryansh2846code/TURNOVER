@@ -440,8 +440,28 @@ async function loadConnectorCatalog() {
       <button class="tiny ghost" id="cxOwn">Add your own</button>
     </div>`;
 
+  // Grouped, because two dozen connectors in one list is a wall and the same
+  // two dozen on six shelves is a decision. The order comes from the server —
+  // the catalog knows what belongs where, and a second list here would
+  // eventually disagree with it.
+  const order = data.categories && data.categories.length
+    ? data.categories
+    : [...new Set(data.available.map((c) => c.category).filter(Boolean))];
+  const shelved = order
+    .map((cat) => [cat, data.available.filter((c) => c.category === cat)])
+    .filter(([, items]) => items.length);
+  // Anything the server grouped under a name we were not given still has to
+  // appear. A connector that exists and is invisible is worse than an ugly
+  // heading.
+  const placed = new Set(shelved.flatMap(([, items]) => items.map((c) => c.id)));
+  const rest = data.available.filter((c) => !placed.has(c.id));
+  if (rest.length) shelved.push(["Other", rest]);
+
+  const shelf = ([cat, items]) =>
+    `<div class="cx-head">${esc(cat)}</div>${items.map(card).join("")}`;
+
   box.innerHTML =
-    `<div class="cx-head">Available</div>${data.available.map(card).join("")}${own}` +
+    `${shelved.map(shelf).join("")}${own}` +
     (data.blocked.length
       ? `<div class="cx-head" style="margin-top:14px">Not possible</div>
          ${data.blocked.map(blocked).join("")}` : "");
