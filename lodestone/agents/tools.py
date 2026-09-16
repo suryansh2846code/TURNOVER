@@ -13,6 +13,7 @@ from ..models.base import Tool
 from . import (
     automation_tools,
     brain_tools,
+    browse_tools,
     code_tools,
     file_tools,
     mcp_tools,
@@ -251,6 +252,10 @@ TOOL_IMPLS = {
     "read_file": file_tools.read_file,
     "write_file": file_tools.write_file,
     "run_python": code_tools.run_python,
+    "browse_open": browse_tools.browse_open,
+    "browse_read": browse_tools.browse_read,
+    "browse_find": browse_tools.browse_find,
+    "browse_sites": browse_tools.browse_sites,
     "list_routines": automation_tools.list_routines,
     "pause_routine": automation_tools.pause_routine,
     "list_pending_approvals": automation_tools.list_pending_approvals,
@@ -492,6 +497,56 @@ TOOL_DEFS: dict[str, Tool] = {
             "path": {"type": "string"},
             "content": {"type": "string"}}, "required": ["path", "content"]},
     ),
+    # Reading only. `browse_click`, `browse_type` and `browse_submit` are a
+    # separate landing, and must join `permissions.NEVER_UNATTENDED` in the same
+    # commit that adds them — a routine reading a stranger's email is the one
+    # caller that must never reach them.
+    "browse_open": Tool(
+        name="browse_open",
+        description=(
+            "Open a page on a website the user has allowed you to read, and get "
+            "back what is on it. You can only reach sites on their list — call "
+            "browse_sites to see which. You can read and report; you cannot "
+            "click, type or buy anything."
+        ),
+        parameters={"type": "object", "properties": {
+            "url": {"type": "string",
+                    "description": "The full https address of the page"}},
+            "required": ["url"]},
+    ),
+    "browse_read": Tool(
+        name="browse_read",
+        description=(
+            "Read the page that is already open again. Pass the page-version "
+            "from your last read and you will be told cheaply if nothing has "
+            "changed, instead of being charged for the whole page twice."
+        ),
+        parameters={"type": "object", "properties": {
+            "since": {"type": "string",
+                      "description": "The page-version from your previous read"}}},
+    ),
+    "browse_find": Tool(
+        name="browse_find",
+        description=(
+            "Find links, buttons and fields on the open page by describing them. "
+            "Returns a short reference for each. Use it to say precisely what is "
+            "on a page; if nothing matches the page has probably changed — say "
+            "so rather than guessing at something nearby."
+        ),
+        parameters={"type": "object", "properties": {
+            "what": {"type": "string",
+                     "description": "What you are looking for, in plain words"}},
+            "required": ["what"]},
+    ),
+    "browse_sites": Tool(
+        name="browse_sites",
+        description=(
+            "Which websites the user has allowed you to read. Call it before "
+            "saying you cannot do something on the web, so you can tell them "
+            "which site to add rather than only that you failed."
+        ),
+        parameters={"type": "object", "properties": {}},
+    ),
     "run_python": Tool(
         name="run_python",
         description=(
@@ -729,6 +784,14 @@ _LABELS: dict[str, tuple[str, str]] = {
     "gmail_search":             ("Search",    "Email"),
     "calendar_lookup":          ("Schedule",  "Calendar"),
     "web_search":               ("Search",    "Web"),
+    # Websites the user has allowed. Their own group rather than folded into
+    # "Web": a search returns public results, and these read pages the user is
+    # signed in to — which is a different thing to hand an agent, and the person
+    # ticking the box should see it as one.
+    "browse_open":              ("Open page", "Websites you allow"),
+    "browse_read":              ("Re-read",   "Websites you allow"),
+    "browse_find":              ("Find on page", "Websites you allow"),
+    "browse_sites":             ("Which sites", "Websites you allow"),
     # Your Mac — the powers worth naming as a group, because they are the ones
     # a person wants to see gathered before deciding
     "list_dir":                 ("Browse",    "Your Mac"),
