@@ -54,7 +54,10 @@ def test_every_declared_tool_actually_exists():
     from lodestone.agents.mcp_tools import SENTINEL
 
     for t in TEMPLATES:
-        for name in t.tools:
+        # Against what it GRANTS, not what it declares: the generalist holds a
+        # marker, and validating the marker would either fail or — worse — pass
+        # while never checking the thing it expands to.
+        for name in t.resolved_tools():
             assert name == SENTINEL or name in TOOL_DEFS, (
                 f"{t.id} asks for '{name}', which is not a tool")
 

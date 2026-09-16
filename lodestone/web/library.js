@@ -128,6 +128,7 @@ function libCard(t) {
   const powers = [];
   if (t.runs_code) powers.push("runs code on your Mac");
   if (t.touches_files) powers.push("reads and writes in folders you choose");
+  if (t.forgets_facts) powers.push("can retract things from your brain");
   if (powers.length) {
     const p = document.createElement("div");
     p.className = "lib-powers";

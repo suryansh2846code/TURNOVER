@@ -37,7 +37,7 @@ class Agent:
 
         return build(name=self.name, role=self.role,
                      system_prompt=self.system_prompt, actions=self.actions,
-                     tools=self.tools)
+                     tools=self.tools, agent_id=self.id)
 
 
 # ── per-agent conversation memory (persistent) ────────────────────────────

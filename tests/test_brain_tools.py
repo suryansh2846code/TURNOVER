@@ -113,11 +113,22 @@ def test_correcting_needs_both_halves():
 
 
 # ── forgetting is opt-in ─────────────────────────────────────────────────
-def test_no_shipped_agent_can_forget_by_default():
-    """"Forget everything about X" is a sentence an injection would write."""
-    for agent in PRESETS.values():
-        assert "forget_fact" not in agent.tools, (
-            f"{agent.id} ships with forget_fact in its tool list")
+def test_only_the_declared_generalist_can_forget():
+    """"Forget everything about X" is a sentence an injection would write, and
+    these agents read text other people wrote.
+
+    Exactly one agent has it — the generalist, which the user adds knowing that
+    is what it is. Every other agent must not, and the library card has to say
+    so before it is added, because adding it is the consent.
+    """
+    from lodestone.agents.library import describe
+
+    cards = {c["id"]: c for c in describe(include_status=False)}
+    with_it = {a.id for a in PRESETS.values() if "forget_fact" in a.tools}
+    assert with_it == {"chief-of-staff"}, f"unexpected agents can forget: {with_it}"
+    for agent_id, card in cards.items():
+        assert card["forgets_facts"] is (agent_id in with_it), (
+            f"{agent_id}'s card disagrees with what it was given")
 
 
 def test_forgetting_still_works_when_a_user_grants_it(seeded):

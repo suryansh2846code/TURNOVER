@@ -72,6 +72,31 @@ _DIARY = ["calendar_lookup", "sync_source"]
 
 _ALL_ACTIONS = ["send_email", "create_event", "set_reminder", "create_routine"]
 
+#: Stands for "every tool there is" in a template's list.
+#:
+#: Written as a marker rather than as the list itself, because the list is the
+#: thing that goes stale: a generalist enumerated by hand stops being a
+#: generalist the first time somebody adds a tool and forgets one template.
+#: Expanded when the agent is built, so a tool added tomorrow reaches it.
+EVERYTHING = "*"
+
+
+def expand_tools(names: list[str]) -> list[str]:
+    """A template's tool list with `EVERYTHING` resolved.
+
+    Imported inside the function: `tools.py` reaches back into this module
+    through `presets` when it builds `ask_agent`'s description, and a
+    module-level import here would close that loop at import time.
+    """
+    if EVERYTHING not in names:
+        return list(names)
+    from .tools import TOOL_DEFS
+
+    every = [*TOOL_DEFS, MCP_TOOLS]
+    # Anything named beside the marker is already covered; keep the order
+    # stable so a stored list and a rebuilt one compare equal.
+    return every + [n for n in names if n != EVERYTHING and n not in every]
+
 
 @dataclass(frozen=True)
 class Template:
@@ -92,10 +117,14 @@ class Template:
     #: Sources it genuinely cannot function without. A subset of `works_with`.
     needs: list[str] = field(default_factory=list)
 
+    def resolved_tools(self) -> list[str]:
+        """What this template actually grants, with `EVERYTHING` expanded."""
+        return expand_tools(list(self.tools))
+
     def to_agent(self) -> Agent:
         return Agent(
             id=self.id, name=self.name, role=self.role,
-            system_prompt=self.system_prompt, tools=list(self.tools),
+            system_prompt=self.system_prompt, tools=self.resolved_tools(),
             recall_sources=list(self.recall_sources), actions=list(self.actions),
         )
 
@@ -109,15 +138,27 @@ TEMPLATES: tuple[Template, ...] = (
         description="Runs your daily brief: what's on, what needs a reply, "
                     "what you promised and haven't done.",
         system_prompt=(
-            "You run the user's day. Each morning, and whenever asked, you give "
-            "a short brief: what is on the calendar, what in the inbox needs a "
-            "response, which commitments are still open, and what you would do "
-            "first. Lead with the answer, not the method. When something needs "
-            "doing, capture it as a task or an open loop rather than leaving it "
-            "in prose. You are the one agent with the whole picture — when a "
-            "question belongs to a specialist, ask them rather than guessing."
+            "You run the user's day, and you are the generalist: you hold every "
+            "tool this app has and reach every source they have connected. "
+            "Whatever they ask for, the answer is yours to get.\n"
+            "When they ask for a brief, give a short one: what is on the "
+            "calendar, what in the inbox needs a response, which commitments "
+            "are still open, and what you would do first. Lead with the answer, "
+            "not the method. If they want that every morning, propose a standing "
+            "automation for it rather than describing one — it will not happen "
+            "on its own otherwise.\n"
+            "When something needs doing, capture it as a task or an open loop "
+            "rather than leaving it in prose. Compute with `run_python` rather "
+            "than counting in your head — a number you estimated is a number you "
+            "made up.\n"
+            "You are the one agent with the whole picture, and you know who else "
+            "is on the team. When a question belongs to a specialist, ask them "
+            "with `ask_agent` — several at once with `ask_agents` — and answer "
+            "the user yourself. You stay responsible for the reply."
         ),
-        tools=[*BASE_TOOLS, *_FILES, *_TASKS, *_LOOPS, *_MAIL, *_DIARY],
+        # Everything. A generalist enumerated by hand stops being one the first
+        # time a tool is added and this line is not.
+        tools=[EVERYTHING],
         actions=_ALL_ACTIONS,
         recall_sources=["gmail", "gcal"],
         works_with=["gmail", "gcal"],
@@ -394,8 +435,15 @@ def describe(include_status: bool = True) -> list[dict]:
             "missing": missing,
             # Said on the card, before the user adds it: adding an agent IS the
             # consent for what it can do, so the consent has to be informed.
-            "runs_code": "run_python" in t.tools,
-            "touches_files": "read_file" in t.tools,
+            # Against the RESOLVED list: a generalist holds its tools behind a
+            # marker, and a card that read the marker would tell the user it
+            # runs no code while handing it the interpreter.
+            "runs_code": "run_python" in t.resolved_tools(),
+            "touches_files": "read_file" in t.resolved_tools(),
+            # Retracting something from the brain is a real power and the card
+            # says so. It is a soft retraction that keeps provenance, so a
+            # mistake is recoverable — but "recoverable" is not "unremarkable".
+            "forgets_facts": "forget_fact" in t.resolved_tools(),
             "in_roster": t.id in have,
         })
     return rows

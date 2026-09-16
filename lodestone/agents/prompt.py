@@ -280,12 +280,44 @@ def _connector_actions(tools: list[str] | None) -> str:
     )
 
 
+def _teammates(agent_id: str, tools: list[str] | None) -> str:
+    """Who else is on this user's team, by name and speciality.
+
+    `ask_agent`'s own description already names them, but a tool description is
+    read when the model is deciding whether to call that tool. An agent whose
+    job is to route work needs to know the roster while it is still deciding
+    what the job IS — before it has settled on delegating at all.
+
+    Built per turn, never stored: the roster changes whenever somebody adds or
+    removes an agent, and a list written into a prompt last week would name
+    agents that are gone and miss every one added since.
+    """
+    if not any(t in (tools or []) for t in ("ask_agent", "ask_agents")):
+        return ""
+    with suppressed("listing the user's other agents for the prompt"):
+        from .presets import list_agents
+
+        others = [a for a in list_agents() if a.id != agent_id]
+        if not others:
+            # Say so rather than staying silent: an agent told nothing about the
+            # team assumes there is one, and claims to have asked it.
+            return ("YOUR TEAM: nobody else yet — this user has no other agents. "
+                    "Do not offer to hand anything off or claim you asked "
+                    "someone; answer it yourself, or say what is missing.")
+        lines = [f"- {a.name} (`{a.id}`) — {a.role}" for a in others[:20]]
+        return ("YOUR TEAM — the agents this user has, and what each is for. "
+                "Ask one when the question is theirs; you still write the final "
+                "answer.\n" + "\n".join(lines))
+    return ""
+
+
 _CLOSING = "Be concise and act like a capable teammate."
 
 
 def build(*, name: str, role: str, system_prompt: str,
           actions: list[str] | None = None,
-          tools: list[str] | None = None) -> str:
+          tools: list[str] | None = None,
+          agent_id: str = "") -> str:
     """The system message for one agent, carrying only what applies to it."""
     parts = [_identity(name, role, system_prompt), _BRAIN]
 
@@ -303,6 +335,10 @@ def build(*, name: str, role: str, system_prompt: str,
         if "send_email" in allowed or "create_event" in allowed:
             lines.append(_SCHEDULING)
         parts.append("\n".join(lines))
+
+    team = _teammates(agent_id, tools)
+    if team:
+        parts.append(team)
 
     connectors = _connector_actions(tools)
     if connectors:
