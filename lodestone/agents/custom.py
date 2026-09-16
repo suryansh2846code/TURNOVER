@@ -7,6 +7,7 @@ import re
 import sqlite3
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from ..config import get_settings
 from ..log import suppressed
@@ -70,9 +71,15 @@ class CustomAgentStore:
         while self._c.execute("SELECT 1 FROM custom_agents WHERE id=?",
                               (aid,)).fetchone():
             aid = f"{base}-{n}"; n += 1
-        # default toolset if none chosen
-        tools = tools or ["search_brain", "remember", "list_entities",
-                          "web_search", "ask_agent"]
+        # The same base every preset gets, from the same constant. It used to
+        # be five hand-picked names with no connector access, so an agent the
+        # user built themselves could not read a connector they had signed into
+        # — and the sentinel is not offered at build time when nothing is
+        # connected yet, so there was no moment at which they could have chosen
+        # it. See docs/development/agent-tool-grants.md §1.
+        from .library import BASE_TOOLS
+
+        tools = tools if tools is not None else list(BASE_TOOLS)
         self._c.execute(
             "INSERT INTO custom_agents (id,name,role,system_prompt,tools,"
             "recall_sources,created_at) VALUES (?,?,?,?,?,?,?)",
@@ -81,6 +88,40 @@ class CustomAgentStore:
              datetime.now(UTC).isoformat()))
         self._c.commit()
         return self.get(aid)
+
+    def update(self, agent_id: str, **fields: Any) -> Agent | None:
+        """Change a custom agent in place. None if there is no such agent.
+
+        A real update, not delete-and-recreate: the chat history in
+        `agent_messages` and the model binding in `agent_model_configs` are both
+        keyed by `agent_id`, so recreating would silently throw away a
+        conversation and a model the user chose. **The id never moves**, whatever
+        happens to `name`.
+
+        Only the fields passed are touched — absent means "leave it alone", so a
+        caller changing one thing cannot blank another by omission.
+        """
+        if self.get(agent_id) is None:
+            return None
+
+        columns: builtins.list[str] = []
+        values: builtins.list[Any] = []
+        for column in ("name", "role", "system_prompt"):
+            if column in fields and fields[column] is not None:
+                columns.append(f"{column}=?")
+                values.append(str(fields[column]))
+        for column in ("tools", "recall_sources"):
+            if column in fields and fields[column] is not None:
+                columns.append(f"{column}=?")
+                values.append(json.dumps(list(fields[column])))
+
+        if columns:
+            values.append(agent_id)
+            self._c.execute(
+                f"UPDATE custom_agents SET {', '.join(columns)} WHERE id=?",
+                values)
+            self._c.commit()
+        return self.get(agent_id)
 
     def delete(self, agent_id: str) -> bool:
         with suppressed("from .agent_models import clear_agent_model …"):

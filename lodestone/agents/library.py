@@ -48,9 +48,12 @@ CATEGORIES = (
 )
 
 #: What every agent gets: the brain, the web, each other, and a plan.
+#: **Public, and shared with `custom.py`** — a custom agent is an agent, and two
+#: different defaults for the same capability is exactly the accident that let a
+#: user's own agent sit next to a connected Notion it could not read.
 #: `forget_fact` and `run_python` are absent on purpose — see `presets`-era
 #: notes in `brain_tools.py` and `code_tools.py`. Both are opt-in per agent.
-_CORE = [
+BASE_TOOLS = [
     "search_brain", "who_is", "whats_true_about_me", "timeline",
     "why_do_you_think_that", "correct_fact", "remember", "list_entities",
     "web_search", "ask_agent", "ask_agents", "update_plan",
@@ -116,7 +119,7 @@ TEMPLATES: tuple[Template, ...] = (
             "in prose. You are the one agent with the whole picture — when a "
             "question belongs to a specialist, ask them rather than guessing."
         ),
-        tools=[*_CORE, *_FILES, *_TASKS, *_LOOPS, *_MAIL, *_DIARY],
+        tools=[*BASE_TOOLS, *_FILES, *_TASKS, *_LOOPS, *_MAIL, *_DIARY],
         actions=_ALL_ACTIONS,
         recall_sources=["gmail", "gcal"],
         works_with=["gmail", "gcal"],
@@ -136,7 +139,7 @@ TEMPLATES: tuple[Template, ...] = (
             "person. Surface what needs a response and what can wait. Draft; "
             "never claim to have sent."
         ),
-        tools=[*_CORE, *_FILES, *_MAIL, *_DIARY, *_TASKS],
+        tools=[*BASE_TOOLS, *_FILES, *_MAIL, *_DIARY, *_TASKS],
         actions=_ALL_ACTIONS,
         recall_sources=["gmail", "gcal"],
         works_with=["gmail", "gcal"],
@@ -159,7 +162,7 @@ TEMPLATES: tuple[Template, ...] = (
         ),
         # No actions, deliberately: a researcher with no way to send should not
         # be taught how, and then cannot claim it did.
-        tools=[*_CORE, *_FILES],
+        tools=[*BASE_TOOLS, *_FILES],
         works_with=[],
         starter=True,
     ),
@@ -178,7 +181,7 @@ TEMPLATES: tuple[Template, ...] = (
             "script over reasoning about what a program would print. When you "
             "are not sure a change is right, say which part you are unsure of."
         ),
-        tools=[*_CORE, *_FILES, "run_python", *_TASKS, *_LOOPS],
+        tools=[*BASE_TOOLS, *_FILES, "run_python", *_TASKS, *_LOOPS],
         recall_sources=["github", "linear"],
         works_with=["github", "linear", "files"],
     ),
@@ -196,7 +199,7 @@ TEMPLATES: tuple[Template, ...] = (
             "Ground claims in their real projects. Offer one strong draft, not "
             "three weak options, and say what you would cut."
         ),
-        tools=[*_CORE, *_FILES, *_TASKS],
+        tools=[*BASE_TOOLS, *_FILES, *_TASKS],
         actions=["set_reminder", "create_routine"],
         recall_sources=["notes", "gdrive", "notion"],
         works_with=["notes", "gdrive", "notion", "files"],
@@ -216,7 +219,7 @@ TEMPLATES: tuple[Template, ...] = (
             "the figures you used. Flag a subscription that renewed and was not "
             "used. Never guess an amount — say you could not find it."
         ),
-        tools=[*_CORE, *_FILES, "run_python", *_MAIL, *_TASKS, *_LOOPS],
+        tools=[*BASE_TOOLS, *_FILES, "run_python", *_MAIL, *_TASKS, *_LOOPS],
         actions=["set_reminder", "create_routine"],
         recall_sources=["gmail", "files"],
         works_with=["gmail", "files"],
@@ -238,7 +241,7 @@ TEMPLATES: tuple[Template, ...] = (
             "plan when it is not being followed instead of repeating it. You "
             "are not a clinician; say so when a question needs one."
         ),
-        tools=[*_CORE, *_DIARY, *_TASKS, *_LOOPS],
+        tools=[*BASE_TOOLS, *_DIARY, *_TASKS, *_LOOPS],
         actions=["set_reminder", "create_event", "create_routine"],
         recall_sources=["gcal", "notes"],
         works_with=["gcal", "notes"],
@@ -257,7 +260,7 @@ TEMPLATES: tuple[Template, ...] = (
             "make a commitment to someone, record it as an open loop. Warm, "
             "discreet and brief — and proactive about what is coming up."
         ),
-        tools=[*_CORE, *_FILES, *_TASKS, *_LOOPS, *_DIARY],
+        tools=[*BASE_TOOLS, *_FILES, *_TASKS, *_LOOPS, *_DIARY],
         actions=_ALL_ACTIONS,
         recall_sources=["gcal", "imessage", "notes"],
         works_with=["gcal", "imessage", "notes"],
@@ -278,7 +281,7 @@ TEMPLATES: tuple[Template, ...] = (
             "so plainly when asked to. If no folder has been opened yet, say "
             "that is the first step rather than describing what you would find."
         ),
-        tools=[*_CORE, *_FILES, "run_python", *_TASKS],
+        tools=[*BASE_TOOLS, *_FILES, "run_python", *_TASKS],
         works_with=["files"],
         needs=["files"],
     ),

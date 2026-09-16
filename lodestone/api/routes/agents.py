@@ -12,7 +12,7 @@ from ...agents.agent import AgentMemory
 from ...brain import get_brain
 from ...config import get_settings
 from ...log import get_logger
-from ..concurrency import calls_a_model
+from ..concurrency import calls_a_model, probes_a_provider
 from ..schemas import ChatIn
 
 log = get_logger(__name__)
@@ -21,11 +21,16 @@ router = APIRouter()
 
 @router.get("/api/agents")
 def agents():
+    from ...agents.grants import reaches_connectors
     from ...agents.presets import PRESETS
     mem = AgentMemory()
     return {"agents": [
         {"id": a.id, "name": a.name, "role": a.role, "tools": a.tools,
          "custom": a.id not in PRESETS,
+         # Whether this agent can reach the user's connectors. Derived here so
+         # the rule — the sentinel, or a connector tool by name — exists once
+         # rather than being re-inferred by every caller from `tools`.
+         "reaches_connectors": reaches_connectors(a),
          "model_provider": a.model_provider,
          "model_name": a.model_name,
          "messages": len(mem.history(a.id, limit=1000))}
@@ -235,8 +240,14 @@ class NewAgent(BaseModel):
     name: str
     role: str = ""
     system_prompt: str = ""
-    tools: list[str] = []
-    recall_sources: list[str] = []
+    #: `None` means the caller expressed no opinion and wants the standard set;
+    #: `[]` means they deliberately want none. `CustomAgentStore.create` is
+    #: built on exactly that distinction, and declaring a `[]` default here
+    #: erased it — the API could never send `None`, so an agent built from the
+    #: builder without touching the tool list was created with no tools at all.
+    #: See docs/development/agent-tool-grants.md §1 (decision D).
+    tools: list[str] | None = None
+    recall_sources: list[str] | None = None
 
 
 @router.get("/api/agents/tools")
@@ -247,6 +258,78 @@ def available_tools():
     # group the user's own connectors instead of listing their tools as if they
     # shipped with the app.
     return {"tools": describe_tools()}
+
+
+@router.get("/api/agents/connector-gaps")
+@probes_a_provider
+def connector_gaps():
+    """Who cannot use the connectors the user has — the "I just connected
+    something, who can't see it?" question.
+
+    Reads. Never grants: connector access is a permission the user set, and an
+    agent that already exists was configured by somebody who did not tick this
+    box. See docs/development/agent-tool-grants.md §5.
+    """
+    from ...agents.grants import connector_gaps as gaps
+
+    return gaps()
+
+
+@router.get("/api/agents/{agent_id}/tools")
+@probes_a_provider
+def agent_tools(agent_id: str):
+    """What THIS agent has, what it could have, and for anything it cannot, why.
+
+    On the probing lane because a connector that is contributing nothing is
+    asked why — only the ones already failing cost that, which is exactly when
+    the answer is the thing the user needs.
+    """
+    from ...agents.grants import for_agent
+
+    try:
+        return for_agent(agent_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'") from None
+
+
+class AgentPatch(BaseModel):
+    """Changes to a custom agent. Absent means "leave it alone"."""
+
+    tools: list[str] | None = None
+    name: str | None = None
+    role: str | None = None
+    system_prompt: str | None = None
+    recall_sources: list[str] | None = None
+
+
+@router.patch("/api/agents/custom/{agent_id}")
+@probes_a_provider
+def update_agent(agent_id: str, body: AgentPatch):
+    """Change a custom agent's tools without losing anything it has.
+
+    A PATCH rather than delete-and-recreate on purpose: the chat history and the
+    model binding are keyed by `agent_id`, so recreating would throw away a
+    conversation and a model the user chose.
+    """
+    from ...agents.custom import get_custom_store
+    from ...agents.grants import for_agent, unknown_tools
+
+    if body.tools is not None:
+        # Named rather than dropped — a tool quietly vanishing from an agent the
+        # user just edited is the same silent failure this whole change ends.
+        unknown = unknown_tools(body.tools)
+        if unknown:
+            raise HTTPException(
+                400, "Not something an agent can be given: " + ", ".join(unknown))
+
+    updated = get_custom_store().update(
+        agent_id, tools=body.tools, name=body.name, role=body.role,
+        system_prompt=body.system_prompt, recall_sources=body.recall_sources)
+    if updated is None:
+        # Presets land here too, which is the point: the boundary is the
+        # server's to enforce rather than the UI's to remember.
+        raise HTTPException(404, "not a custom agent")
+    return for_agent(agent_id)
 
 
 @router.post("/api/agents/custom")
