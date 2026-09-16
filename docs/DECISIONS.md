@@ -232,14 +232,14 @@ Desktop client ships in-repo → a stranger who installs the `.dmg` presses *Sig
 Google* and it works, with no Cloud Console setup. That is the decision and it stands.
 
 **What it costs, which the original entry did not say.** The `client_id` is public, so
-anyone can stand up a consent screen branded "Lodestone" with it. Abuse attributed to the
+anyone can stand up a consent screen branded "Chitragupta" with it. Abuse attributed to the
 project lands on our quota: a rate-limit or suspension takes Gmail, Calendar **and** Drive
 down for *every* user at once, and nothing shippable from our side fixes it except a new
 client. A secret scanner revoking it has the same effect, unilaterally, on a day we did
 not choose.
 
 **Why that is survivable.** `config.py::google_client_secrets` resolves in precedence
-order — `$GOOGLE_CLIENT_SECRETS`, then `~/Library/Lodestone/google_client_secret.json`,
+order — `$GOOGLE_CLIENT_SECRETS`, then `~/Library/Chitragupta/google_client_secret.json`,
 then the bundled file. So a replacement is verified against a real account *before* it is
 committed, and one affected user is unblocked by dropping a file rather than by a release.
 That order is pinned by `tests/test_google_client_rotation.py`; if it breaks, the rotation
