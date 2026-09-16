@@ -132,6 +132,75 @@ function parseActions(text) {
   return { clean: clean.trim(), actions };
 }
 
+// ── a connector action, in words ─────────────────────────────────────────
+// The card used to print the tool's id and every argument raw:
+//
+//     Action  notion-update-page
+//     page_id 3bddf1be-bce9-80d7-a826-c2042f47f837
+//     properties {}
+//     content_updates []
+//
+// None of which tells a person what they are about to approve. These turn it
+// into a sentence, and drop the arguments that carry no information — while
+// keeping every argument that does, because a confirmation the user cannot
+// actually read is not a confirmation.
+
+/** "notion-update-page" + "Notion" → "Update page in Notion". */
+function humanAction(tool, connector) {
+  // The tag may carry the connector's id rather than its label ("notion"), and
+  // "Update page in notion" reads as a typo. Title-case a bare slug; leave a
+  // real label ("Google Drive") exactly as its owner spelled it.
+  const named = String(connector || "").trim();
+  const where = /^[a-z0-9_-]+$/.test(named)
+    ? named.replace(/[-_]+/g, " ").replace(/\b./g, (c) => c.toUpperCase())
+    : named;
+  let raw = String(tool || "").trim();
+  if (!raw) return where ? `Run an action in ${where}` : "Run an action";
+  // Strip a leading connector slug ("notion-", "linear_") only when it really
+  // is the connector's name — a tool genuinely called "search" must not lose it.
+  const head = raw.split(/[-_:.]/)[0].toLowerCase();
+  if (where && head === where.toLowerCase().replace(/\s+/g, "")) {
+    raw = raw.slice(head.length + 1);
+  }
+  const words = raw.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+                   .replace(/[-_:.]+/g, " ").trim();
+  if (!words) return where ? `Run an action in ${where}` : "Run an action";
+  const sentence = words.charAt(0).toUpperCase() + words.slice(1);
+  return where ? `${sentence} in ${where}` : sentence;
+}
+
+/** An argument name as a person would say it. */
+function humanKey(k) {
+  return String(k || "").replace(/[-_]+/g, " ")
+    .replace(/\bids?\b/gi, (m) => (m.toLowerCase() === "id" ? "ID" : "IDs"))
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+/** An argument value, or "" when it carries nothing worth showing. */
+function humanValue(v) {
+  if (v === true) return "yes";
+  if (v === false) return "no";
+  if (v === null || v === undefined || v === "") return "";
+  if (Array.isArray(v)) return v.length ? `${v.length} item${v.length === 1 ? "" : "s"}` : "";
+  if (typeof v === "object") {
+    const keys = Object.keys(v);
+    return keys.length ? keys.map(humanKey).join(", ") : "";
+  }
+  return String(v);
+}
+
+/** Whatever a connector answered with, as one readable line. */
+function resultLine(detail) {
+  if (detail === null || detail === undefined || detail === "") return "Done";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) return `Done — ${detail.length} item${detail.length === 1 ? "" : "s"}`;
+  if (typeof detail === "object") {
+    const named = detail.title || detail.name || detail.url || detail.id;
+    return named ? `Done — ${named}` : "Done";
+  }
+  return String(detail);
+}
+
 function actionCard(a) {
   const p = a.params;
   let title, rows, verb = "send";
@@ -159,15 +228,19 @@ function actionCard(a) {
     // Previously this fell through to the calendar branch, so a connector
     // action would have been presented as "Create calendar event" — a card
     // describing something other than what the button runs.
-    title = `Run this in ${esc(p.connector || p.server_id || "a connector")}`;
+    const where = p.connector || p.server_id || "a connector";
+    title = humanAction(p.tool, where);
     verb = "run";
     const args = p.arguments && typeof p.arguments === "object" ? p.arguments : {};
+    // Only the arguments that say something. `properties {}` and
+    // `content_updates []` are the tool's own empty defaults, and printing them
+    // asks the user to read noise before approving.
     const shown = Object.keys(args).map((k) => {
-      const v = typeof args[k] === "string" ? args[k] : JSON.stringify(args[k]);
-      return `<div class="ac-row"><b>${esc(k)}</b> ${esc(String(v).slice(0, 400))}</div>`;
-    }).join("");
-    rows = `<div class="ac-row"><b>Action</b> <code>${esc(p.tool || "")}</code></div>`
-      + (shown || `<div class="ac-row"><b>Arguments</b> none</div>`);
+      const v = humanValue(args[k]);
+      if (!v) return "";
+      return `<div class="ac-row"><b>${esc(humanKey(k))}</b> ${esc(v.slice(0, 300))}</div>`;
+    }).filter(Boolean).join("");
+    rows = shown || `<div class="ac-row muted">No details to fill in.</div>`;
   } else {
     title = "Create calendar event"; verb = "create";
     rows = `<div class="ac-row"><b>Title</b> ${esc(p.title || "")}</div>
@@ -190,7 +263,7 @@ function actionCard(a) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: a.type, params: { ...p, agent_id: current } }) });
       const rr = el.querySelector(".ac-result");
-      if (r.ok) { rr.innerHTML = `<span class="ac-ok">✓ ${esc(r.detail || "Done")}</span>`; loadReminders(); loadRoutines(); return; }
+      if (r.ok) { rr.innerHTML = `<span class="ac-ok">✓ ${esc(resultLine(r.detail))}</span>`; loadReminders(); loadRoutines(); return; }
       rr.innerHTML = `<span class="ac-err">${esc(r.error || "Failed")}</span>`;
       if (r.reauth) {
         const b = document.createElement("button");
@@ -198,7 +271,12 @@ function actionCard(a) {
         b.onclick = async () => { const x = await api("/api/google/reconnect", { method: "POST" }); toast(x.detail || "Opening browser…"); };
         rr.appendChild(document.createElement("br")); rr.appendChild(b);
       }
-    } catch (e) { el.querySelector(".ac-result").innerHTML = `<span class="ac-err">${esc(String(e))}</span>`; }
+    } catch (e) {
+      // A rejected request carries FastAPI's `detail`, which for a validation
+      // error is a LIST of objects — so this must not assume a string either.
+      el.querySelector(".ac-result").innerHTML =
+        `<span class="ac-err">${esc(resultLine(e) || "That did not go through.")}</span>`;
+    }
   };
   return el;
 }

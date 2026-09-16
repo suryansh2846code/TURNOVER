@@ -28,7 +28,15 @@ function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("s
 function _lessMotion() {
   return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 }
-function esc(s) { return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+// Coerces first, deliberately. A connector tool answers with whatever shape it
+// likes, so `esc()` gets handed objects and arrays — and `({}).replace` is not
+// a function, so the escaper threw and the catch above it rendered the
+// TypeError where the real message should have been. An escaper that can crash
+// destroys the very thing it was asked to display.
+function esc(s) {
+  const t = s == null ? "" : (typeof s === "string" ? s : String(s));
+  return t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 
 // gradient orb avatar per agent (stable colour from the id; the lead is always blue)
 const ORB_COLORS = [["#8fb0ff", "#2f3a5e"], ["#7fd8b0", "#1f4636"], ["#c3a0f5", "#382a54"],

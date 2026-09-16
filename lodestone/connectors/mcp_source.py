@@ -781,6 +781,30 @@ def _remote_reason(spec: MCPServerSpec) -> str:
             f"choose Connect — the sign-in happens on {spec.name}'s own site.")
 
 
+#: Keeps a server's complaint to something a person will read. Long enough for
+#: a real sentence, short enough that a wall of JSON does not become the card.
+MAX_REFUSAL_CHARS = 300
+
+
+def _refusal(answer: Any, label: str) -> str:
+    """Why the connector said no, in its own words where it gave any.
+
+    Falls back to the flat sentence when the server returned nothing readable —
+    an empty quotation is worse than a plain statement.
+    """
+    parts: list[str] = []
+    for block in getattr(answer, "content", None) or []:
+        text = str(getattr(block, "text", "") or "").strip()
+        if text:
+            parts.append(text)
+    said = " ".join(parts).strip()
+    if not said:
+        return f"{label} could not complete that action."
+    if len(said) > MAX_REFUSAL_CHARS:
+        said = said[:MAX_REFUSAL_CHARS].rstrip() + "…"
+    return f"{label} refused that: {said}"
+
+
 def _records(result: Any) -> list[Any]:
     """Pull records out of whatever shape the tool answered with.
 
@@ -1020,8 +1044,12 @@ class MCPConnector(Connector):
             return {"ok": False,
                     "error": f"{self.label} has no `{tool}` to run."}
         if getattr(answer, "is_error", False):
-            return {"ok": False,
-                    "error": f"{self.label} could not complete that action."}
+            # The server said WHY, and this used to throw it away. So the user
+            # was told only that it had not worked, the agent could not see the
+            # reason either, and the best it could do was guess at the shape and
+            # ask them to paste the error back in. A vendor's own sentence about
+            # the user's own request is the actionable part, not an internal.
+            return {"ok": False, "error": _refusal(answer, self.label)}
         records = _records(answer)
         detail = records[0] if len(records) == 1 else records
         return {"ok": True, "detail": detail}
