@@ -15,6 +15,7 @@ from . import (
     brain_tools,
     code_tools,
     file_tools,
+    health_tools,
     mail_tools,
     mcp_tools,
     message_tools,
@@ -260,6 +261,10 @@ TOOL_IMPLS = {
     "sync_source": source_tools.sync_source,
     "list_mail": mail_tools.list_mail,
     "read_thread": mail_tools.read_thread,
+    "whats_tracked": health_tools.whats_tracked,
+    "measurement_history": health_tools.measurement_history,
+    "log_measurement": health_tools.log_measurement,
+    "forget_measurement": health_tools.forget_measurement,
     "list_chats": message_tools.list_chats,
     "read_chat": message_tools.read_chat,
     "search_source": source_tools.search_source,
@@ -494,6 +499,56 @@ TOOL_DEFS: dict[str, Tool] = {
                        "description": "A thread id from list_mail"},
             "max_messages": {"type": "integer", "default": 20}},
             "required": ["thread"]},
+    ),
+    "whats_tracked": Tool(
+        name="whats_tracked",
+        description=(
+            "What measurements the user actually has data for, and how many. "
+            "Call this BEFORE saying anything about weight, sleep, training or "
+            "a trend — it is the difference between a fact and a guess."
+        ),
+        parameters={"type": "object", "properties": {}},
+    ),
+    "measurement_history": Tool(
+        name="measurement_history",
+        description=(
+            "One measurement over time, with the arithmetic already done: "
+            "range, mean, and a SMOOTHED trend per week. Use the smoothed "
+            "trend, never first-minus-last — body weight swings a kilo a day "
+            "on water alone."
+        ),
+        parameters={"type": "object", "properties": {
+            "metric": {"type": "string",
+                       "description": "weight, sleep, steps, energy_in, "
+                                      "protein, resting_heart_rate, …"},
+            "days": {"type": "integer", "default": 90}},
+            "required": ["metric"]},
+    ),
+    "log_measurement": Tool(
+        name="log_measurement",
+        description=(
+            "Record one measurement the user tells you. Give the unit they "
+            "used — kg or lb, hours or minutes — it is converted, never "
+            "assumed. `when` accepts \"yesterday\" or a date; it defaults to now."
+        ),
+        parameters={"type": "object", "properties": {
+            "metric": {"type": "string"},
+            "value": {"type": "number"},
+            "unit": {"type": "string"},
+            "when": {"type": "string"},
+            "note": {"type": "string"}},
+            "required": ["metric", "value"]},
+    ),
+    "forget_measurement": Tool(
+        name="forget_measurement",
+        description=(
+            "Remove a measurement that was recorded wrong. Only ever removes "
+            "readings that were typed in, never ones imported from a device."
+        ),
+        parameters={"type": "object", "properties": {
+            "metric": {"type": "string"},
+            "when": {"type": "string", "description": "a date; omit for all"}},
+            "required": ["metric"]},
     ),
     "list_chats": Tool(
         name="list_chats",
@@ -787,6 +842,10 @@ _LABELS: dict[str, tuple[str, str]] = {
     "gmail_search":             ("Search",    "Email"),
     "list_mail":                ("List",      "Email"),
     "read_thread":              ("Read",      "Email"),
+    "whats_tracked":            ("Check",     "Measurements"),
+    "measurement_history":      ("Trend",     "Measurements"),
+    "log_measurement":          ("Record",    "Measurements"),
+    "forget_measurement":       ("Correct",   "Measurements"),
     "list_chats":               ("List",      "Messages"),
     "read_chat":                ("Read",      "Messages"),
     "calendar_lookup":          ("Schedule",  "Calendar"),

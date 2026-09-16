@@ -16,6 +16,11 @@ One class per source, registered in `__init__.py::REGISTRY`.
   returns **oldest first**; every chat API returns the opposite, and a
   conversation read backwards is answered backwards. Which apps are reachable at
   all: [`docs/MESSAGING.md`](../../docs/MESSAGING.md).
+- **A connector that measures writes to `../metrics.py`, never to the brain.**
+  Apple Health is tens of thousands of readings; as memories they would cost
+  every agent a second of recall per turn, forever. Dedup is the unique index on
+  (metric, at, source), so pointing at a fresh export upserts rather than
+  doubling a year of data.
 - **A tool is a write unless it proves otherwise.** `_is_write()` needs evidence
   to call something a read — the server's own `readOnlyHint`, or a recognised
   read verb. It ran the other way once, and handed `merge_pull_request` to a

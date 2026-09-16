@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .apple_calendar import AppleCalendarConnector
+from .apple_health import AppleHealthConnector
 from .apple_mail import AppleMailConnector
 from .base import Connector, SyncResult
 from .files import FilesConnector
@@ -30,6 +31,7 @@ REGISTRY: dict[str, type[Connector]] = {
     GitHubConnector.name: GitHubConnector,
     SlackConnector.name: SlackConnector,
     TelegramConnector.name: TelegramConnector,
+    AppleHealthConnector.name: AppleHealthConnector,
 }
 
 

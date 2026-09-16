@@ -436,6 +436,45 @@ def run(*, include_slow: bool = True) -> Scorecard:
         finally:
             _swap(messaging_mod, "apps", saved_apps)
 
+        # ── measuring, rather than remembering a number ──────────────────
+        #
+        # The Health agent was told to "review honestly" with nothing to review:
+        # every weight went into the brain as prose, so progress was answered by
+        # estimating from recall. The capability is that a trend now comes back
+        # as arithmetic the agent did not have to do.
+        from datetime import UTC, datetime, timedelta
+
+        from .. import metrics as metrics_mod
+
+        base = (datetime.now(UTC) - timedelta(days=60)).replace(
+            hour=0, minute=0, second=0, microsecond=0)
+        metrics_mod.log_many(
+            [{"metric": "weight", "unit": "kg",
+              "value": 70 + i * 0.05 + (1.2 if i % 2 else -1.1),
+              "at": (base + timedelta(days=i)).isoformat()}
+             for i in range(60)], source="evaluation")
+        try:
+            summary = metrics_mod.summarise("weight", days=90)
+            trend = summary.get("trend") or {}
+            check("measurements",
+                  "A trend is measured and smoothed, not estimated from recall")(
+                summary.get("n") == 60 and 2.0 < trend.get("change", 0) < 4.0,
+                f"{summary.get('n')} readings, trend {trend.get('change')}")
+
+            provider = _scripted([[("whats_tracked", {})],
+                                  [("measurement_history", {"metric": "weight"})],
+                                  "you are up about 3 kg over the two months"])
+            use(provider)
+            reviewed = runtime.run_turn("health", "am I actually gaining?",
+                                        effort="medium")
+            looked = [s.name for s in reviewed.trace if s.kind == "tool_result"]
+            check("health_checks_before_judging",
+                  "The health agent looks at the data before saying anything")(
+                "whats_tracked" in looked or "measurement_history" in looked,
+                f"tools used: {looked}")
+        finally:
+            metrics_mod.forget("weight", source="evaluation")
+
     finally:
         _swap(mcp, "_supplier", saved_supplier)
         mcp.clear_cache()

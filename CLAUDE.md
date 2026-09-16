@@ -48,6 +48,7 @@ and that document is the one to update when the rule changes.
 | `core/` | SQLite store, schema, embeddings, chunking, dates |
 | `web/` | the whole frontend. Vanilla JS, **no build step** |
 | `desktop.py` · `hud.py` | the native window and the floating sign-in card |
+| `metrics.py` | numbers over time — measurements, kept as numbers not prose |
 | `config.py` · `log.py` | settings and logging. Leaf utilities — keep them that way |
 
 Full ownership table and the allowed dependency direction:
@@ -131,6 +132,16 @@ even when every test is green. Reasoning and measurements:
 - A `chat()` returns a `ChatResult`, never raises. Errors are classified and
   translated, never dumped.
 - Credentials are independent: removing a key must not sign the user out.
+
+**Measurements — `metrics.py`**
+- **A number over time is not a memory.** Recall is linear in memory count, so
+  an Apple Health export filed as memories costs every agent a second per turn,
+  forever. Claims supersede; readings accumulate.
+- **One unit per metric, converted on the way in, unknown units refused.** A
+  silent assumption turns 170 lb into 170 kg — a different person, not a
+  rounding error.
+- **A trend is smoothed and says what it is based on.** Body weight moves a kilo
+  a day on water; under ~10 days no trend is reported at all.
 
 **Brain and storage — `brain/`, `core/`**
 - **`"key" in row` on a `sqlite3.Row` tests the VALUES, not the keys.** Use
@@ -297,6 +308,7 @@ The boundaries and what each must name:
 | the brain's data model | [`docs/BRAIN-V1.5.md`](docs/BRAIN-V1.5.md) |
 | connectors | [`docs/CONNECTORS.md`](docs/CONNECTORS.md) |
 | connecting Telegram | [`docs/development/telegram.md`](docs/development/telegram.md) |
+| measurements, and the health boundary | [`docs/development/health.md`](docs/development/health.md) |
 | changing the user's inbox, and why it could not | [`docs/development/mail-triage.md`](docs/development/mail-triage.md) |
 | which messaging apps are actually reachable | [`docs/MESSAGING.md`](docs/MESSAGING.md) |
 | driving a real browser (planned) | [`docs/BROWSER.md`](docs/BROWSER.md) |

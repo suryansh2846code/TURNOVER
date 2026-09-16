@@ -206,6 +206,55 @@ _SCHEDULING = (
     "need a reminder. Use set_reminder only for a plain notification."
 )
 
+#: Tools that make an agent a health agent, whoever assembled it.
+_HEALTH_TOOLS = {"log_measurement", "measurement_history", "whats_tracked",
+                 "forget_measurement"}
+
+#: The boundary, attached to the capability rather than to one template.
+#:
+#: Writing it into the shipped Health agent's prose would mean a user who builds
+#: their own "Nutrition coach" out of the same tools gets none of it — and that
+#: agent is the one most likely to be asked something it should not answer. So
+#: it is derived, the way every other block here is: an agent that can record
+#: your weight and read your Apple Health data is a health agent, and is told
+#: where the line is.
+#:
+#: Phrased to be used ONCE and then get out of the way. An assistant that
+#: repeats a disclaimer every turn is one the user learns to skip, which is the
+#: same as not having said it.
+_HEALTH_SAFETY = (
+    "HEALTH — where your competence ends:\n"
+    "You are not a clinician and you do not pretend to be one. Never diagnose, "
+    "never name a dose, and never tell the user to start, stop or change a "
+    "medication — including supplements taken alongside one. If a question "
+    "turns on a condition, a pregnancy, a medication or a recent injury, say "
+    "plainly that it needs their doctor or physio, say what you CAN still help "
+    "with, and move on.\n"
+    "Stop and say see someone today for: chest pain, fainting or near-fainting, "
+    "blood where there should be none, sudden or unexplained weight change, "
+    "numbness, or an injury that is not improving. Do not soften these and do "
+    "not work around them.\n"
+    "On restriction: if a goal, a target or the way they talk about food would "
+    "mean severe undereating, losing weight very fast, or training through real "
+    "pain — say so ONCE, plainly, without lecturing, and offer the version that "
+    "is sustainable. Then help with that. Do not repeat it every turn, and do "
+    "not refuse ordinary training and nutrition work because the topic is "
+    "food.\n"
+    "Say what is genuinely unsettled. Nutrition and training science disagrees "
+    "with itself constantly; presenting one protocol as fact is how people end "
+    "up certain about something wrong. Give your best answer and name the parts "
+    "that are contested.\n"
+    "NEVER present a number you remembered as a measurement. A weight, a "
+    "calorie total or an hours-slept figure is a fact only if it came back from "
+    "`measurement_history` or `whats_tracked`. If it did not, say you do not "
+    "have it."
+)
+
+
+def _health_safety(tools: list[str] | None) -> str:
+    return _HEALTH_SAFETY if _HEALTH_TOOLS & set(tools or []) else ""
+
+
 def _connector_reads(tools: list[str] | None) -> str:
     """The connectors this agent can question live, right now.
 
@@ -362,6 +411,10 @@ def build(*, name: str, role: str, system_prompt: str,
         if "send_email" in allowed or "create_event" in allowed:
             lines.append(_SCHEDULING)
         parts.append("\n".join(lines))
+
+    safety = _health_safety(tools)
+    if safety:
+        parts.append(safety)
 
     team = _teammates(agent_id, tools)
     if team:

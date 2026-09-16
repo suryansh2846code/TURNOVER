@@ -73,6 +73,11 @@ _MAIL = ["search_source", "sync_source", "gmail_search",
 #: Which apps are reachable at all: docs/MESSAGING.md.
 _MESSAGES = ["list_chats", "read_chat"]
 _DIARY = ["calendar_lookup", "sync_source"]
+#: Numbers over time. The agent that plans training and food had none of these
+#: and was still asked to "review honestly" — so every answer about progress was
+#: a model estimating from recalled prose. See `lodestone/metrics.py`.
+_MEASURE = ["whats_tracked", "measurement_history", "log_measurement",
+            "forget_measurement"]
 
 _ALL_ACTIONS = ["send_email", "create_event", "set_reminder", "create_routine"]
 #: Only for agents that can actually reach an inbox or a chat. An agent taught
@@ -310,21 +315,55 @@ TEMPLATES: tuple[Template, ...] = (
         name="Health & Fitness",
         role="training, food & recovery",
         category="Health & everyday life",
-        description="Plans training, meals and recovery around your actual "
-                    "week, and checks in on how it went.",
+        description="Tracks what your body is actually doing, plans training "
+                    "and meals around your real week, and reviews it honestly.",
         system_prompt=(
-            "You help the user train, eat and recover sustainably. Plan around "
-            "the week they actually have — check the calendar before proposing "
-            "a schedule. Use what the brain knows about their goals, their "
-            "constraints and what they have tried. Be concrete: sets, portions, "
-            "times. Review honestly rather than encouragingly, and adjust the "
-            "plan when it is not being followed instead of repeating it. You "
-            "are not a clinician; say so when a question needs one."
+            "You help the user train, eat and recover sustainably.\n"
+            "MEASURE BEFORE YOU JUDGE. `whats_tracked` first, every time you "
+            "are about to say anything about progress \u2014 it tells you what "
+            "data exists. Then `measurement_history` for the metric in "
+            "question. If there is no data, say there is no data; do not reach "
+            "for a number you remember them mentioning, and do not soften it "
+            "into a guess that sounds like a fact.\n"
+            "Use the SMOOTHED trend, never first-minus-last. Body weight moves "
+            "a kilo or two a day on water alone, so two raw readings a week "
+            "apart say almost nothing \u2014 telling someone they gained a "
+            "kilo overnight is the most common wrong thing said in this whole "
+            "subject.\n"
+            "Count with `run_python`, never in your head: weekly training "
+            "volume, calories, protein totals, rate of change, how many "
+            "sessions they actually did. A number you estimated is a number "
+            "you made up.\n"
+            "Log what they tell you, in the unit they said it in \u2014 "
+            "`log_measurement` converts, it does not assume. If they correct a "
+            "number, `forget_measurement` the wrong one rather than logging a "
+            "second one on top.\n"
+            "Plan around the week they actually have: check the calendar "
+            "before proposing a schedule, and put sessions where there is "
+            "room. Be concrete \u2014 sets, reps, portions, times. A plan that "
+            "does not say what to do on Tuesday is not a plan.\n"
+            "Learn the person from the brain: their goals, their constraints, "
+            "what they have already tried and abandoned. Ask before assuming, "
+            "and `remember` what you learn so the next conversation starts "
+            "further along.\n"
+            "Review honestly rather than encouragingly. When the plan is not "
+            "being followed, change the plan \u2014 say what the data shows, "
+            "ask what got in the way, and make the next version smaller. "
+            "Repeating a plan nobody is doing is the one thing guaranteed not "
+            "to work."
         ),
-        tools=[*BASE_TOOLS, *_DIARY, *_TASKS, *_LOOPS],
+        # run_python because this agent lives on arithmetic; files because a
+        # gym app or a food tracker exports CSV and that is where the rest of
+        # the numbers are.
+        tools=[*BASE_TOOLS, *_MEASURE, *_FILES, *_DIARY, *_TASKS, *_LOOPS,
+               "run_python"],
         actions=["set_reminder", "create_event", "create_routine"],
-        recall_sources=["gcal", "notes"],
-        works_with=["gcal", "notes"],
+        recall_sources=["gcal", "notes", "apple_health"],
+        works_with=["gcal", "notes", "apple_health"],
+        # Nothing. It works on the first day with no connectors at all: the
+        # user says a number, it records it. Apple Health makes it better, not
+        # possible.
+        needs=[],
     ),
     Template(
         id="personal",
