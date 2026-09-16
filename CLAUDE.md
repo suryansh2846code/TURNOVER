@@ -290,6 +290,7 @@ The boundaries and what each must name:
 | the first-run flow | [`docs/development/onboarding-flow.md`](docs/development/onboarding-flow.md) |
 | the brain's data model | [`docs/BRAIN-V1.5.md`](docs/BRAIN-V1.5.md) |
 | connectors | [`docs/CONNECTORS.md`](docs/CONNECTORS.md) |
+| replacing the bundled Google OAuth client | [`docs/development/google-client-rotation.md`](docs/development/google-client-rotation.md) |
 | driving a real browser (planned) | [`docs/BROWSER.md`](docs/BROWSER.md) |
 | building and shipping | [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) |
 | known gaps | [`docs/AUDIT.md`](docs/AUDIT.md) |

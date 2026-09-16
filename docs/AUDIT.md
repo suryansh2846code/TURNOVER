@@ -26,13 +26,48 @@ brain-search delete button had never worked. **A12 is new**, and is the most
 serious item in this file: the background sync loop runs unattended on every
 machine at 30% coverage, where a failure is silent by construction.
 
-Still open and unchanged: A1 (the committed Google client), A6 (recall
-throughput), A7 (`suppressed()` call sites), A9 (the review queue has no
-consumer), A10 (the extractors disagree).
+Still open and unchanged: A6 (recall throughput), A7 (`suppressed()` call
+sites), A9 (the review queue has no consumer), A10 (the extractors disagree).
+
+**Re-reviewed 2026-09-16.** **A1 and A12 are closed** — the two items named above
+as most serious. A1 closed as prescribed (a rehearsed rotation procedure plus a
+test pinning the precedence chain it depends on), not by deleting the client.
+A12 closed with a driven-clock test suite that took `scheduler.py` from 30%, and
+which caught three real defects in the process; each is recorded in its entry.
 
 ---
 
-## A1 — A live Google OAuth client secret is committed
+## A1 — ~~A live Google OAuth client secret is committed~~ · **CLOSED**
+
+> **Closed 2026-09-16.** Not by removing the file — that breaks first launch and
+> was never the fix. The gap was that the *recovery* was undocumented and had
+> never been rehearsed, so the day the client is revoked would have been spent
+> discovering the procedure rather than running it.
+>
+> What closed it:
+>
+> * **H12 now states the abuse path and the blast radius** — one revocation takes
+>   Gmail, Calendar and Drive down for every user simultaneously.
+> * **[`development/google-client-rotation.md`](development/google-client-rotation.md)**
+>   is the rehearsed procedure, including the step that matters most: the
+>   replacement client is verified against a real Google account *before* it is
+>   committed, via `$GOOGLE_CLIENT_SECRETS`. It also records what an existing
+>   user experiences — the ~1 hour where a live access token 401s instead of
+>   self-healing, and the fact that the background scheduler surfaces a
+>   reconnect message rather than opening a browser.
+> * **`tests/test_google_client_rotation.py`** pins the precedence chain the
+>   whole procedure depends on. Without that order the procedure is fiction, and
+>   nothing previously stopped a refactor from removing it.
+>
+> ```bash
+> pytest tests/test_google_client_rotation.py -q
+> ```
+>
+> **Still true, and deliberately not addressed:** per-user Cloud clients. That is
+> the "if the repo goes public" escape hatch and a product decision, not a defect
+> fix. Reopen this as a new finding if the repo is published.
+
+### Original finding
 
 `lodestone/data/google_client.json` holds a real `client_id`, `project_id` and
 `client_secret` for the Lodestone Google Cloud project.
@@ -58,6 +93,8 @@ verification screen check. If the repo goes public, treat the id as burned and
 plan for per-user clients as the escape hatch.
 
 **Severity:** medium · **Cost:** low (documentation + a rehearsed procedure)
+
+*Done as prescribed — see the closing note above.*
 
 ---
 
