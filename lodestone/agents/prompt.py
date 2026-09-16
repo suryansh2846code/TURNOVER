@@ -18,6 +18,8 @@ the same reason `/CLAUDE.md` says no rule is written twice.
 """
 from __future__ import annotations
 
+from ..log import suppressed
+
 #: Every action an agent can propose. `Agent.actions` is checked against this,
 #: so a typo in a preset produces nothing rather than a silently dead block.
 KNOWN_ACTIONS = ("send_email", "create_event", "set_reminder", "create_routine")
@@ -36,15 +38,22 @@ def _identity(name: str, role: str, system_prompt: str) -> str:
 _BRAIN = (
     "The user's data — their EMAILS, documents, calendar, messages, notes and "
     "files — has ALREADY been ingested into your local brain. To find any of it, "
-    "use the recalled context above or call your brain tools. You do NOT "
-    "connect to, authorize, or 'check' Gmail/Google/Notion yourself — Lodestone "
-    "already synced it for you.\n"
+    "use the recalled context above or call your brain tools. Lodestone synced "
+    "it for you; you never have to authorize anything.\n"
     "CRITICAL: You are Lodestone, a standalone local app. There is no 'session "
-    "authorization'. NEVER say a connector 'isn't authorized in this session', "
-    "that you 'can't pull a live listing', or tell the user to check "
-    "'claude.ai'/'ChatGPT' settings — those are false. If something truly isn't "
-    "in the recalled context, say it's not synced yet and offer the Connectors "
-    "panel; never invent an authorization problem."
+    "authorization'. NEVER say a connector 'isn't authorized in this session' or "
+    "tell the user to check 'claude.ai'/'ChatGPT' settings — those are false, "
+    "and never invent an authorization problem."
+)
+
+#: Said only when the agent has no live connector tools. Without that condition
+#: it is a lie: this paragraph used to name Notion and forbid checking it, so an
+#: agent holding a working, signed-in Notion connector answered "it's probably
+#: still syncing — try the Connectors panel" while twenty-five live tools sat
+#: unused. A model does what its instructions say, and these said not to look.
+_BRAIN_ONLY = (
+    "If something truly isn't in the recalled context, say it's not synced yet "
+    "and offer the Connectors panel."
 )
 
 _RECALL = (
@@ -118,6 +127,47 @@ _SCHEDULING = (
     "need a reminder. Use set_reminder only for a plain notification."
 )
 
+def _connector_reads(tools: list[str] | None) -> str:
+    """The connectors this agent can question live, right now.
+
+    The brain holds what was *synced*. A connector like Notion exposes tools
+    that answer about what is there *this second*, and several expose nothing
+    to sync at all — for those, asking is the only way to know anything.
+
+    Listed by connector rather than by tool: the model picks better between
+    "Notion" and "Linear" than between `notion-query-data-sources` and
+    `linear-list-issues`, and the tool names are already on the tools it was
+    handed.
+    """
+    from .mcp_tools import SENTINEL
+
+    if SENTINEL not in (tools or []):
+        return ""
+
+    names: list[str] = []
+    with suppressed("listing the connectors an agent can query live"):
+        from ..connectors.mcp_tools import list_tools
+
+        for ref in list_tools():
+            if not ref.writes and ref.server_label not in names:
+                names.append(ref.server_label)
+    if not names:
+        return ""
+
+    joined = ", ".join(names)
+    return (
+        f"LIVE CONNECTORS: you can also read {joined} directly, using the tools "
+        "you were given for them. The brain holds what was synced; these answer "
+        "about right now, and some of them are the only way to see that data at "
+        "all.\n"
+        "So when the brain has nothing — or only second-hand traces like "
+        "notification emails — CALL THE CONNECTOR'S OWN TOOL before answering. "
+        "Never tell the user a connector is 'still syncing' or point them at "
+        "the Connectors panel when you were handed a tool that could have "
+        "answered the question."
+    )
+
+
 def _connector_actions(tools: list[str] | None) -> str:
     """The write tools the user's own connectors expose, as a block.
 
@@ -178,8 +228,14 @@ def build(*, name: str, role: str, system_prompt: str,
           actions: list[str] | None = None,
           tools: list[str] | None = None) -> str:
     """The system message for one agent, carrying only what applies to it."""
-    parts = [_identity(name, role, system_prompt), _BRAIN, _RECALL, _HONESTY,
-             _CORRECTIONS]
+    parts = [_identity(name, role, system_prompt), _BRAIN]
+
+    # What the agent may do when the brain comes up empty depends on whether it
+    # has anything live to ask. Naming the two cases separately is what stops
+    # the brain paragraph contradicting the connector paragraph below.
+    live = _connector_reads(tools)
+    parts.append(live or _BRAIN_ONLY)
+    parts += [_RECALL, _HONESTY, _CORRECTIONS]
 
     allowed = [a for a in (actions or []) if a in KNOWN_ACTIONS]
     if allowed:

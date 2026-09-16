@@ -408,3 +408,67 @@ def test_narrowing_a_connector_takes_effect_on_the_next_turn(isolated_home):
     reloaded = get_server("narrow")
     assert reloaded.permits("list_records")
     assert not reloaded.permits("something_else")
+
+
+# ── the prompt has to agree with the tools ─────────────────────────────────
+
+
+def _prompt(tools, labels):
+    """`build()` with a fixed set of connector labels behind the sentinel."""
+    from types import SimpleNamespace
+
+    import lodestone.connectors.mcp_tools as supplier
+    from lodestone.agents import prompt as mod
+
+    refs = [SimpleNamespace(server_label=name, server_id=name.lower(),
+                            tool=f"{name.lower()}-search", writes=False,
+                            description="Search it.")
+            for name in labels]
+    real = supplier.list_tools
+    supplier.list_tools = lambda: refs
+    try:
+        return mod.build(name="A", role="r", system_prompt="", tools=tools)
+    finally:
+        supplier.list_tools = real
+
+
+def test_an_agent_with_a_live_connector_is_told_to_ask_it():
+    """The defect this closes was visible to a user, not a test.
+
+    With Notion connected, signed in and exposing twenty-five working tools, the
+    agent answered a question about Notion out of *notification emails* and
+    said the connector was "probably still syncing — try the Connectors panel".
+    It was doing as it was told: the brain paragraph named Notion and forbade
+    checking it, because it was written before a connector could be asked
+    anything live.
+    """
+    from lodestone.agents.mcp_tools import SENTINEL
+
+    text = _prompt(["search_brain", SENTINEL], ["Notion"])
+
+    assert "Notion" in text
+    assert "CALL THE CONNECTOR" in text
+    assert "not synced yet" not in text, (
+        "an agent holding a working connector must never send the user to the "
+        "Connectors panel instead of using it")
+
+
+def test_an_agent_with_no_connectors_still_offers_the_panel():
+    """The old sentence is right in the case it was written for — there is
+    genuinely nothing else to try. It just is not right in both cases."""
+    text = _prompt(["search_brain"], ["Notion"])
+
+    assert "not synced yet" in text
+    assert "LIVE CONNECTORS" not in text
+
+
+def test_the_prompt_never_forbids_checking_a_connector():
+    """`You do NOT connect to, authorize, or 'check' Gmail/Google/Notion
+    yourself` shipped as an absolute, and became false the moment a connector
+    could answer live."""
+    from lodestone.agents.mcp_tools import SENTINEL
+
+    for tools in (["search_brain"], ["search_brain", SENTINEL]):
+        text = _prompt(tools, ["Notion"])
+        assert "do NOT" not in text
+        assert "'check' Gmail" not in text
