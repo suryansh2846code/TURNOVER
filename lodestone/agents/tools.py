@@ -693,6 +693,79 @@ def build_tools(names: list[str], *, self_id: str | None = None,
     return tools
 
 
+# ── what a person calls each tool ──────────────────────────────────────────
+# `name` is the id the model calls and the agent stores. It is not a label: a
+# user reading "whats_true_about_me" is reading our variable name, and a list
+# of thirty-two of them is a wall nobody can choose from.
+#
+# So every built-in carries ONE WORD and a category. One word because the
+# category already says the subject — under Memory, "Search" needs no further
+# qualification, and "Search your brain" only repeats the heading. The category
+# is what turns thirty-two rows into nine short lists.
+#
+# Lives here, not in the UI. A label table in the frontend would be a name
+# chain — exactly what a consumer must never grow — and the same names are
+# wanted by anything else that lists tools.
+_LABELS: dict[str, tuple[str, str]] = {
+    # Memory — the brain, and what it believes about the user
+    "search_brain":             ("Search",    "Memory"),
+    "who_is":                   ("People",    "Memory"),
+    "whats_true_about_me":      ("Profile",   "Memory"),
+    "timeline":                 ("Timeline",  "Memory"),
+    "why_do_you_think_that":    ("Evidence",  "Memory"),
+    "check_for_contradictions": ("Conflicts", "Memory"),
+    "correct_fact":             ("Correct",   "Memory"),
+    "forget_fact":              ("Forget",    "Memory"),
+    "remember":                 ("Remember",  "Memory"),
+    "list_entities":            ("Topics",    "Memory"),
+    # Tasks — things to do, and commitments still open
+    "add_task":                 ("Add",       "Tasks"),
+    "list_tasks":               ("List",      "Tasks"),
+    "complete_task":            ("Done",      "Tasks"),
+    "create_open_loop":         ("Track",     "Tasks"),
+    "list_open_loops":          ("Pending",   "Tasks"),
+    "complete_open_loop":       ("Close",     "Tasks"),
+    # The things it can reach
+    "gmail_search":             ("Search",    "Email"),
+    "calendar_lookup":          ("Schedule",  "Calendar"),
+    "web_search":               ("Search",    "Web"),
+    # Your Mac — the powers worth naming as a group, because they are the ones
+    # a person wants to see gathered before deciding
+    "list_dir":                 ("Browse",    "Your Mac"),
+    "read_file":                ("Read",      "Your Mac"),
+    "write_file":               ("Write",     "Your Mac"),
+    "run_python":               ("Run",       "Your Mac"),
+    # Agents — asking the rest of the team, and thinking out loud
+    "ask_agent":                ("Ask",       "Agents"),
+    "ask_agents":               ("Survey",    "Agents"),
+    "update_plan":              ("Plan",      "Agents"),
+    # Automations — work that runs without being asked
+    "list_routines":            ("List",      "Automations"),
+    "pause_routine":            ("Pause",     "Automations"),
+    "list_scheduled":           ("Queued",    "Automations"),
+    "list_pending_approvals":   ("Approvals", "Automations"),
+    # Connectors — the deep sources, as opposed to an MCP server's own tools
+    "sync_source":              ("Sync",      "Connectors"),
+    "search_source":            ("Search",    "Connectors"),
+}
+
+#: The order the categories read in. Memory first because it is what makes an
+#: agent know the user at all; "Your Mac" last because it is the one worth
+#: pausing over.
+TOOL_CATEGORIES = ("Memory", "Tasks", "Email", "Calendar", "Web",
+                   "Agents", "Automations", "Connectors", "Your Mac")
+
+
+def tool_label(name: str) -> tuple[str, str]:
+    """`(label, category)` for a built-in, falling back to its own name.
+
+    A tool added without an entry still renders — under "Other", with its id as
+    the label, which is ugly on purpose: it is visible enough to be fixed and
+    not so broken that the screen fails.
+    """
+    return _LABELS.get(name, (name, "Other"))
+
+
 def describe_tools() -> list[dict[str, str]]:
     """Every tool an agent could be given, for the agent-builder UI.
 
@@ -700,10 +773,17 @@ def describe_tools() -> list[dict[str, str]]:
     ("builtin" | "mcp") plus `connector` let the UI group the user's own
     connectors instead of listing them among the built-ins as if they shipped
     with the app.
+
+    `label` is now one word a person would use, and `category` is what it sits
+    under — see `_LABELS`. Both come from here rather than the UI, because a
+    name-to-label table in a consumer is the name chain this codebase keeps
+    paying for.
     """
-    rows = [{"name": n, "description": t.description, "label": n,
-             "source": "builtin", "connector": ""}
-            for n, t in TOOL_DEFS.items()]
+    rows = []
+    for n, t in TOOL_DEFS.items():
+        label, category = tool_label(n)
+        rows.append({"name": n, "description": t.description, "label": label,
+                     "category": category, "source": "builtin", "connector": ""})
     rows.extend(mcp_tools.describe())
     return rows
 

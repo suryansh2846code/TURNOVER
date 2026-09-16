@@ -252,12 +252,17 @@ class NewAgent(BaseModel):
 
 @router.get("/api/agents/tools")
 def available_tools():
-    from ...agents.tools import describe_tools
+    from ...agents.tools import TOOL_CATEGORIES, describe_tools
     # Each row keeps `name` and `description` exactly as before and adds
     # `source` ("builtin" | "mcp") and `connector`, so the agent builder can
     # group the user's own connectors instead of listing their tools as if they
-    # shipped with the app.
-    return {"tools": describe_tools()}
+    # shipped with the app. `label` is one word and `category` is its heading.
+    #
+    # `categories` is the ORDER they read in, not a list of what exists — the
+    # rows already say that. It is here because the layer that decided "Your
+    # Mac" comes last is this one, and a consumer sorting them itself would be
+    # re-deciding it alphabetically.
+    return {"tools": describe_tools(), "categories": list(TOOL_CATEGORIES)}
 
 
 @router.get("/api/agents/connector-gaps")
