@@ -14,7 +14,7 @@ from ..log import get_logger, suppressed
 from ..models import Message, get_provider
 from ..models.base import ChatResult
 from ..models.entitlements import resolve_usable_model
-from . import background, cancellation, context, delegation, grounding, planning
+from . import background, cancellation, connector_grants, context, delegation, grounding, planning
 from .agent import Agent, AgentMemory
 from .context import build_history
 from .effort import Effort, get_effort
@@ -288,6 +288,7 @@ def run_turn(agent_id: str, user_text: str, *,
              effort: str | Effort | None = None,
              images: list | None = None,
              cancel: threading.Event | None = None,
+             connectors: list[str] | None = None,
              persist: bool = True,
              on_event: Callable[[dict], None] | None = None) -> TurnResult:
     """Run one turn for `agent_id` and return what it produced.
@@ -420,7 +421,11 @@ def run_turn(agent_id: str, user_text: str, *,
         images=images))
     if persist:
         mem.append(agent.id, "user", user_text)
-    runner = ToolRunner(effort=profile, cancel=cancel)
+    # Connectors the user attached to this message with `@`. Held for the turn
+    # and released on every exit path below, so one message's grant cannot leak
+    # into the next.
+    grant_token = connector_grants.allow_for_this_turn(connectors)
+    runner = ToolRunner(effort=profile, cancel=cancel, agent_id=agent.id)
     budget = max(MIN_STEPS, profile.max_steps)
     chain_token = delegation.enter(agent.id, profile, cancel)
     # Shared with every sub-agent this turn reaches, so three agents at High
@@ -571,6 +576,7 @@ def run_turn(agent_id: str, user_text: str, *,
                     return reply
 
     finally:
+        connector_grants.reset(grant_token)
         delegation.leave(chain_token)
         # Read the plan before releasing it — it is what the UI shows to explain
         # what the agent thought it was doing.

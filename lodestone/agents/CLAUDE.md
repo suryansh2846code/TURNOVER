@@ -31,6 +31,11 @@ permissions — and `library.py`, which is what Lodestone *offers*.
 - **An agent's conversation is its own.** A delegated turn runs `persist=False`
   — no history in, nothing written out, no learning — because the "user" of that
   turn is another agent. The brain stays shared; the chat does not.
+- **An agent asks before it reaches a connector**, and the asking is enforced in
+  `loop.py`, never in a prompt. Three ways in: `once` (a turn, from `@` or
+  *Allow once*), `always` (stored per agent+connector), and `unrestricted` —
+  declared by a template, and only Chief of Staff has it.
+  [`connector-permissions.md`](../../docs/development/connector-permissions.md)
 - A routine pre-authorises the routine, not the stranger who wrote the email it
   read. Outbound actions need a recipient on the explicit allow-list; everything
   else queues for one tap. Interactive chat is deliberately not gated.

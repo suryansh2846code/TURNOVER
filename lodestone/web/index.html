@@ -62,6 +62,12 @@
         <input type="file" id="cmpFile" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden />
         <div class="cmp-stack">
         <div class="cmp-attachments" id="cmpAttachments" hidden></div>
+        <!-- Connectors attached to THIS message with @. Visible before it is
+             sent, because a grant you cannot see before sending is not one you
+             made. -->
+        <div class="cmp-connectors" id="cmpConnectors" hidden></div>
+        <div class="cmp-picker" id="cmpPicker" hidden role="listbox"
+             aria-label="Connectors you can add to this message"></div>
         <div class="cmp-main-row">
           <button type="button" class="cmp-ic" id="attachBtn" title="Attach an image" aria-label="Attach an image"></button>
           <textarea id="input" rows="1" autocomplete="off" aria-label="Message your agent"

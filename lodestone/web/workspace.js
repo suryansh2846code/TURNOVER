@@ -248,8 +248,20 @@ $("#composer").onsubmit = (e) => {
     $("#input").value = ""; autoGrow(); send(v);
   }
 };
-$("#input").addEventListener("input", autoGrow);
+$("#input").addEventListener("input", () => { autoGrow(); updateConnectorPicker(); });
+$("#input").addEventListener("blur", () => setTimeout(closeConnectorPicker, 120));
 $("#input").addEventListener("keydown", (e) => {
+  const picker = $("#cmpPicker");
+  const open = picker && !picker.hidden;
+  if (open && (e.key === "Enter" || e.key === "Tab")) {
+    // While the picker is up, Enter chooses rather than sends — otherwise the
+    // half-typed @mention goes to the agent as a word it has to ignore.
+    e.preventDefault();
+    const chosen = picker.querySelector(".cmp-opt.on") || picker.querySelector(".cmp-opt");
+    if (chosen) chosen.click();
+    return;
+  }
+  if (open && e.key === "Escape") { e.preventDefault(); closeConnectorPicker(); return; }
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); }
 });
 $("#clearBtn").onclick = async () => { await api(`/api/agents/${current}/clear`, { method: "POST" }); selectAgent(current); toast("chat cleared"); };

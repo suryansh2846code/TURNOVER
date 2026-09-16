@@ -94,6 +94,23 @@ class FakeSupplier:
 
 
 @pytest.fixture(autouse=True)
+def _connectors_allowed():
+    """These tests are about the connector TOOL path, not the permission gate.
+
+    An agent must be allowed before it reaches a connector, so without this
+    they would measure the refusal instead of the thing they name. Granted the
+    way `@` grants it — for the turn, never stored.
+    """
+    from lodestone.agents import connector_grants
+    from lodestone.agents.mcp_tools import connector_ids
+
+    token = connector_grants.allow_for_this_turn(
+        ["notion", "linear", "demo", *connector_ids()])
+    yield
+    connector_grants.reset(token)
+
+
+@pytest.fixture(autouse=True)
 def _someone_to_ask():
     """`ask_agent` is not offered when there is nobody to ask — correct, and
     since nothing is pre-added any more these tests have to put someone there
@@ -263,7 +280,11 @@ def test_a_connector_result_flows_back_into_the_turn(connectors, monkeypatch):
     monkeypatch.setattr(runtime, "get_provider", lambda p, m: provider)
     monkeypatch.setattr(runtime, "resolve_usable_model", lambda p, m: (m or "scripted-1", None))
 
-    result = runtime.run_turn("research", "when does the roadmap ship?", effort="medium")
+    # Attached to the message, the way `@notion` does it. `run_turn` sets the
+    # turn's grants from this argument, so an outer grant would be overwritten
+    # — which is correct: one message's permission is the message's to carry.
+    result = runtime.run_turn("research", "when does the roadmap ship?",
+                              effort="medium", connectors=["notion"])
 
     assert fake.calls == [("notion:search", {"query": "roadmap"})]
     assert "notion_search" in provider.tools_offered[0]

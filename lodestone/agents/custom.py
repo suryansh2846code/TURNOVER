@@ -92,6 +92,9 @@ class CustomAgentStore:
         with suppressed("from .agent_models import clear_agent_model …"):
             from .agent_models import clear_agent_model
             clear_agent_model(agent_id)
+        with suppressed("from .connector_grants import forget_agent …"):
+            from .connector_grants import forget_agent
+            forget_agent(agent_id)
         with suppressed("from .tool_overrides import get_tool_overrides …"):
             # An id is a slug of the name, so it is deterministic: delete
             # "Chotu", build another "Chotu", and it lands on the same id. An

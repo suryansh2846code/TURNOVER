@@ -1,0 +1,183 @@
+"""Whether an agent may reach a connector right now.
+
+An agent holding the connector category could read everything the user had
+connected, on any turn, without saying so. That was the right shape when the
+category was the only way to reach a connector at all. It is the wrong one once
+agents are specialists somebody assembles: adding a Writer should not hand it
+the inbox.
+
+The line is not "trust the agent less". It is that reaching a third-party
+account is a thing the user should be able to see happening and decide about,
+per agent — while never being asked twice about something already settled.
+
+Three ways in, and only three:
+
+* **once** — this turn. From *Allow once*, or from `@gmail` in the message.
+  Never stored: persisting "just this time" turns it into something the user
+  has to remember to undo.
+* **always** — stored per `(agent_id, connector)` until revoked.
+* **unrestricted** — a template declares it. Only Chief of Staff, which is the
+  agent the user adds knowing it is the one that can do anything.
+
+Contract, including every field name: `docs/development/connector-permissions.md`.
+"""
+from __future__ import annotations
+
+import contextvars
+import sqlite3
+from datetime import UTC, datetime
+
+from ..config import get_settings
+from ..log import get_logger, suppressed
+
+log = get_logger(__name__)
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS agent_connector_grants (
+    agent_id   TEXT NOT NULL,
+    connector  TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (agent_id, connector)
+);
+"""
+
+#: Connectors granted for the current turn only.
+#:
+#: A ContextVar, not an attribute on anything: tool calls run in a thread pool
+#: and a sub-agent runs a whole turn of its own, so this has to travel the same
+#: way the delegation chain does. A plain global would leak one turn's grant
+#: into whatever ran next.
+_ONCE: contextvars.ContextVar[frozenset[str]] = contextvars.ContextVar(
+    "lodestone_connector_grants_once", default=frozenset())
+
+
+#: One connection, held. Opening a fresh one per call looks harmless and is
+#: not: `execute` on one and `commit` on another commits nothing, so a grant
+#: was written and then rolled back when its connection was collected — while
+#: the abandoned handles piled up until SQLite reported the database locked.
+_DB: sqlite3.Connection | None = None
+
+
+def _conn() -> sqlite3.Connection:
+    # The same file as the agents themselves: this is a fact about an agent,
+    # and a second database would be a second thing to back up and keep
+    # consistent.
+    global _DB
+    if _DB is None:
+        path = get_settings().home / "agents.db"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _DB = sqlite3.connect(str(path), check_same_thread=False)
+        _DB.row_factory = sqlite3.Row
+        _DB.executescript(_SCHEMA)
+    return _DB
+
+
+# ── the one-turn grant ───────────────────────────────────────────────────
+def allow_for_this_turn(connectors: list[str] | None):
+    """Grant these connectors for the current turn. Returns a token for `reset`."""
+    clean = frozenset(str(c).strip().lower() for c in (connectors or []) if str(c).strip())
+    return _ONCE.set(clean)
+
+
+def reset(token) -> None:
+    with suppressed("releasing this turn's connector grants"):
+        _ONCE.reset(token)
+
+
+def granted_this_turn() -> frozenset[str]:
+    return _ONCE.get()
+
+
+# ── the stored grant ─────────────────────────────────────────────────────
+def always_allowed(agent_id: str) -> list[str]:
+    """Connectors this agent may use without asking, until revoked."""
+    if not agent_id:
+        return []
+    rows = _conn().execute(
+        "SELECT connector FROM agent_connector_grants WHERE agent_id=? "
+        "ORDER BY connector", (agent_id,)).fetchall()
+    return [r["connector"] for r in rows]
+
+
+def allow_always(agent_id: str, connector: str) -> dict:
+    name = str(connector or "").strip().lower()
+    if not agent_id or not name:
+        raise ValueError("a grant needs an agent and a connector")
+    conn = _conn()
+    conn.execute(
+        "INSERT INTO agent_connector_grants (agent_id, connector, created_at) "
+        "VALUES (?,?,?) ON CONFLICT(agent_id, connector) DO NOTHING",
+        (agent_id, name, datetime.now(UTC).isoformat()))
+    conn.commit()
+    log.info("agent %s may now use %s without asking", agent_id, name)
+    return {"agent_id": agent_id, "connector": name, "scope": "always"}
+
+
+def revoke(agent_id: str, connector: str) -> bool:
+    name = str(connector or "").strip().lower()
+    conn = _conn()
+    cur = conn.execute(
+        "DELETE FROM agent_connector_grants WHERE agent_id=? AND connector=?",
+        (agent_id, name))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def forget_agent(agent_id: str) -> None:
+    """Drop every grant for an agent that no longer exists.
+
+    An agent id is a slug of its name, so it repeats: build "Writer", grant it
+    Gmail, delete it, build another "Writer" — and without this the second one
+    inherits a permission nobody gave it.
+    """
+    with suppressed("clearing an agent's connector grants"):
+        conn = _conn()
+        conn.execute("DELETE FROM agent_connector_grants WHERE agent_id=?", (agent_id,))
+        conn.commit()
+
+
+# ── the question everything else asks ────────────────────────────────────
+def unrestricted(agent_id: str) -> bool:
+    """Does this agent's template exempt it from asking at all?"""
+    with suppressed("checking whether an agent may use connectors freely"):
+        from .library import BY_ID
+
+        template = BY_ID.get(agent_id)
+        return bool(template and template.unrestricted_connectors)
+    return False
+
+
+def may_use(agent_id: str, connector: str) -> bool:
+    """May this agent reach this connector, right now?
+
+    The single place that answers it. Called from the loop before a connector
+    tool runs — never from a prompt, because a model told "ask first" will
+    sometimes not, and the rule has to hold whatever the model does.
+    """
+    name = str(connector or "").strip().lower()
+    if not name:
+        return True                      # not a connector tool; not ours to gate
+    if unrestricted(agent_id):
+        return True
+    if name in granted_this_turn():
+        return True
+    return name in set(always_allowed(agent_id))
+
+
+def describe(agent_id: str) -> dict:
+    """What this agent may use, and what it would have to ask for."""
+    from .mcp_tools import connector_ids
+
+    every = connector_ids()
+    if unrestricted(agent_id):
+        return {"agent_id": agent_id, "unrestricted": True,
+                "allowed": list(every), "must_ask": [], "this_turn": []}
+    allowed = set(always_allowed(agent_id))
+    turn = granted_this_turn()
+    return {
+        "agent_id": agent_id,
+        "unrestricted": False,
+        "allowed": sorted(allowed),
+        "must_ask": sorted(c for c in every if c not in allowed),
+        "this_turn": sorted(turn),
+    }

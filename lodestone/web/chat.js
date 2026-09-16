@@ -40,6 +40,11 @@ async function selectAgent(id) {
     chip._wired = 1;
     chip.onclick = () => { if (current) openAgentModelModal(current); };
   }
+  // Which connectors this agent could be handed, for the `@` picker. Per
+  // agent, because the labels are the same but who may use them is not.
+  attachedConnectors = [];
+  renderConnectorChips();
+  loadConnectorNames();
   const { history } = await api(`/api/agents/${id}/history`);
   renderHistory(history);
 }
@@ -130,6 +135,103 @@ function parseActions(text) {
     return "";   // strip the tag from the visible text
   });
   return { clean: clean.trim(), actions };
+}
+
+// ── attaching a connector to one message ─────────────────────────────────
+// An agent must ask before it reaches a connector. `@` is the way to answer
+// that question in advance: attach one to THIS message and the agent may use
+// it for this turn only, without a card and without a standing grant.
+//
+// The chips are rendered before sending, deliberately. A permission the user
+// cannot see at the moment they grant it is not a permission they granted.
+
+let attachedConnectors = [];      // ids for this message
+let CONNECTOR_LABELS = {};        // id → what a person reads
+let connectorPickerIndex = -1;
+
+async function loadConnectorNames() {
+  if (!current) return;
+  try {
+    const d = await api(`/api/agents/${encodeURIComponent(current)}/connectors`);
+    CONNECTOR_LABELS = d.labels || {};
+  } catch (_) { CONNECTOR_LABELS = {}; }
+}
+
+function renderConnectorChips() {
+  const box = $("#cmpConnectors");
+  if (!box) return;
+  box.hidden = attachedConnectors.length === 0;
+  box.innerHTML = attachedConnectors.map((id) =>
+    `<span class="cmp-chip">${esc(CONNECTOR_LABELS[id] || id)}` +
+    `<button type="button" data-drop-connector="${esc(id)}" aria-label="Remove">✕</button></span>`).join("");
+  box.querySelectorAll("[data-drop-connector]").forEach((b) => {
+    b.onclick = () => {
+      attachedConnectors = attachedConnectors.filter((x) => x !== b.dataset.dropConnector);
+      renderConnectorChips();
+    };
+  });
+}
+
+/** What the user is part-way through typing after an `@`, or null. */
+function connectorQuery(value, caret) {
+  const upto = value.slice(0, caret);
+  const at = upto.lastIndexOf("@");
+  if (at < 0) return null;
+  // Only when `@` starts a word — an email address must not open the picker.
+  if (at > 0 && !/\s/.test(upto[at - 1])) return null;
+  const typed = upto.slice(at + 1);
+  if (/\s/.test(typed)) return null;
+  return { at, typed: typed.toLowerCase() };
+}
+
+function closeConnectorPicker() {
+  const p = $("#cmpPicker");
+  if (p) { p.hidden = true; p.innerHTML = ""; }
+  connectorPickerIndex = -1;
+}
+
+// Named for what it picks, not for what it is. `workspace.js` also has an
+// `openPicker` — for folders — and it loads later, so the short name silently
+// overwrote this one. Twelve scripts share one scope; a generic name in it is
+// a collision waiting for the next file.
+function openConnectorPicker(matches, q) {
+  const p = $("#cmpPicker");
+  if (!p) return;
+  if (!matches.length) return closeConnectorPicker();
+  connectorPickerIndex = 0;
+  p.hidden = false;
+  p.innerHTML = matches.map(([id, label], i) =>
+    `<button type="button" role="option" class="cmp-opt${i === 0 ? " on" : ""}"
+       data-pick="${esc(id)}">${esc(label)}<span>add to this message</span></button>`).join("");
+  p.querySelectorAll("[data-pick]").forEach((b) => {
+    b.onclick = () => chooseConnectorOption(b.dataset.pick, q);
+  });
+}
+
+function chooseConnectorOption(id, q) {
+  const input = $("#input");
+  if (!attachedConnectors.includes(id)) attachedConnectors.push(id);
+  // Take the half-typed @mention back out: the chip is the record now, and
+  // leaving the text would send the agent a word it has to ignore.
+  const value = input.value;
+  input.value = value.slice(0, q.at) + value.slice(q.at + 1 + q.typed.length);
+  closeConnectorPicker();
+  renderConnectorChips();
+  input.focus();
+  autoGrow();
+}
+
+function updateConnectorPicker() {
+  const input = $("#input");
+  if (!input) return;
+  const q = connectorQuery(input.value, input.selectionStart ?? input.value.length);
+  if (!q) return closeConnectorPicker();
+  const matches = Object.entries(CONNECTOR_LABELS)
+    .filter(([id, label]) =>
+      !attachedConnectors.includes(id) &&
+      (id.includes(q.typed) || String(label).toLowerCase().includes(q.typed)))
+    .slice(0, 6);
+  openConnectorPicker(matches, q);
 }
 
 // ── a connector action, in words ─────────────────────────────────────────
@@ -607,7 +709,13 @@ async function send(text) {
     if (controller && controller.signal.aborted) addMsg("assistant", "■ Stopped.");
     else addMsg("assistant", "△ " + e);
   }
-  finally { controller = null; turnId = null; setBusy(false); }
+  finally {
+    controller = null; turnId = null;
+    // The grant belonged to the message that has now been sent.
+    attachedConnectors = [];
+    renderConnectorChips();
+    setBusy(false);
+  }
 }
 
 // Run one turn over Server-Sent Events, showing the reply as it is written and
@@ -640,6 +748,8 @@ async function streamTurn(text, think) {
     model: localStorage.getItem("lodestone_model") || undefined,
     effort: localStorage.getItem("lodestone_effort") || undefined,
     turn_id: turnId || undefined,
+    // Granted for this turn only. The server never stores these.
+    connectors: attachedConnectors.slice(),
     images: sentImages.map((a) => ({ data_url: a.dataUrl, name: a.name })),
   });
   let resp;

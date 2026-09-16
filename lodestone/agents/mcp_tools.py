@@ -210,7 +210,11 @@ def _build() -> tuple[dict[str, Tool], list[dict[str, str]]]:
                            handler=_caller(qualified, label))
         rows.append({"name": name, "description": built[name].description,
                      "label": str(getattr(ref, "tool", "") or name),
-                     "source": "mcp", "connector": label})
+                     "source": "mcp", "connector": label,
+                     # The id, beside the label. Permission is decided against
+                     # the id — a label is what a person reads and a user can
+                     # rename, and a rename must not change who may use what.
+                     "connector_id": str(getattr(ref, "server_id", "") or "").lower()})
     return built, rows
 
 
@@ -243,6 +247,39 @@ def lookup(name: str) -> Tool | None:
     if not name or name == SENTINEL:
         return None
     return definitions().get(name)
+
+
+def connector_of(tool_name: str) -> str:
+    """Which connector a tool belongs to, or "" if it is not a connector tool.
+
+    By id, not label. Built from the same pass that built the tool, so the
+    answer cannot drift from what actually runs.
+    """
+    if not tool_name or tool_name == SENTINEL:
+        return ""
+    _defs, rows = _resolved()
+    for row in rows:
+        if row.get("name") == tool_name:
+            return row.get("connector_id", "")
+    return ""
+
+
+def connector_ids() -> list[str]:
+    """Every connector currently offering an agent something, by id."""
+    _defs, rows = _resolved()
+    seen: dict[str, None] = {}
+    for row in rows:
+        cid = row.get("connector_id") or ""
+        if cid:
+            seen.setdefault(cid, None)
+    return list(seen)
+
+
+def labels_by_id() -> dict[str, str]:
+    """Connector id → the name a person reads. For cards and pickers."""
+    _defs, rows = _resolved()
+    return {r.get("connector_id", ""): r.get("connector", "")
+            for r in rows if r.get("connector_id")}
 
 
 def describe() -> list[dict[str, str]]:

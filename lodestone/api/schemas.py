@@ -55,6 +55,11 @@ class ChatIn(BaseModel):
     #: window at the start of exactly the slowest turns. Absent means the turn
     #: cannot be stopped, which is what an internal caller gets.
     turn_id: str | None = Field(default=None, max_length=128)
+    #: Connectors the user attached to THIS message with `@`, granted for this
+    #: turn only and never stored. Ids, not display labels — a label is what a
+    #: person reads and can change, and renaming a connector must not change
+    #: who may use it.
+    connectors: list[str] = Field(default_factory=list, max_length=20)
 
 
 class SecretIn(BaseModel):

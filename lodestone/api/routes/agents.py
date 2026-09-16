@@ -279,6 +279,52 @@ def connector_gaps():
     return gaps()
 
 
+class ConnectorGrantIn(BaseModel):
+    """Letting one agent reach one connector without asking again."""
+
+    connector: str
+    #: Only "always" is stored. "once" lives for a single turn and arrives with
+    #: the message instead — storing it would turn "just this time" into
+    #: something the user has to remember to undo.
+    scope: str = "always"
+
+
+@router.get("/api/agents/{agent_id}/connectors")
+@probes_a_provider
+def agent_connectors(agent_id: str):
+    """What this agent may reach, and what it would have to ask for."""
+    from ...agents.connector_grants import describe
+    from ...agents.mcp_tools import labels_by_id
+
+    out = describe(agent_id)
+    # Ids decide permission; labels are what a person reads. Both, so the
+    # caller never has to guess one from the other.
+    out["labels"] = labels_by_id()
+    return out
+
+
+@router.post("/api/agents/{agent_id}/connectors")
+def grant_agent_connector(agent_id: str, body: ConnectorGrantIn):
+    from ...agents.connector_grants import allow_always
+
+    if body.scope != "always":
+        raise HTTPException(
+            400, "Only an always-allow is stored. A one-time grant belongs on "
+                 "the message it applies to.")
+    try:
+        return allow_always(agent_id, body.connector)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+
+@router.delete("/api/agents/{agent_id}/connectors/{connector}")
+def revoke_agent_connector(agent_id: str, connector: str):
+    from ...agents.connector_grants import always_allowed, revoke
+
+    return {"revoked": revoke(agent_id, connector),
+            "allowed": always_allowed(agent_id)}
+
+
 @router.get("/api/agents/{agent_id}/tools")
 @probes_a_provider
 def agent_tools(agent_id: str):
@@ -471,7 +517,8 @@ def chat(agent_id: str, body: ChatIn):
     try:
         result = run_turn(agent_id, message, provider_name=body.provider,
                           model_name=body.model, effort=body.effort,
-                          images=images, cancel=stop)
+                          images=images, cancel=stop,
+                          connectors=body.connectors)
     except KeyError:
         raise HTTPException(404, f"unknown agent '{agent_id}'") from None
     except Exception as exc:  # never 500 the chat — return a readable message
@@ -521,7 +568,8 @@ async def chat_stream(agent_id: str, body: ChatIn):
         try:
             result = run_turn(agent_id, message, provider_name=body.provider,
                               model_name=body.model, effort=body.effort,
-                              images=images, cancel=stop, on_event=push)
+                              images=images, cancel=stop,
+                              connectors=body.connectors, on_event=push)
             push({"type": "done", "result": result.as_dict()})
         except KeyError:
             push({"type": "error", "message": f"unknown agent '{agent_id}'"})

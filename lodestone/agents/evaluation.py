@@ -328,7 +328,11 @@ def run(*, include_slow: bool = True) -> Scorecard:
 
         provider = _scripted([[("demo_list_items", {})], "there is one item"])
         use(provider)
-        connected = runtime.run_turn("research", "what is in demo?", effort="medium")
+        # With the connector attached to the message, the way `@` does it. An
+        # agent must be allowed before it reaches a connector, so a turn that
+        # grants nothing is measuring the gate rather than the tool path.
+        connected = runtime.run_turn("research", "what is in demo?",
+                                     effort="medium", connectors=["demo"])
         offered = provider.tools_offered[0] if provider.tools_offered else []
         check("connector_tools",
               "An agent can read the user's own connectors mid-turn")(
@@ -338,6 +342,16 @@ def run(*, include_slow: bool = True) -> Scorecard:
               "A connector's write tools are never offered to a model")(
             "demo_list_items" in offered
             and not any("create_item" in n for n in offered))
+
+        # ── and the same call, with nothing granted ──────────────────────
+        provider = _scripted([[("demo_list_items", {})], "I could not read it"])
+        use(provider)
+        ungranted = runtime.run_turn("research", "what is in demo?", effort="medium")
+        refused = [s for s in ungranted.trace
+                   if s.kind == "tool_result" and "permission" in s.result]
+        check("connector_permission",
+              "An agent asks before it reaches a connector")(
+            bool(refused), refused[0].result[:48] if refused else "reached it anyway")
 
     finally:
         _swap(mcp, "_supplier", saved_supplier)

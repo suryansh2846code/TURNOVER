@@ -2159,3 +2159,35 @@ button.tiny.running:hover { background: linear-gradient(to right,
    itself and points at the library instead of sitting blank. */
 .agents-empty { padding: 14px 12px; color: var(--muted, #8a94a3); }
 .agents-empty p { margin: 0 0 10px; font-size: .9rem; }
+
+/* ── attaching a connector to one message ────────────────────────────────
+   An agent asks before it reaches a connector; `@` answers that in advance,
+   for this message only. The chips are visible BEFORE sending — a permission
+   you cannot see at the moment you grant it is not one you granted. */
+.cmp-connectors { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px 0; }
+.cmp-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 6px 3px 9px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent, #6c8cff) 45%, transparent);
+  background: color-mix(in srgb, var(--accent, #6c8cff) 12%, transparent);
+  font-size: .78rem;
+}
+.cmp-chip button {
+  border: 0; background: none; cursor: pointer; padding: 0 2px;
+  color: var(--muted, #8a94a3); font-size: .9em; line-height: 1;
+}
+.cmp-picker {
+  position: absolute; bottom: calc(100% + 8px); left: 10px; right: 10px;
+  z-index: 20; max-height: 232px; overflow-y: auto;
+  border: 1px solid var(--line, #1e232b); border-radius: 12px;
+  background: var(--panel, #12161c);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .45);
+}
+.cmp-opt {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 9px 13px; cursor: pointer;
+  border: 0; background: none; color: inherit; font: inherit; text-align: left;
+}
+.cmp-opt span { color: var(--muted, #8a94a3); font-size: .76rem; }
+.cmp-opt:hover, .cmp-opt.on { background: var(--bg, #0b0d10); }
+.composer { position: relative; }

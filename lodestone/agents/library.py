@@ -116,6 +116,13 @@ class Template:
     works_with: list[str] = field(default_factory=list)
     #: Sources it genuinely cannot function without. A subset of `works_with`.
     needs: list[str] = field(default_factory=list)
+    #: May it reach the user's connectors without asking each time?
+    #:
+    #: A field rather than a hardcoded id, so the exception is visible in the
+    #: library beside the agent that has it, and a second generalist would need
+    #: no code change to behave the same way. See
+    #: `docs/development/connector-permissions.md`.
+    unrestricted_connectors: bool = False
 
     def resolved_tools(self) -> list[str]:
         """What this template actually grants, with `EVERYTHING` expanded."""
@@ -159,6 +166,9 @@ TEMPLATES: tuple[Template, ...] = (
         # Everything. A generalist enumerated by hand stops being one the first
         # time a tool is added and this line is not.
         tools=[EVERYTHING],
+        # The one agent that does not stop to ask. Asking on every turn for the
+        # agent whose whole job is "whatever you need" is a prompt nobody reads.
+        unrestricted_connectors=True,
         actions=_ALL_ACTIONS,
         recall_sources=["gmail", "gcal"],
         works_with=["gmail", "gcal"],
@@ -172,12 +182,25 @@ TEMPLATES: tuple[Template, ...] = (
                     "surfaces what actually needs you.",
         system_prompt=(
             "You handle the user's email and messages. You triage what arrived, "
-            "summarise threads, and draft replies in their voice — aware of "
-            "their commitments and of what they have already said to this "
-            "person. Surface what needs a response and what can wait. Draft; "
-            "never claim to have sent."
+            "summarise threads, and surface what needs a response and what can "
+            "wait.\n"
+            "Draft replies in their voice, and learn that voice rather than "
+            "inventing one: look up what they have written to THIS person "
+            "before, and match how they actually talk to them. `who_is` on the "
+            "sender tells you who they are to the user.\n"
+            "Email is where commitments are made. When they promise something "
+            "— or someone promises them — record it with `create_open_loop` so "
+            "it does not live only in a thread nobody reopens. Check "
+            "`list_open_loops` before saying nothing is outstanding.\n"
+            "Count with `run_python`, never in your head: how many are unread, "
+            "how many days until a deadline, which of these is oldest. A number "
+            "you estimated is a number you made up.\n"
+            "Draft; never claim to have sent."
         ),
-        tools=[*BASE_TOOLS, *_FILES, *_MAIL, *_DIARY, *_TASKS],
+        # Open loops matter more here than anywhere: email is where people
+        # commit to things. run_python because triage is counting and dates.
+        tools=[*BASE_TOOLS, *_FILES, *_MAIL, *_DIARY, *_TASKS, *_LOOPS,
+               "run_python"],
         actions=_ALL_ACTIONS,
         recall_sources=["gmail", "gcal"],
         works_with=["gmail", "gcal"],
@@ -444,6 +467,7 @@ def describe(include_status: bool = True) -> list[dict]:
             # says so. It is a soft retraction that keeps provenance, so a
             # mistake is recoverable — but "recoverable" is not "unremarkable".
             "forgets_facts": "forget_fact" in t.resolved_tools(),
+            "unrestricted_connectors": t.unrestricted_connectors,
             "in_roster": t.id in have,
         })
     return rows

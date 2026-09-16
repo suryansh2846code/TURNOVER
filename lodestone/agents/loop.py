@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from ..log import get_logger
 from ..models.base import ToolCall
-from . import cancellation
+from . import cancellation, connector_grants, mcp_tools
 from .effort import Effort
 from .results import ToolResult, worked
 from .tools import run_tool
@@ -69,12 +69,26 @@ class ToolOutcome:
 #: next round would read — and "" reads as "this tool found nothing".
 STOPPED_OUTPUT = ToolResult("Not run — the user stopped this turn.")
 
+#: What a tool says when this agent has not been allowed to reach that
+#: connector yet. Phrased as an instruction, because the model's next move is
+#: the thing that matters: ask, in the user's terms, and do not go looking for
+#: another way round.
+NEEDS_PERMISSION = (
+    "Needs the user's permission: reading {label}. You have not been allowed to "
+    "use it yet. Ask them for it in your reply — say plainly what you wanted it "
+    "for. Do not try a different connector instead, and do not answer as though "
+    "you had read it."
+)
+
 
 @dataclass
 class ToolRunner:
     """Runs a model's tool calls for one turn, remembering what it has run."""
 
     effort: Effort
+    #: Whose permissions apply. Empty means an internal caller with nobody to
+    #: ask, which is gated the same way rather than waved through.
+    agent_id: str = ""
     #: Set when the user presses Stop. Checked before each call is executed, so
     #: a round of six tools that is stopped after the first does not run the
     #: other five — the expensive half of a stopped turn is usually here.
@@ -149,9 +163,27 @@ class ToolRunner:
         self.calls_made += len(calls)
         return [o for o in outcomes if o is not None]
 
+    def _blocked(self, name: str) -> ToolResult | None:
+        """The permission check, here rather than in a prompt.
+
+        A model told "ask first" will sometimes not, so the rule is enforced
+        where the call actually happens — the same reason the outbound
+        allow-list is not a sentence in the system prompt.
+        """
+        connector = mcp_tools.connector_of(name)
+        if not connector or connector_grants.may_use(self.agent_id, connector):
+            return None
+        label = mcp_tools.labels_by_id().get(connector, connector)
+        return ToolResult.failed(NEEDS_PERMISSION.format(label=label))
+
     def _execute(self, call: ToolCall, key: str) -> ToolOutcome:
         if cancellation.stopped(self.cancel):
             return ToolOutcome(call, STOPPED_OUTPUT)
+        refused = self._blocked(call.name)
+        if refused is not None:
+            # Not memoised: the answer changes the moment the user allows it,
+            # and a cached refusal would outlive the permission being granted.
+            return ToolOutcome(call, refused)
         output: ToolResult = run_tool(call.name, call.arguments)
         self._memo[key] = output
         return ToolOutcome(call, output)
