@@ -11,7 +11,6 @@ import pytest
 from lodestone.agents import library
 from lodestone.agents.agent import AgentMemory
 from lodestone.agents.library import (
-    BASE_TOOLS,
     BY_ID,
     CATEGORIES,
     DEFAULT_ROSTER,
@@ -174,44 +173,12 @@ def test_an_agent_you_add_really_gets_its_tools():
         assert "search_brain" in names and "who_is" in names, f"{tid} is toolless"
 
 
-# ── the lead agent, which is what a first run actually has ───────────────
-def test_the_lead_agent_can_reach_connectors_from_the_day_it_is_built():
-    """The original bug, at its source. The onboarding route hardcoded eight
-    tools with no connector access, so the user's own lead agent sat next to a
-    connected Notion it could not read — and nothing ever sent them back."""
-    from fastapi.testclient import TestClient
+def test_there_is_no_lead_agent_any_more():
+    """It was a second definition of Chief of Staff, built from a hardcoded
+    tool list with no connector access and a prompt naming three specialists a
+    new user does not have. Two definitions of one role is how one goes stale."""
+    from lodestone.api.routes import agents as routes
 
-    from lodestone.agents.custom import get_custom_store
-    from lodestone.agents.grants import reaches_connectors
-    from lodestone.agents.mcp_tools import SENTINEL
-    from lodestone.api.app import app
-
-    made = TestClient(app).post("/api/agents/lead", json={"name": "TestLead"})
-    assert made.status_code == 200, made.text
-    agent_id = made.json()["id"]
-    try:
-        built = get_custom_store().get(agent_id)
-        assert SENTINEL in built.tools, "the lead agent cannot reach connectors"
-        assert reaches_connectors(built)
-        assert list(built.tools) == list(BASE_TOOLS), (
-            "the lead agent is on a different base from everyone else")
-    finally:
-        get_custom_store().delete(agent_id)
-
-
-def test_the_lead_agents_prompt_does_not_name_retired_agents():
-    """It used to promise "(Inbox, Launch, Research, Personal)" — one of which
-    no longer exists, and none of which a new user now has."""
-    from fastapi.testclient import TestClient
-
-    from lodestone.agents.custom import get_custom_store
-    from lodestone.api.app import app
-
-    made = TestClient(app).post("/api/agents/lead", json={"name": "TestLead2"})
-    agent_id = made.json()["id"]
-    try:
-        prompt = get_custom_store().get(agent_id).system_prompt
-        assert "Launch" not in prompt, "it still names a retired agent"
-        assert "Agent Library" in prompt
-    finally:
-        get_custom_store().delete(agent_id)
+    assert not hasattr(routes, "create_lead_agent")
+    assert not hasattr(routes, "_fallback_welcome")
+    assert "chief-of-staff" in BY_ID, "the role has to live somewhere"

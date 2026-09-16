@@ -1,7 +1,7 @@
 # The onboarding → workspace flow
 
 > The path a brand-new user takes, and what each screen is waiting for.
-> Order: **Hero → Connect → Build → Digest → Workspace (welcome + lead agent)**.
+> Order: **Hero → Connect → Build → Digest → Workspace (Agent Library)**.
 
 ---
 
@@ -50,14 +50,23 @@ The cards in `onboarding.html` are **neutral placeholders**; `fillCards`
 populates them from the real brain. Nothing in them may be specific to one
 person or one machine.
 
-## Workspace welcome
+## First entry — the Agent Library
 
-First entry (onboarded, no lead agent yet) shows "name your lead agent":
+There used to be a fifth step here: *name your lead agent*, which built a custom
+agent from the brain and gave it a **Lead** badge. It is gone, and so is the
+one-time LLM intro it delivered.
 
-1. `POST /api/agents/lead` — system prompt personalised from the brain, pinned
-   with a **Lead** badge.
-2. `POST /api/agents/{id}/welcome` — a one-time LLM intro that teaches the app.
-   Scripted fallback offline, and not persisted.
+It was a second answer to a question the library already answers. "Chief of
+Staff" is that agent, written once, in `library.py`, with the tools for the job
+— where the lead agent was built from a hardcoded list that had no connector
+access and a prompt naming three specialists a new user does not have. Two
+definitions of the same role is how one of them ends up stale, and that one did.
+
+So first entry opens the **Agent Library** instead. Nothing is pre-added and
+there is no lead agent, so a new install genuinely has no agents: the library is
+not a nicety here, it is the only way to get one. It opens once
+(`lodestone_saw_library`), and the agent rail says so and points there whenever
+it is empty.
 
 ## Brain status
 
@@ -71,7 +80,7 @@ the live "Your brain" panel (`#brainBuild`).
 | key | where | what it means |
 |---|---|---|
 | `lodestone_onboarded` | localStorage | the user finished onboarding |
-| `lodestone_lead_agent` | localStorage | which agent wears the Lead badge |
+| `lodestone_saw_library` | localStorage | the Agent Library has opened itself once |
 | `lodestone_provider` / `lodestone_model` | localStorage | the chosen backend |
 | `ls_saw_onboarding` | sessionStorage | guards the empty-brain redirect |
 | onboarded flag | `GET`/`POST /api/onboarded` | **server-side**, because localStorage is per-origin and the desktop app binds a different port per launch |
@@ -82,9 +91,11 @@ app opens looking empty. See [`../DESKTOP-SIGNIN.md`](../DESKTOP-SIGNIN.md) → 
 
 ## Endpoints this flow added
 
-`POST /api/brain/reset` · `POST /api/brain/digest` · `POST /api/agents/lead` ·
-`POST /api/agents/{id}/welcome` · `POST /api/providers/{name}/key` ·
-`POST /api/sync/cancel`
+`POST /api/brain/reset` · `POST /api/brain/digest` ·
+`POST /api/providers/{name}/key` · `POST /api/sync/cancel`
+
+(`POST /api/agents/lead` and `POST /api/agents/{id}/welcome` were removed with
+the lead agent.)
 
 The authoritative list of every endpoint is `tests/api_surface.json`, not this
 file.

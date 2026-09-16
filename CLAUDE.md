@@ -189,7 +189,7 @@ Many users, many machines. Do not bake in anything specific to one of either.
   falls back to `settings.model_provider`. Keys entered in the UI are saved via
   `POST /api/providers/{name}/key`; providers read them through
   `models/base.py::_saved_key` when the env var is unset.
-- **localStorage keys**: `lodestone_onboarded`, `lodestone_lead_agent`,
+- **localStorage keys**: `lodestone_onboarded`, `lodestone_saw_library`,
   `lodestone_provider`, `lodestone_model`; `sessionStorage.ls_saw_onboarding`
   guards the empty-brain redirect.
 - **Cmd/Ctrl+R** is bound in JS on both pages — the webview does not wire it.

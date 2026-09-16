@@ -42,7 +42,6 @@ function esc(s) {
 const ORB_COLORS = [["#8fb0ff", "#2f3a5e"], ["#7fd8b0", "#1f4636"], ["#c3a0f5", "#382a54"],
   ["#e0b489", "#48331f"], ["#e79aa0", "#48232e"], ["#9ad0e0", "#1e444f"], ["#b8c0cf", "#2b3140"]];
 function orbPair(id) {
-  if (id === "__lead") return ORB_COLORS[0];
   let h = 0; for (const ch of String(id || "")) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return ORB_COLORS[h % ORB_COLORS.length];
 }

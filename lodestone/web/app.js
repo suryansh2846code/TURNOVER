@@ -65,10 +65,9 @@ function setCollapsed(on) {
   if (b) b.onclick = () => setCollapsed(!document.querySelector(".app").classList.contains("collapsed"));
   setCollapsed(localStorage.getItem("ls_collapsed") === "1");
 }
-function agentOrbId(a) { return (a && a.id === localStorage.getItem("lodestone_lead_agent")) ? "__lead" : (a ? a.id : ""); }
+function agentOrbId(a) { return a ? a.id : ""; }
 function agentDesc(a) {
   if (!a) return "";
-  if (a.id === localStorage.getItem("lodestone_lead_agent")) return "Leads your team and helps with everything — your first stop for anything.";
   return "Helps you with " + (a.role || "your work") + ".";
 }
 
@@ -76,9 +75,6 @@ function agentDesc(a) {
 async function loadAgents() {
   const d = await api("/api/agents");
   agents = d.agents;
-  // pin the lead agent (created at welcome) to the top
-  const leadId = localStorage.getItem("lodestone_lead_agent");
-  agents.sort((a, b) => (b.id === leadId ? 1 : 0) - (a.id === leadId ? 1 : 0));
   if (!agents.length) {
     // Nothing ships pre-added, so an empty rail is a real first run — not an
     // error. It has to lead somewhere rather than just being blank.
@@ -92,17 +88,16 @@ async function loadAgents() {
     return;
   }
   $("#agentList").innerHTML = agents.map((a) => {
-    const lead = a.id === leadId;
     return `
     <div class="agent ${a.id === current ? "active" : ""}" data-id="${a.id}"
          role="button" tabindex="0" aria-pressed="${a.id === current}"
-         aria-label="${esc(a.name)}${lead ? " (lead agent)" : ""} — ${esc(a.role)}">
+         aria-label="${esc(a.name)} — ${esc(a.role)}">
       <span class="orb" style="${orbStyle(agentOrbId(a))}"></span>
       <div class="a-meta">
-        <div class="n">${esc(a.name)}${lead ? ` <span class="lead-tag">Lead</span>` : ""}</div>
+        <div class="n">${esc(a.name)}</div>
         <div class="r">${esc(a.role)}</div>
       </div>
-      ${a.custom && !lead ? `<button type="button" class="del-agent" data-del-agent="${a.id}" aria-label="Delete agent ${esc(a.name)}">✕</button>`
+      ${a.custom ? `<button type="button" class="del-agent" data-del-agent="${a.id}" aria-label="Delete agent ${esc(a.name)}">✕</button>`
         : (a.id === current ? `<span class="dot"></span>` : "")}
     </div>`; }).join("");
   document.querySelectorAll(".agent").forEach((el) => {
@@ -173,7 +168,10 @@ window.addEventListener("keydown", (e) => {
   applyIcons();
   await loadProviders();
   loadAgents(); loadBrain(); loadTasks(); loadReminders(); loadRoutines();
-  updateBrainStatus(); maybeWelcome();
+  updateBrainStatus();
+  // No lead agent and nothing pre-added, so a new install has no agents at
+  // all — the library is how you get one, and it opens itself once.
+  libraryOnFirstRun();
   // poll the brain status often while it's building, and keep time-based panels fresh
   setInterval(updateBrainStatus, 5000);
   setInterval(() => { loadReminders(); loadRoutines(); }, 45000);

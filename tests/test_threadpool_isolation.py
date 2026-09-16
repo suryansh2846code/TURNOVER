@@ -125,7 +125,7 @@ def test_the_slow_routes_are_the_ones_on_a_lane():
     from lodestone.api.routes import agents, brain, connectors, providers
 
     must_be_offloaded = [
-        (agents, "chat"), (agents, "agent_welcome"), (agents, "create_lead_agent"),
+        (agents, "chat"),
         (brain, "brain_digest"), (brain, "brain_enrich"),
         (providers, "models_catalog"), (providers, "providers"),
         (providers, "refresh_provider_endpoint"), (providers, "auth_start_endpoint"),

@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 
 from ...agents import cancellation, list_agents, run_turn
 from ...agents.agent import AgentMemory
-from ...brain import get_brain
 from ...config import get_settings
 from ...log import get_logger
 from ..concurrency import calls_a_model, probes_a_provider
@@ -559,111 +558,7 @@ def clear(agent_id: str):
     return {"cleared": agent_id}
 
 
-class LeadIn(BaseModel):
-    name: str = "Atlas"
 
 
-@router.post("/api/agents/lead")
-@calls_a_model
-def create_lead_agent(body: LeadIn):
-    """Create the user's lead agent — head of the team + chief of staff —
-    with a system prompt personalised from the brain."""
-    from ...agents.custom import get_custom_store
-    brain = get_brain()
-    name = (body.name or "").strip() or "Atlas"
-    ctx = brain.recall(
-        "who the user is — their work, projects, interests, the people in "
-        "their life, and how they spend their time", limit=16).get("context", "")
-    persona = (ctx or "").strip()[:2600]
-    system = (
-        f"You are {name}, the user's lead agent — the head of their Lodestone team "
-        "and their personal chief of staff. You are their first point of contact and "
-        "you help with everything: you know their whole world from the shared brain, "
-        "you coordinate whichever specialist agents they have added from the Agent "
-        "Library, and you hand off or pull them in when useful — `ask_agent` names "
-        "the ones they actually have. Be warm, concise, and proactive; "
-        "when you don't know something, use your tools (search the brain, the web, "
-        "tasks, Gmail).\n\n"
-        + (f"WHAT YOU ALREADY KNOW ABOUT THE USER:\n{persona}\n" if persona else "")
-    )
-    # No hardcoded tool list. This one used to name eight tools with no
-    # connector access, which is how the user's own lead agent sat next to a
-    # connected Notion it could not read — the agent was built before Notion
-    # existed and nothing ever went back. `create` defaults to the same base
-    # every library agent gets, and the category keeps up on its own.
-    a = get_custom_store().create(name, "lead agent · chief of staff", system)
-    return {"id": a.id, "name": a.name, "role": a.role}
 
 
-def _fallback_welcome(name: str) -> str:
-    return (
-        f"Hi — I'm **{name}**, the lead of your Lodestone team. I know your world "
-        "from your brain and I'm your first stop for anything. Here's how to get "
-        "the most out of Lodestone:\n\n"
-        "- **Chat with me** for anything — I'll pull in the specialists (Inbox, "
-        "Launch, Research, Personal) when they fit. Switch agents in the left rail.\n"
-        "- **Your brain** (right panel) holds your memories and a knowledge graph. "
-        "Search it, click an entity for its facts, or *teach it* a new fact anytime.\n"
-        "- **Tasks & Automations** let me and the team act for you — capture to-dos "
-        "and set things to run on a trigger or schedule.\n"
-        "- **Connectors** keep your brain fresh — add more sources whenever you like; "
-        "everything stays on your Mac.\n\n"
-        "Ask me anything to get started — try *“what should I focus on today?”*"
-    )
-
-
-@router.post("/api/agents/{agent_id}/welcome")
-@calls_a_model
-def agent_welcome(agent_id: str, body: ChatIn | None = None):
-    """A one-time, personalised welcome from an agent that introduces itself and
-    teaches the app. Generated fresh (not persisted to chat history)."""
-    from ...agents.presets import get_agent
-    from ...agents.runtime import build_runtime_identity, format_runtime_context_prompt
-    from ...models.base import Message
-    from ...models.registry import get_provider
-    try:
-        agent = get_agent(agent_id)
-    except KeyError:
-        raise HTTPException(404, f"unknown agent '{agent_id}'") from None
-    s = get_settings()
-    p_name = (body.provider if body else None) or agent.model_provider or s.model_provider
-    m_name = (body.model if body else None) or agent.model_name
-    # Only fall back to settings.model_name when provider matches — prevents
-    # leaking e.g. an Ollama model name into Gemini.
-    if not m_name and (p_name == s.model_provider or not agent.model_provider):
-        m_name = s.model_name
-    provider = get_provider(p_name, m_name)
-    identity = build_runtime_identity(agent, provider)
-    try:
-        ready, _ = provider.is_ready()
-    except Exception:
-        ready = False
-    if not ready:
-        return {"reply": _fallback_welcome(agent.name), "runtime_identity": identity,
-                "provider": provider.name, "model": provider.model}
-    seed = (
-        "You are meeting the user for the very first time as their lead agent. "
-        "Write a warm welcome that: (1) greets them and introduces yourself in 1-2 "
-        "sentences using what you already know about them from the brain (be specific "
-        "but natural); (2) teaches them how to use Lodestone in short skimmable "
-        "bullet points — chatting with you and switching to the specialist agents "
-        "(Inbox, Launch, Research, Personal); the Brain panel (memories, the knowledge "
-        "graph, and teaching it new facts); Tasks and Automations; and connecting more "
-        "sources (all on-device). End by inviting them to ask you anything. Use Markdown."
-    )
-    runtime_prompt = format_runtime_context_prompt(identity)
-    try:
-        res = provider.chat([
-            Message(role="system", content=runtime_prompt),
-            Message(role="system", content=agent.system_message()),
-            Message(role="user", content=seed),
-        ], temperature=0.5, max_tokens=700)
-        return {
-            "reply": (res.text or "").strip() or _fallback_welcome(agent.name),
-            "runtime_identity": identity,
-            "provider": provider.name,
-            "model": provider.model,
-        }
-    except Exception:
-        return {"reply": _fallback_welcome(agent.name), "runtime_identity": identity,
-                "provider": provider.name, "model": provider.model}

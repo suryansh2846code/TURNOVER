@@ -1,12 +1,12 @@
 /**
  * Does the Agent Library open on first entry, and only on first entry?
  *
- * Nothing is pre-added any more, so a workspace holding one lead agent and no
- * way to find the rest is a dead end. This executes the real first-run path —
- * naming a lead agent, and skipping one — and reports whether the library
- * opened, and whether it opens again on a second launch.
+ * Nothing is pre-added and there is no lead agent, so a new install has NO
+ * agents at all — the library is the only way to get one. It used to be opened
+ * by the "name your lead agent" card; that card is gone, so this executes the
+ * boot path instead.
  *
- * argv: <a path inside lodestone/web/>   stdin: {path: "create" | "skip", seen: bool}
+ * argv: <a path inside lodestone/web/>   stdin: {onboarded: bool, seen: bool}
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -14,7 +14,7 @@ import path from "node:path";
 import { appSource } from "./_app_source.mjs";
 
 const APP_JS = process.argv[2];
-const { path: which, seen } = JSON.parse(fs.readFileSync(0, "utf8"));
+const { onboarded, seen } = JSON.parse(fs.readFileSync(0, "utf8"));
 
 const makeEl = () => {
   const node = {
@@ -45,7 +45,8 @@ globalThis.document = {
 };
 globalThis.window = { location: { pathname: "/", href: "/" }, addEventListener() {},
   matchMedia: () => ({ matches: false, addEventListener() {} }), open() {} };
-const store = { lodestone_onboarded: "1" };
+const store = {};
+if (onboarded) store.lodestone_onboarded = "1";
 if (seen) store.lodestone_saw_library = "1";
 globalThis.localStorage = {
   getItem: (k) => (k in store ? store[k] : null),
@@ -64,25 +65,27 @@ const FIXTURES = [
   [/\/api\/agents\/[^/]+\/model/, { provider: null, model: null }],
   [/\/api\/agents/, { agents: [] }],
 ];
+/** Boot touches a dozen endpoints. A fixture thin enough to throw would abort
+ *  the very sequence under test, so the default is permissive rather than {}. */
+const DEFAULT = {
+  agents: [], tools: [], categories: [], templates: [], entities: [],
+  tasks: [], reminders: [], routines: [], providers: [], connectors: [],
+  history: [], results: [], onboarded: true, total: 0,
+  stats: { today: 0, overdue: 0, total: 0 },
+  graph: { entities: 0, relations: 0 },
+};
 globalThis.fetch = async (p) => {
   const url = String(p);
   const hit = FIXTURES.find(([re]) => re.test(url));
-  return { ok: true, json: async () => (hit ? hit[1] : {}) };
+  return { ok: true, json: async () => (hit ? { ...DEFAULT, ...hit[1] } : DEFAULT) };
 };
 
-new Function(appSource(path.dirname(APP_JS)) +
-  "\nglobalThis.__createLead = createLead;" +
-  "\nglobalThis.__maybeWelcome = maybeWelcome;")();
-
+// Evaluating the app RUNS its boot sequence — which is the thing under test,
+// so it is not called a second time here. Boot is async, hence the settle.
 let error = null;
 try {
-  if (which === "create") {
-    await globalThis.__createLead("Atlas");
-  } else {
-    await globalThis.__maybeWelcome();
-    const skip = el("#wSkip");
-    if (skip.onclick) await skip.onclick();
-  }
+  new Function(appSource(path.dirname(APP_JS)))();
+  await new Promise((r) => setTimeout(r, 60));
 } catch (e) {
   error = `${e.constructor.name}: ${e.message}`;
 }
@@ -93,7 +96,8 @@ console.log(JSON.stringify({
   sawFlag: store.lodestone_saw_library || null,
   // `createLead` catches its own failures, so a silent abort looks identical
   // to "the library did not open". These say which happened.
-  createButton: el("#wCreate").textContent,
-  note: el("#wNote").textContent,
-  leadStored: store.lodestone_lead_agent || null,
+  agentsEmptyState: el("#agentList").innerHTML.includes("Agent Library"),
 }, null, 2));
+
+// Boot installs polling intervals that would keep this process alive forever.
+process.exit(0);

@@ -1,12 +1,12 @@
 """After onboarding, the Agent Library is the screen you land on.
 
-Nothing is pre-added any more, so a workspace holding one lead agent and no way
-to find the rest is a dead end. Naming the lead agent is the last step of
-onboarding; the library is what follows it.
+Nothing is pre-added and there is no lead agent any more, so a new install has
+NO agents at all — the library is not a nicety here, it is the only way to get
+one. The rail says so whenever it is empty, and points there.
 
-Executed rather than asserted from source: `createLead` catches its own
-failures, so a silent abort partway through looks exactly like "the library did
-not open" — which is what happened the first two times this ran.
+Executed rather than asserted from source: evaluating the app runs its real boot
+sequence, which is the thing under test. An earlier version of this file drove
+the "name your lead agent" card instead, and that card is gone.
 """
 import json
 import subprocess
@@ -18,43 +18,50 @@ ROOT = Path(__file__).parent.parent
 WEB = ROOT / "lodestone/web"
 
 
-def _run(which: str, seen: bool) -> dict:
+def _boot(onboarded: bool, seen: bool) -> dict:
     proc = subprocess.run(
         ["node", str(ROOT / "tests/js/first_run_library.mjs"), str(WEB / "app.js")],
-        input=json.dumps({"path": which, "seen": seen}),
+        input=json.dumps({"onboarded": onboarded, "seen": seen}),
         capture_output=True, text=True, timeout=60)
     assert proc.stdout, proc.stderr[-2000:]
     return json.loads(proc.stdout)
 
 
-@pytest.mark.parametrize("which", ["create", "skip"])
-def test_the_library_opens_on_first_entry(which):
-    out = _run(which, seen=False)
+def test_the_library_opens_on_first_entry():
+    out = _boot(onboarded=True, seen=False)
     assert out["error"] is None, out["error"]
-    assert out["libraryOpen"] is True, (
-        f"the library did not open after {which}; note was {out['note']!r}")
+    assert out["libraryOpen"] is True, "there is no other way to get an agent"
 
 
-@pytest.mark.parametrize("which", ["create", "skip"])
-def test_it_does_not_open_again_on_a_later_launch(which):
-    out = _run(which, seen=True)
+def test_it_does_not_open_again_on_a_later_launch():
+    out = _boot(onboarded=True, seen=True)
     assert out["error"] is None
     assert out["libraryOpen"] is False, "the library reopens on every launch"
 
 
-def test_naming_a_lead_agent_still_works():
-    """The library must not be reached by breaking the step before it."""
-    out = _run("create", seen=False)
-    assert out["leadStored"] == "atlas"
-    assert "Couldn't create" not in out["note"], out["note"]
+def test_it_does_not_open_over_the_top_of_onboarding():
+    """Somebody who has not onboarded is being redirected to it."""
+    out = _boot(onboarded=False, seen=False)
+    assert out["libraryOpen"] is False
 
 
-def test_the_library_does_not_wait_on_the_agents_welcome():
-    """The welcome streams a model reply. A first screen that only appears when
-    a model call succeeds is a first screen that sometimes does not appear."""
-    source = (WEB / "workspace.js").read_text()
-    body = source[source.index("async function createLead"):]
-    body = body[:body.index("\n}")]
-    assert body.index("libraryOnFirstRun()") < body.index("agentWelcome("), (
-        "the library is opened after the streamed welcome, so a failed model "
-        "call would leave the user on an empty rail")
+def test_an_empty_rail_explains_itself():
+    """Zero agents is a real first run, not an error — it has to lead
+    somewhere rather than being blank."""
+    out = _boot(onboarded=True, seen=True)
+    assert out["agentsEmptyState"] is True
+
+
+@pytest.mark.parametrize("gone", ["createLead", "maybeWelcome", "agentWelcome",
+                                  "lodestone_lead_agent"])
+def test_the_lead_agent_flow_is_gone_from_the_frontend(gone):
+    """It was a second definition of Chief of Staff. Leaving half of it behind
+    is how a dead path gets called again by accident."""
+    for name in ("workspace.js", "app.js", "chat.js"):
+        assert gone not in (WEB / name).read_text(), f"{gone} survives in {name}"
+
+
+def test_the_welcome_card_markup_is_gone():
+    html = (WEB / "index.html").read_text()
+    for gone in ("wName", "wCreate", "wSkip", "Meet your"):
+        assert gone not in html, f"{gone} is still in index.html"

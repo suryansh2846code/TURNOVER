@@ -515,7 +515,7 @@
     if(didReset)return;didReset=true;
     if(REPLAY){await refreshConnectors();return;}   // replay: keep the brain & creds
     // truly new-user: wipe brain + credentials server-side AND clear local prefs
-    try{["lodestone_onboarded","lodestone_lead_agent","lodestone_provider","lodestone_model"]
+    try{["lodestone_onboarded","lodestone_saw_library","lodestone_provider","lodestone_model"]
       .forEach(function(k){localStorage.removeItem(k);});}catch(e){}
     try{await api("/api/onboarded",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({value:false})});}catch(e){}
     try{await api("/api/brain/reset",{method:"POST",headers:{"Content-Type":"application/json"},

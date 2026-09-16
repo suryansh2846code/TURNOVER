@@ -103,7 +103,7 @@ def test_run_turn_injects_authoritative_runtime_context(monkeypatch):
     assert d["runtime_identity"]["agent_id"] == "inbox"
 
 
-def test_api_chat_and_welcome_include_runtime_identity(monkeypatch):
+def test_api_chat_includes_runtime_identity(monkeypatch):
     client = TestClient(app)
 
     # 1. Chat endpoint
@@ -119,14 +119,5 @@ def test_api_chat_and_welcome_include_runtime_identity(monkeypatch):
     assert data["runtime_identity"]["application"] == "Lodestone"
     assert data["runtime_identity"]["model"] == "mock-test-model"
 
-    # 2. Welcome endpoint
-    resp = client.post("/api/agents/personal/welcome", json={
-        "message": "welcome",
-        "provider": "mock",
-        "model": "mock-welcome-model",
-    })
-    assert resp.status_code == 200
-    wdata = resp.json()
-    assert "runtime_identity" in wdata
-    assert wdata["runtime_identity"]["agent_id"] == "personal"
-    assert wdata["runtime_identity"]["model"] == "mock-welcome-model"
+    # The welcome endpoint used to be checked here too. It existed to deliver
+    # the lead agent's one-time introduction and went with it.
