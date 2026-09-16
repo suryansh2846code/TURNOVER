@@ -582,7 +582,48 @@ those 93 functions.
 
 ---
 
-## A12 — `scheduler.py` runs unattended on every machine at 30% coverage
+## A12 — ~~`scheduler.py` runs unattended on every machine at 30% coverage~~ · **CLOSED**
+
+> **Closed 2026-09-16.** `tests/test_scheduler_loop.py` — 27 tests, no real
+> clock and no real connector, the whole file under a second. Coverage of
+> `scheduler.py` from that file alone: **30% → 72%**; the remainder is the
+> files/MCP/custom-app loops, which `tests/connectors/` already drives.
+>
+> ```bash
+> pytest --cov=lodestone.scheduler --cov-report=term-missing tests/test_scheduler_loop.py
+> ```
+>
+> The suite is driven rather than waited on: `DrivenStop` answers `wait()` from
+> a script instead of a timer, which is what makes the 20-second settle and the
+> 60-second tick testable at all. That they were not is most of how 99 unattended
+> lines reached 30%.
+>
+> **One real defect, found by writing the test and watched red before it was
+> fixed.** `_stop` was a single `threading.Event` for the life of the process, so
+> `stop()` set it permanently: the next `start()` spawned a thread that returned
+> immediately from its first wait. `running` read `True`, the UI showed a healthy
+> scheduler, and nothing ever synced again — the failure mode this entry is about,
+> sitting in the lifecycle itself. It bites on a `--dev` reload and after the
+> shutdown hook in `api/app.py`. Each thread now carries the token it was started
+> with, which also rules out the obvious wrong fix: clearing the shared event
+> would have revived a previous thread still inside its 60-second wait, leaving
+> two loops on one timer.
+>
+> **Two other suspicions were investigated and are not defects**, recorded so
+> nobody re-opens them:
+>
+> * `last_run` advancing after a pass where every connector failed is *not* a
+>   scheduler bug — the per-connector errors are in `last_result`, which
+>   `/api/sync/status` already returns. Nothing consumes them: `web/brain.js`
+>   renders `last_run` alone, so the UI says "Last synced 12:34" after a sweep
+>   that synced nothing. **That is a frontend gap, not this one**, and it is worth
+>   fixing where the roadmap's sync-feedback work lands.
+> * `routines.sweep()` being called from both `_fire_reminders` and the end of
+>   `_sync_all` is redundant but harmless: schedule routines are interval-gated on
+>   their own `last_run`, and `new_email` routines need a non-zero count, which
+>   only the `_sync_all` call passes.
+
+### Original finding
 
 The background sync loop is the least-protected code in the repository, and it
 is code no user ever watches run.
@@ -608,6 +649,8 @@ and two scheduler instances never running at once after a reload.
 
 **Severity: medium** (silent, unattended, user-visible only long after the fact)
 · **Owner: Connectors + API** · **Cost: medium**
+
+*Closed as prescribed — a fake connector and a driven clock; see above.*
 
 > Found while measuring coverage during the complexity-reduction pass, not while
 > working on the scheduler. Recorded rather than fixed because it is a testing
