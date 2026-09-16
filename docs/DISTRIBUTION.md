@@ -42,7 +42,7 @@ download:
 | | size |
 |---|---|
 | `Lodestone.app` (torch excluded) | **189 MB** |
-| `Lodestone-0.1.0.dmg` (compressed) | **74 MB** |
+| `Lodestone-0.1.0-arm64.dmg` (compressed) | **75 MB** |
 | the same bundle with torch | ~2 GB |
 
 A user who wants local embeddings installs the extra into a source checkout.
@@ -59,9 +59,18 @@ bundle. One pass over the `.app` leaves the nested binaries unsigned and Apple
 rejects the entire upload for any one of them.
 
 **3. Notarise.** Without a ticket, Gatekeeper tells the user the app *"cannot be
-opened because Apple cannot check it for malicious software"*, and the only way
-through is right-click → Open. For this product that is not a minor rough edge —
-it is precisely the instruction `CLAUDE.md` says never to give:
+opened because Apple cannot check it for malicious software"*.
+
+> **The way through changed, and got worse.** It used to be right-click → Open.
+> **Apple removed that bypass in macOS 15**, so on any current Mac the only
+> route is: open the app and let it be blocked, then go to
+> **System Settings → Privacy & Security**, scroll to the "Lodestone was
+> blocked" line, click **Open Anyway**, and open the app again. Anything still
+> telling a tester to right-click strands them on a dialog whose only button is
+> *Done*. This file and `scripts/build-dmg.sh` both said it until 2026-09-16.
+
+For this product that is not a minor rough edge — it is precisely the
+instruction `CLAUDE.md` says never to give:
 
 > **Never ask the user to open a terminal.** … If a path cannot succeed, say
 > why, in the place the user is looking.
@@ -88,9 +97,19 @@ ID password.
 
 ```bash
 uv pip install pyinstaller
+./.venv/bin/python packaging/make-icon.py   # once, or after changing the art
 ./scripts/build-dmg.sh              # signed + notarised + stapled
 ./scripts/build-dmg.sh --unsigned   # a real .dmg, but Gatekeeper will warn
 ```
+
+The output is named for the architecture it was built on —
+`Lodestone-0.1.0-arm64.dmg` — because that is the only machine it runs on and
+two identically-named images on a download page is not a mistake you can take
+back.
+
+An `--unsigned` image also carries a **READ ME FIRST.txt** next to the app, with
+the Open Anyway steps. The dialog is unavoidable without a certificate; meeting
+it with no explanation is not.
 
 The script preflights everything it needs and tells you exactly which command
 fixes what is missing, rather than failing halfway through a five-minute build.
@@ -116,13 +135,19 @@ them — they only appear on someone else's Mac.
 System Settings → Privacy & Security. This cannot be requested by a prompt; the
 user has to do it by hand.
 
-Which means it has to be *handled*, per the product rule: those two connectors
-should detect the refusal and say "macOS is blocking access to your Messages —
-open System Settings → Privacy & Security → Full Disk Access and add Lodestone",
-with a button that opens that pane
-(`x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles`).
-**This is not built yet** and is the largest gap between "the `.dmg` builds" and
-"the `.dmg` works for a stranger".
+**Built, as of 2026-09-16.** `connectors/permissions.py` owns the sentence and
+the pane URL; Messages, Apple Mail and Apple Calendar all raise it and set
+`fix = "full_disk_access"`, which `/api/connectors` passes through so the row can
+render an **Open Settings** button. Previously all three told the user to grant
+access to *"your terminal/app"* — a thing a shipped `.app` does not have.
+
+The pane is opened by `desktop.py::_AppBridge.open_privacy_settings`, **not** by
+`/api/open-browser`. That endpoint accepts `http(s)` only, deliberately, because
+handing the system opener an arbitrary scheme reaches any URL handler any
+installed app registered. The bridge method takes **no argument** — the URL is a
+module constant — so the guard did not have to move. The button is withheld in a
+browser tab, where there is no bridge behind it; the sentence still says where
+to go by hand.
 
 **Automation / Apple Events** — anything driving Notes or Calendar through
 AppleScript triggers a consent prompt, which needs
@@ -132,9 +157,11 @@ Lodestone does with the data and that it stays on the machine.
 
 ## Known gaps
 
-* **Architecture.** This builds for the machine it runs on — arm64 here. Intel
-  Macs need a separate build, or a universal2 Python to build a fat binary from.
-  Decide whether Intel is supported before publishing a download link.
+* **Architecture — decided: Apple Silicon only.** This builds for the machine it
+  runs on. Intel is **not supported** and there is no plan to add it; a
+  universal2 build is not worth carrying for it. The image is named
+  `…-arm64.dmg` and `READ ME FIRST.txt` says so, because the failure on an Intel
+  Mac is otherwise indistinguishable from a broken download.
 * **Updates.** A `.dmg` has no update mechanism. Every new version is a fresh
   download unless something like Sparkle is added. Worth deciding early: the
   in-app "check for updates" affordance is much easier to add before there are
@@ -145,14 +172,39 @@ Lodestone does with the data and that it stays on the machine.
   non-confidential — the security is PKCE plus the loopback redirect). Shipping
   it in a public download is a larger audience than shipping it in a repo, so
   re-confirm that decision before publishing, and know how to rotate it.
-* **Icon.** `packaging/icon.icns` is not present, so the bundle gets the generic
-  application icon. Add one before anyone sees this.
+* ~~**Icon.**~~ **Closed 2026-09-16.** `packaging/make-icon.py` draws
+  `icon.icns` from the tokens in `docs/DESIGN-BRIEF.md` — night sky, the
+  sidebar's diamond mark, one gold pole star — with the detail dropping in tiers
+  so 16px stays a readable silhouette rather than a grey blob.
+
+  The icon had in fact *never* shipped: the spec tested
+  `Path("packaging/icon.icns")` while PyInstaller runs from inside `packaging/`,
+  so it looked for `packaging/packaging/icon.icns` and silently fell back to
+  PyInstaller's generic `icon-windowed.icns`. Adding artwork alone would have
+  changed nothing. The spec is now anchored on `SPECPATH`, and `build-dmg.sh`
+  asserts `CFBundleIconFile` on the built plist — the failure looked exactly
+  like success, so it needed a check rather than a fix.
 
 ## What was verified, and what was not
 
-Built and run on this machine: the bundle, the smoke test, and the unsigned
-`.dmg` — 189 MB app, 74 MB image, the app launches, serves its API and answers
-`/api/sync/status`.
+Built and run on this machine (re-verified 2026-09-16): the bundle, the smoke
+test, and the unsigned `.dmg` — 189 MB app, 75 MB image, the app launches,
+serves its API and answers `/api/sync/status`. Also checked on the built
+artefact rather than assumed:
+
+```bash
+/usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" dist/Lodestone.app/Contents/Info.plist
+# icon.icns          (was icon-windowed.icns — PyInstaller's generic default)
+codesign --verify --deep --strict dist/Lodestone.app
+# valid on disk · satisfies its Designated Requirement
+```
+
+That second one now runs inside `--unsigned` builds too. PyInstaller ad-hoc
+signs on Apple Silicon, and a *broken* ad-hoc signature does not produce the
+"unverified developer" dialog — it produces **"Lodestone is damaged and can't be
+opened"**, which no Open Anyway sequence rescues. Skipping the signing block
+used to skip this check with it, so the build could not tell "will warn" from
+"will not open".
 
 **Not verified: signing, notarisation and stapling.** No Developer ID
 certificate exists on this machine (`security find-identity -v -p codesigning`

@@ -32,8 +32,13 @@ def connectors():
             continue                      # hide macOS-only connectors off macOS
         inst = cls()
         ready, reason = inst.is_configured()
+        # `fix` is additive and usually None. It names a refusal the user can
+        # clear themselves — read straight after `is_configured()`, which is
+        # when the connector sets it — so the card can offer the button instead
+        # of only describing the problem.
         out.append({"name": name, "label": cls.label, "ready": ready,
-                    "reason": reason, "always_available": cls.always_available,
+                    "reason": reason, "fix": inst.fix,
+                    "always_available": cls.always_available,
                     "secret_field": cls.secret_field, "custom": False,
                     "state": state.get(name)})
     # user-defined custom API apps

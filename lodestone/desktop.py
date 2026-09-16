@@ -7,8 +7,10 @@ same entry point.
 from __future__ import annotations
 
 import socket
+import sys
 import threading
 import time
+from pathlib import Path
 
 from .log import suppressed
 
@@ -59,6 +61,83 @@ def _reserve_port(host: str) -> tuple[int, socket.socket]:
         pf.parent.mkdir(parents=True, exist_ok=True)
         pf.write_text(str(port))
     return port, sock
+
+
+#: Shown as the alert's bold first line when the server never came up.
+LAUNCH_FAILURE_TITLE = "Lodestone could not start"
+
+
+def _log_path() -> Path:
+    from .config import get_settings
+
+    return get_settings().home / "logs" / "lodestone.log"
+
+
+def launch_failure_message(log_path: Path) -> str:
+    """What the user reads when the server did not come up.
+
+    It has one job: leave them with something to *do*. "Failed to start" on its
+    own is the same dead end as saying nothing, only louder.
+    """
+    return (
+        "The Lodestone server did not start, so there is nothing to show yet.\n\n"
+        "This is usually temporary — try opening Lodestone again. If it keeps "
+        "happening, the log below records what went wrong:\n\n"
+        f"{log_path}"
+    )
+
+
+def _show_launch_failure_alert(log_path: Path) -> None:  # pragma: no cover - needs AppKit
+    """The native half of `report_launch_failure`.
+
+    Unlike the sign-in card, this one *does* activate the app
+    (`activateIgnoringOtherApps_`). The card deliberately does not, because it
+    appears while the user is working in another app and stealing focus there is
+    rude — see docs/DESKTOP-SIGNIN.md. This is the opposite situation: the user
+    just double-clicked the icon and is waiting for a window. An alert that
+    opens behind whatever they had in front is the same silence with extra
+    steps.
+
+    `run_app` is still on the main thread here and the GUI loop has not started,
+    so this is the one Cocoa call in this module that must NOT go through
+    `AppHelper.callAfter` — there is no run loop yet for it to be delivered to.
+    """
+    import AppKit
+
+    app = AppKit.NSApplication.sharedApplication()
+    app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyRegular)
+
+    alert = AppKit.NSAlert.alloc().init()
+    alert.setAlertStyle_(AppKit.NSAlertStyleCritical)
+    alert.setMessageText_(LAUNCH_FAILURE_TITLE)
+    alert.setInformativeText_(launch_failure_message(log_path))
+    alert.addButtonWithTitle_("Show Log")
+    alert.addButtonWithTitle_("Quit")
+
+    app.activateIgnoringOtherApps_(True)
+    if alert.runModal() == AppKit.NSAlertFirstButtonReturn:
+        AppKit.NSWorkspace.sharedWorkspace().selectFile_inFileViewerRootedAtPath_(
+            str(log_path), "")
+
+
+def report_launch_failure() -> None:
+    """Say the server never started, somewhere the user will actually see it.
+
+    `print()` was the entire report here, and a bundled `.app` is not launched
+    from a shell: stdout goes nowhere. The user double-clicked the icon and
+    *nothing happened* — no window, no dialog, not even a dock bounce. It reads
+    as a broken app, and it leaves neither them nor us anything to act on.
+
+    A source checkout keeps the print, because there is a terminal and that is
+    where everything else already went. A frozen bundle gets a real alert.
+    """
+    print("Lodestone server failed to start.")
+    if not getattr(sys, "frozen", False):
+        return
+    # An alert that itself explodes must not replace one silent failure with
+    # another, so the path is best-effort and the print above always happens.
+    with suppressed("showing the launch-failure alert"):
+        _show_launch_failure_alert(_log_path())
 
 
 def _install_edit_menu_now() -> None:
@@ -154,8 +233,6 @@ def run_app(dev: bool = False) -> None:
         # Run the backend as a uvicorn subprocess with --reload so Python edits
         # hot-reload — then Cmd+R in the window picks up frontend + backend both.
         import subprocess
-        import sys
-        from pathlib import Path
         sock.close()             # the reloader subprocess binds it itself
         pkg = str(Path(__file__).resolve().parent)
         proc = subprocess.Popen(
@@ -174,9 +251,9 @@ def run_app(dev: bool = False) -> None:
         threading.Thread(target=lambda: server.run(sockets=[sock]), daemon=True).start()
 
     if not _wait_for_port(host, port, timeout=30.0 if dev else 15.0):
-        print("Lodestone server failed to start.")
         if proc:
             proc.terminate()
+        report_launch_failure()
         return
 
     from . import hud
@@ -194,6 +271,28 @@ def run_app(dev: bool = False) -> None:
 
         def close_signin_hud(self) -> None:
             hud.close()
+
+        def open_privacy_settings(self) -> bool:
+            """Open System Settings at Full Disk Access.
+
+            Here rather than behind an endpoint on purpose. `/api/open-browser`
+            accepts `http(s)` only — handing the system opener an arbitrary
+            scheme would let any page reach any URL handler an installed app
+            registered — and that guard is right. This takes **no argument**:
+            the URL is a module constant, so there is nothing for a caller to
+            redirect and nothing to widen.
+
+            `/usr/bin/open` rather than AppKit: pywebview runs `js_api` calls on
+            a worker thread, and this way the question of which Cocoa calls are
+            safe off the main thread does not arise at all.
+            """
+            import subprocess
+
+            from .connectors.permissions import FULL_DISK_ACCESS_PANE
+            with suppressed("opening the Full Disk Access pane"):
+                subprocess.run(["/usr/bin/open", FULL_DISK_ACCESS_PANE], check=True)
+                return True
+            return False
 
     window = webview.create_window(
         "Lodestone" + (" (dev)" if dev else ""),

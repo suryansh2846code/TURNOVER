@@ -25,13 +25,20 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 BLOCK_CIPHER = None
 
+# This spec's own directory. PyInstaller injects SPECPATH; every path below is
+# anchored on it rather than on the working directory, because `build-dmg.sh`
+# invokes PyInstaller from inside `packaging/` — and a cwd-relative path here is
+# exactly how the icon silently stopped shipping for the whole life of the spec.
+HERE = pathlib.Path(SPECPATH)  # noqa: F821 — injected by PyInstaller
+ICON = HERE / "icon.icns"
+
 # One source of truth for the version. It was hardcoded here as 0.2.0 while
 # pyproject.toml said 0.1.0 and the shim bundle's Info.plist said 0.2.0 — three
 # numbers for one build, which is how a user reports a version that never
 # existed.
 VERSION = re.search(
     r'^version = "([^"]+)"',
-    pathlib.Path("../pyproject.toml").read_text(), re.M).group(1)
+    (HERE.parent / "pyproject.toml").read_text(), re.M).group(1)
 
 # Imported lazily inside functions, so the analyser cannot find them.
 HIDDEN = [
@@ -49,8 +56,8 @@ HIDDEN += collect_submodules("lodestone")
 # Everything the server serves. `lodestone/web` is read from disk at runtime by
 # `api/assets.py::WEB`, so it has to travel with the bundle.
 DATAS = [
-    ("../lodestone/web", "lodestone/web"),
-    ("../lodestone/data", "lodestone/data"),
+    (str(HERE.parent / "lodestone" / "web"), "lodestone/web"),
+    (str(HERE.parent / "lodestone" / "data"), "lodestone/data"),
 ]
 DATAS += collect_data_files("ddgs", include_py_files=False)
 
@@ -62,8 +69,8 @@ EXCLUDED = [
 ]
 
 a = Analysis(
-    ["launcher.py"],
-    pathex=[".."],
+    [str(HERE / "launcher.py")],
+    pathex=[str(HERE.parent)],
     binaries=[],
     datas=DATAS,
     hiddenimports=HIDDEN,
@@ -97,7 +104,13 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="Lodestone.app",
-    icon="icon.icns" if __import__("pathlib").Path("packaging/icon.icns").exists() else None,
+    # `build-dmg.sh` runs PyInstaller from inside `packaging/`, so this test is
+    # relative to THIS directory — it read `packaging/icon.icns` and therefore
+    # looked for `packaging/packaging/icon.icns`, which never exists. The value
+    # was right and only the test was wrong, so the bundle silently shipped
+    # PyInstaller's generic `icon-windowed.icns` and adding the artwork changed
+    # nothing. `build-dmg.sh` now asserts the built plist to keep it honest.
+    icon=str(ICON) if ICON.exists() else None,
     bundle_identifier="ai.lodestone.app",
     version=VERSION,
     info_plist={

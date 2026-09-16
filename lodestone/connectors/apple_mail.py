@@ -13,6 +13,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
+from . import permissions
 from .base import Connector, SyncResult
 from .gmail import html_to_text
 
@@ -97,10 +98,11 @@ class AppleMailConnector(Connector):
             return False, "no Apple Mail data (add an account in the Mail app)"
         try:
             next(dirs[0].rglob("*.emlx"), None)
+            self.fix = None
             return True, ""
         except PermissionError:
-            return False, ("grant Full Disk Access to Lodestone/your terminal "
-                           "(System Settings → Privacy & Security → Full Disk Access)")
+            self.fix = permissions.FULL_DISK_ACCESS
+            return False, permissions.full_disk_access_reason("Apple Mail")
 
     def sync(self, *, max_messages: int = 800, since: str | None = None,
              limit: int | None = None, full_history: bool = False,

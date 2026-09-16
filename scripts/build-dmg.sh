@@ -18,8 +18,11 @@
 #   3. Notarise    Apple scans the upload and issues a ticket. Without one,
 #                  Gatekeeper tells the user the app "cannot be opened because
 #                  Apple cannot check it for malicious software", and the only
-#                  way past is right-click → Open — which is exactly the kind of
+#                  way past is a trip through System Settings → Privacy &
+#                  Security → Open Anyway — which is exactly the kind of
 #                  instruction this product refuses to give (see CLAUDE.md).
+#                  (It used to be right-click → Open. Apple removed that bypass
+#                  in macOS 15, so the workaround got *worse*, not better.)
 #   4. Staple      Attaches the ticket to the .dmg so first launch works with no
 #                  network. Skipping it means an offline user is blocked.
 #
@@ -31,8 +34,9 @@
 #         --apple-id you@example.com --team-id TEAMID --password <app-specific-password>
 #
 # Without those, run with --unsigned to get a .dmg you can install yourself and
-# hand to people who are willing to right-click → Open. It is a real build; it
-# is just not something a non-technical user can install.
+# hand to testers who are willing to walk through System Settings once. It is a
+# real build; it is just not something a non-technical user can install. The
+# image carries a READ ME FIRST.txt with the steps.
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,7 +46,12 @@ APP_NAME="Lodestone"
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
 DIST="$PROJECT_DIR/dist"
 APP="$DIST/$APP_NAME.app"
-DMG="$DIST/$APP_NAME-$VERSION.dmg"
+# The architecture is in the filename because this build is whatever machine
+# made it (arm64 here) and an Intel Mac cannot run it at all. Two files named
+# `Lodestone-0.1.0.dmg` on a download page is a support problem you cannot undo
+# after the fact, so the name carries the answer from the first release.
+ARCH="$(uname -m)"
+DMG="$DIST/$APP_NAME-$VERSION-$ARCH.dmg"
 STAGE="$DIST/dmg-stage"
 
 SIGN_IDENTITY="${LODESTONE_SIGN_IDENTITY:-Developer ID Application}"
@@ -90,6 +99,24 @@ rm -rf "$APP" "$DIST/$APP_NAME" "$STAGE" "$DMG"
 [ -d "$APP" ] || die "PyInstaller produced no $APP_NAME.app"
 echo "  size: $(du -sh "$APP" | cut -f1)"
 
+# The spec's icon test was cwd-relative while PyInstaller runs from packaging/,
+# so for the whole life of this script the bundle shipped PyInstaller's generic
+# `icon-windowed.icns` and adding real artwork changed nothing visible. Assert
+# the built plist rather than trusting the spec, because the failure looked
+# exactly like success.
+if [ -f packaging/icon.icns ]; then
+  ICON_KEY="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" \
+              "$APP/Contents/Info.plist" 2>/dev/null || echo "")"
+  case "$ICON_KEY" in
+    icon-windowed*|"") die "the bundle did not pick up packaging/icon.icns \
+(CFBundleIconFile=${ICON_KEY:-unset}) — the spec's icon path is wrong again" ;;
+    *) echo "  icon: $ICON_KEY ✓" ;;
+  esac
+else
+  echo "  ! packaging/icon.icns is missing — the app will wear the generic icon."
+  echo "    Generate it with:  ./.venv/bin/python packaging/make-icon.py"
+fi
+
 # The bundle is only useful if it actually starts. A build that produces a
 # launchable-looking .app which dies on a missing hidden import is the failure
 # mode this catches, and it costs fifteen seconds.
@@ -124,6 +151,18 @@ if [ "$UNSIGNED" = "0" ]; then
     --entitlements packaging/entitlements.plist \
     --sign "$SIGN_IDENTITY" "$APP"
   codesign --verify --deep --strict --verbose=2 "$APP"
+else
+  # PyInstaller ad-hoc signs the bundle on Apple Silicon, and an ad-hoc
+  # signature that is broken or incomplete does NOT produce the "unverified
+  # developer" dialog — it produces "Lodestone is damaged and can't be opened",
+  # which no Open Anyway sequence rescues and which reads to the user as a
+  # corrupt download. Skipping the whole signing block used to skip this check
+  # with it, so the build could not tell "will warn" from "will not open".
+  step "Verifying the ad-hoc signature (unsigned build)"
+  codesign --verify --deep --strict --verbose=2 "$APP" \
+    || die "the bundle's ad-hoc signature is broken — macOS will call this
+    .app damaged rather than merely unverified, and no user can get past that.
+    Rebuild, and if it persists check for a stale dist/ or a quarantined file."
 fi
 
 # ── 3. Disk image ───────────────────────────────────────────────────────────
@@ -131,6 +170,48 @@ step "Building $(basename "$DMG")"
 mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"    # the drag-to-install gesture
+
+# An unsigned build cannot avoid Gatekeeper's dialog, but it can avoid the user
+# meeting it uninformed. Without this the image is an app and a symlink, and the
+# first thing that happens after the drag is a warning about malware with no
+# context and a single "Done" button.
+if [ "$UNSIGNED" = "1" ]; then
+  cat > "$STAGE/READ ME FIRST.txt" <<'README'
+Opening Lodestone the first time
+================================
+
+Lodestone is not yet signed with an Apple Developer certificate, so the first
+time you open it macOS will say it "cannot be opened because Apple cannot check
+it for malicious software". That is macOS telling you it does not recognise the
+developer — it is not a virus warning, and it happens to every app distributed
+outside the App Store without a paid certificate.
+
+Here is how to open it. It only has to be done once.
+
+  1. Drag Lodestone to the Applications folder in this window.
+  2. Open Applications and double-click Lodestone. You will see the warning.
+     Click Done.
+  3. Open System Settings -> Privacy & Security.
+  4. Scroll down. There is a line saying "Lodestone was blocked", with an
+     "Open Anyway" button next to it. Click it.
+  5. Double-click Lodestone again and click Open.
+
+From then on it opens normally, like any other app.
+
+Note: older instructions on the internet say to right-click the app and choose
+Open. Apple removed that shortcut in macOS 15, so on any recent Mac the steps
+above are the ones that work.
+
+Requirements
+------------
+  * An Apple Silicon Mac (M1, M2, M3, M4 or later). Intel Macs are not
+    supported.
+  * macOS 11 or later.
+
+Everything Lodestone stores stays on this Mac, in your Library folder. It does
+not upload your data anywhere.
+README
+fi
 hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO -quiet "$DMG"
 rm -rf "$STAGE"
 
@@ -159,9 +240,18 @@ if [ "$UNSIGNED" = "1" ]; then
 
   ! This build is UNSIGNED and NOT notarised.
 
-    Gatekeeper will tell anyone who downloads it that the app cannot be checked
-    for malicious software, and the only way past is right-click → Open. Fine
-    for you and for a handful of testers you can talk to; not something to put
-    on a download page.
+    Gatekeeper will tell anyone who opens it that the app cannot be checked for
+    malicious software. Getting past it means:
+
+        open it once and let it be blocked  →  System Settings
+        →  Privacy & Security  →  scroll down  →  Open Anyway
+
+    NOT right-click → Open. Apple removed that bypass in macOS 15, so any
+    instructions still saying it will strand a tester on a current Mac. The
+    image carries a READ ME FIRST.txt saying the above; send the same steps in
+    whatever message you attach the file to.
+
+    Fine for a handful of testers you can talk to. Not something to put on a
+    download page — for that, notarise.
 NOTE
 fi

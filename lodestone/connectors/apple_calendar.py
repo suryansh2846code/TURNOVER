@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from . import permissions
 from .base import Connector, SyncResult
 
 
@@ -73,10 +74,11 @@ class AppleCalendarConnector(Connector):
             return False, "no Apple Calendar data (add a calendar in the Calendar app)"
         try:
             next(CAL_ROOT.rglob("*.ics"), None)
+            self.fix = None
             return True, ""
         except PermissionError:
-            return False, ("grant Full Disk Access to Lodestone/your terminal "
-                           "(System Settings → Privacy & Security → Full Disk Access)")
+            self.fix = permissions.FULL_DISK_ACCESS
+            return False, permissions.full_disk_access_reason("Calendar")
 
     def sync(self, *, max_events: int = 500, since: str | None = None,
              limit: int | None = None, full_history: bool = False,

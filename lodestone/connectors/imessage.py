@@ -10,6 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from . import permissions
 from .base import Connector, SyncResult
 
 CHAT_DB = Path.home() / "Library" / "Messages" / "chat.db"
@@ -35,10 +36,15 @@ class IMessageConnector(Connector):
             con = sqlite3.connect(f"file:{CHAT_DB}?mode=ro", uri=True)
             con.execute("SELECT 1 FROM message LIMIT 1")
             con.close()
+            self.fix = None
             return True, ""
         except Exception:
-            return False, ("grant Full Disk Access to your terminal/app "
-                           "(System Settings → Privacy & Security → Full Disk Access)")
+            # The database is there and we cannot read it, which on macOS means
+            # exactly one thing. Said in the user's words, with the button the
+            # UI pairs with `fix` — not "grant access to your terminal", which
+            # names something a shipped .app does not have.
+            self.fix = permissions.FULL_DISK_ACCESS
+            return False, permissions.full_disk_access_reason("Messages")
 
     def sync(self, *, days: int = 90, max_messages: int = 1500,
              min_thread: int = 3, since: str | None = None,

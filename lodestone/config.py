@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from functools import lru_cache
 from pathlib import Path
 
@@ -11,7 +12,26 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .log import suppressed
 
-load_dotenv()
+
+def uses_dotenv() -> bool:
+    """Whether a `.env` file should be read at all.
+
+    A source checkout: yes, that is what it is for. A shipped `.app`: no, and
+    the distinction is not cosmetic. `packaging/launcher.py` chdirs to the
+    user's home before starting, because a bundle's cwd is `/` and every
+    relative path from there is a surprise — which means a bare `load_dotenv()`
+    in the bundle reads **`~/.env`**. Any user with one of those sitting in
+    their home directory, for some entirely unrelated project, silently had
+    their model provider, port and embedding backend overridden by it, with
+    nothing in the UI to say why the app was behaving strangely.
+
+    A shipped app is configured by the app.
+    """
+    return not getattr(sys, "frozen", False)
+
+
+if uses_dotenv():
+    load_dotenv()
 
 
 def _default_home() -> Path:
@@ -37,8 +57,12 @@ def forget_cached_secrets() -> None:
 
 
 class Settings(BaseSettings):
+    # `env_file` is bound here, at import, which is the right moment: a frozen
+    # process has `sys.frozen` set before any Lodestone module loads.
     model_config = SettingsConfigDict(
-        env_prefix="LODESTONE_", env_file=".env", extra="ignore"
+        env_prefix="LODESTONE_",
+        env_file=".env" if uses_dotenv() else None,
+        extra="ignore",
     )
 
     home: Path = Field(default_factory=_default_home)

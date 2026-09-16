@@ -99,12 +99,24 @@ class Connector:
     #: dedup), missing an email is not.
     overlap_minutes: int = 120
 
+    #: Set by `is_configured()` when the refusal is something the user can clear
+    #: themselves in one click — currently only `permissions.FULL_DISK_ACCESS`.
+    #: `None` means the reason is informational and there is no button to offer.
+    #:
+    #: Valid **immediately after** `is_configured()` returns, which is how every
+    #: caller uses it. It is an attribute rather than a third tuple member
+    #: because that tuple is the contract eleven connectors already implement,
+    #: and widening it would have meant touching all of them to express
+    #: something three of them know.
+    fix: str | None = None
+
     @classmethod
     def supported_here(cls) -> bool:
         return cls.platforms is None or sys.platform in cls.platforms
 
     def __init__(self, store: MemoryStore | None = None) -> None:
         self.store = store or get_store()
+        self.fix = None
 
     def is_configured(self) -> tuple[bool, str]:
         """Return (ready, human-readable reason-if-not)."""
