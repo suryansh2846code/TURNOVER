@@ -49,6 +49,14 @@ def parse_actions(text: str) -> list[dict]:
                 # does something nobody proposed.
                 continue
             a["params"]["arguments"] = parsed
+        elif t == "log_workout":
+            # A session is a list of blocks, which does not fit in flat
+            # attributes — same reason `mcp_action` puts its arguments in the
+            # body, and parsed by the same rules on both sides.
+            blocks = _items(inner)
+            if blocks is None:
+                continue
+            a["params"]["blocks"] = blocks
         elif t == "mail_triage":
             # A list of messages will not fit in flat attributes either, so the
             # body is JSON here too — `{"items": [...]}` or the bare list.
@@ -171,6 +179,28 @@ def _mail_triage(params: dict) -> dict:
         changed += result.get("count", len(ids))
 
     return {"ok": True, "count": changed, "detail": summarise(items)}
+
+
+def _log_workout(params: dict) -> dict:
+    """Store one training session, after the user has seen and edited it.
+
+    An action rather than a tool, unlike `log_measurement`. The difference is
+    how much interpretation sits between what the user said and what gets
+    stored: "82 this morning" is one number and hard to get wrong, while
+    "5x5 squats, last one a grind, then some bench" is four numbers, a
+    judgement and an exercise name — and a session stored wrong is a wrong
+    trend for months, found weeks later.
+
+    So the card shows what was understood, the user can correct it in place,
+    and what executes is what is on the card at the moment they confirm.
+    """
+    from .training import log_session, parse_blocks
+
+    blocks, problem = parse_blocks(params.get("blocks"))
+    if problem:
+        return {"ok": False, "error": problem}
+    return log_session(blocks, at=str(params.get("at") or ""),
+                       note=str(params.get("note") or ""))
 
 
 def _message_send(params: dict) -> dict:
@@ -317,6 +347,10 @@ REGISTRY: dict[str, dict[str, Any]] = {
     "message_send": {
         "handler": _message_send, "label": "Send a message",
         "fields": ["app", "chat", "text"],
+    },
+    "log_workout": {
+        "handler": _log_workout, "label": "Training session",
+        "fields": ["blocks", "at", "note"],
     },
 }
 

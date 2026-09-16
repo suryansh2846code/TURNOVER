@@ -23,7 +23,7 @@ from ..log import suppressed
 #: Every action an agent can propose. `Agent.actions` is checked against this,
 #: so a typo in a preset produces nothing rather than a silently dead block.
 KNOWN_ACTIONS = ("send_email", "create_event", "set_reminder", "create_routine",
-                 "mail_triage", "message_send")
+                 "mail_triage", "message_send", "log_workout")
 
 #: Argument names listed per connector tool. Enough for a model to fill a call
 #: in correctly; few enough that twenty tools do not become the system prompt.
@@ -170,6 +170,24 @@ _BLOCKS: dict[str, str] = {
         "full rule, including the filter and the exact action, in the tag's "
         "inner text. Check `list_routines` first so you don't duplicate one."
     ),
+    "log_workout": (
+        "When the user describes a training session, propose it as ONE action "
+        "covering the whole session:\n"
+        '<action type="log_workout">\n'
+        '[{"exercise": "Squat", "sets": 5, "reps": 5, "weight": 100, "rpe": 8},\n'
+        ' {"exercise": "Bench press", "sets": 3, "reps": 8, "weight": 60}]\n'
+        "</action>\n"
+        "One entry per sets×reps at one weight: \"100x5, 105x3\" is two "
+        "entries, \"5x5 at 100\" is one. Weight is in KILOGRAMS \u2014 "
+        "convert if they said pounds \u2014 and 0 means bodyweight. `rpe` is "
+        "how hard it felt out of 10; leave it out if they did not say.\n"
+        "Call `list_exercises` FIRST and reuse the exact spelling it gives "
+        "you, or you start a second history for the same lift.\n"
+        "The user sees this as a card and can correct any of it before it is "
+        "saved, so propose your best reading rather than interrogating them "
+        "\u2014 one question at a time is worse than one card they can edit. "
+        "Do not claim it is logged until the action has actually run."
+    ),
     "message_send": (
         "To send a message on a messaging app (Telegram, Slack - NOT email):\n"
         '<action type="message_send" app="telegram" chat="@dana">'
@@ -208,7 +226,8 @@ _SCHEDULING = (
 
 #: Tools that make an agent a health agent, whoever assembled it.
 _HEALTH_TOOLS = {"log_measurement", "measurement_history", "whats_tracked",
-                 "forget_measurement"}
+                 "forget_measurement", "lift_progress", "training_load",
+                 "list_exercises"}
 
 #: The boundary, attached to the capability rather than to one template.
 #:

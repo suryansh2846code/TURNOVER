@@ -20,6 +20,7 @@ from . import (
     mcp_tools,
     message_tools,
     source_tools,
+    training_tools,
 )
 from .effort import get_effort
 from .results import ToolResult
@@ -265,6 +266,9 @@ TOOL_IMPLS = {
     "measurement_history": health_tools.measurement_history,
     "log_measurement": health_tools.log_measurement,
     "forget_measurement": health_tools.forget_measurement,
+    "list_exercises": training_tools.list_exercises,
+    "lift_progress": training_tools.lift_progress,
+    "training_load": training_tools.training_load,
     "list_chats": message_tools.list_chats,
     "read_chat": message_tools.read_chat,
     "search_source": source_tools.search_source,
@@ -549,6 +553,39 @@ TOOL_DEFS: dict[str, Tool] = {
             "metric": {"type": "string"},
             "when": {"type": "string", "description": "a date; omit for all"}},
             "required": ["metric"]},
+    ),
+    "list_exercises": Tool(
+        name="list_exercises",
+        description=(
+            "Every exercise the user has a logged history for, and the exact "
+            "spelling it is stored under. Check this BEFORE naming an exercise "
+            "in a log_workout action — a new spelling starts a separate history, "
+            "so \"Squat\" and \"back squat\" become two half-histories."
+        ),
+        parameters={"type": "object", "properties": {}},
+    ),
+    "lift_progress": Tool(
+        name="lift_progress",
+        description=(
+            "What has happened to one lift: volume per session, the heaviest "
+            "set, the best set, and what that estimates a single at. The "
+            "arithmetic is already done — do not redo it in your head."
+        ),
+        parameters={"type": "object", "properties": {
+            "exercise": {"type": "string",
+                         "description": "exact name from list_exercises"},
+            "days": {"type": "integer", "default": 180}},
+            "required": ["exercise"]},
+    ),
+    "training_load": Tool(
+        name="training_load",
+        description=(
+            "Total training volume per week — whether they are doing more or "
+            "less than they were. Weeks with nothing logged are missing from "
+            "the list, which may mean rest or may mean they stopped logging."
+        ),
+        parameters={"type": "object", "properties": {
+            "weeks": {"type": "integer", "default": 12}}},
     ),
     "list_chats": Tool(
         name="list_chats",
@@ -846,6 +883,9 @@ _LABELS: dict[str, tuple[str, str]] = {
     "measurement_history":      ("Trend",     "Measurements"),
     "log_measurement":          ("Record",    "Measurements"),
     "forget_measurement":       ("Correct",   "Measurements"),
+    "list_exercises":           ("Lifts",     "Training"),
+    "lift_progress":            ("Progress",  "Training"),
+    "training_load":            ("Load",      "Training"),
     "list_chats":               ("List",      "Messages"),
     "read_chat":                ("Read",      "Messages"),
     "calendar_lookup":          ("Schedule",  "Calendar"),

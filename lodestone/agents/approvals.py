@@ -62,6 +62,11 @@ def describe(action_type: str, params: dict) -> str:
         return f"New automation “{params.get('name') or 'untitled'}”"
     if action_type == "set_reminder":
         return f"Reminder: {params.get('message') or ''}"
+    if action_type == "log_workout":
+        from ..training import parse_blocks, summarise_session
+
+        blocks, problem = parse_blocks(params.get("blocks"))
+        return summarise_session(blocks) if blocks else (problem or "Log a session")
     if action_type == "message_send":
         # The app is named because it is half the decision: the same handle can
         # be two different people on two different apps, and "send a message to

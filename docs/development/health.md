@@ -161,14 +161,68 @@ What it says:
 * **Never present a remembered number as a measurement.** A weight is a fact
   only if it came back from `measurement_history` or `whats_tracked`.
 
-## 6. Deliberately still open
+## 6. Sets, reps and load — and the card you correct
+
+`metrics.py` holds one number at one moment. That is right for a body weight and
+wrong for a session: *"five sets of five at 100, last one a grind"* is four
+numbers and a judgement, and flattening it to one figure throws away the part
+that decides what to do next week. So `training.py` is a second store, and its
+unit is a **block** — sets × reps at one weight — because that is how people
+actually write a log. `5x5 @ 100` is one row; `100x5, 105x3, 110x1` is three.
+
+Two derived numbers earn their place and nothing else does. **Volume** (sets ×
+reps × weight) is what progression is measured in and is exact arithmetic a
+model asked to do it in its head gets wrong. **Estimated 1RM** is the only
+honest way to compare 5 at 100 against 3 at 110 — and it is reported with the
+formula named, because other formulas disagree and it is an estimate, not a
+lift anybody has done.
+
+**No exercise taxonomy.** Names are matched case-insensitively so *Squat* and
+*squat* do not become two half-histories, the user's own spelling is what is
+displayed, and the agent is told to check `list_exercises` before inventing a
+new one. Imposing a canonical list would be wrong for anyone whose gym
+vocabulary is not ours.
+
+### Writing is an action, because the misread is the risk
+
+`log_measurement` is a tool with no card. `log_workout` is an **action with an
+editable card**, and the difference is how much interpretation sits between what
+the user said and what gets stored:
+
+| | interpretation | so |
+|---|---|---|
+| *"82 this morning"* | one number, hard to misread, and the tool says back what it stored | tool |
+| *"5x5 squats, last one a grind, then some bench"* | four numbers, a judgement and two exercise names | card |
+
+A session stored wrong is a wrong trend for months, found weeks later. So the
+card shows what was understood, every value is an input, a block the model
+invented has an ✕, and **what executes is what is on the card at the moment
+Confirm is pressed** — never what the model originally proposed. The fields are
+held as elements in a closure and read at click time; a confirm that silently
+fell back to the proposed values would be the worst possible version of this,
+and `test_frontend_workout_card.py` captures the request body to pin it.
+
+Editing is opt-in per action type (`EDITABLE` in `chat.js`), not universal. It
+belongs exactly where a misread is easy and the mistake surfaces late.
+
+**It is chat only.** There is no training screen and there is not going to be
+one: the user describes a session, the card appears, they fix what is wrong,
+they confirm.
+
+### Two bugs this found
+
+* **`entry.get("sets", 1) or 1`** reads naturally and is wrong — zero is falsy,
+  so a block the user had emptied on purpose logged one set they did not do.
+* **The test harness could not see appended elements.** `innerHTML` only holds
+  what was set as a string, so every input on the card was invisible to every
+  assertion. The harness now reports the visible text of the whole tree, which
+  closes the same blind spot for any future card built this way.
+
+## 7. Deliberately still open
 
 * **No food database.** "I ate two eggs" does not become 140 kcal; the user or
   another app supplies the number. A calorie table is a data problem, not an
   agent one, and a wrong one is worse than none.
-* **No exercise-specific logging.** Sets, reps and load per lift are richer
-  than one number a day and want their own shape. `workout_minutes` and `rpe`
-  cover the training *load* question in the meantime.
 * **Strava, Whoop, Oura, MyFitnessPal.** All have real APIs. Each is a
   connector that writes into the same store — the store was built general for
   this reason.

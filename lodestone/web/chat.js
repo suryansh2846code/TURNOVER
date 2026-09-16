@@ -132,6 +132,19 @@ function parseActions(text) {
         return "";
       }
     }
+    else if (a.type === "log_workout") {
+      // A session is a list of blocks, which does not fit in flat attributes.
+      // Same body-as-JSON rule as mcp_action and mail_triage, parsed the same
+      // way on both sides so the card and the execution agree about what exists.
+      try {
+        let body = inner.trim();
+        if (body.startsWith("```")) body = body.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
+        const parsed = body ? JSON.parse(body) : null;
+        const blocks = Array.isArray(parsed) ? parsed : (parsed && parsed.blocks);
+        if (!Array.isArray(blocks) || !blocks.length) return "";
+        a.params.blocks = blocks;
+      } catch { return ""; }
+    }
     else if (a.type === "mail_triage") {
       // A list of emails does not fit in flat attributes either, so the body is
       // JSON — `{items: [...]}` or the bare list. Mirrors `actions._items`.
@@ -261,6 +274,104 @@ function updateConnectorPicker() {
 // actually read is not a confirmation.
 
 /** "notion-update-page" + "Notion" → "Update page in Notion". */
+//: Action types whose card the user can correct before confirming.
+//:
+//: Opt-in rather than universal. The question is how much interpretation sits
+//: between what the user said and what would be stored: "82 this morning" is
+//: one number and `log_measurement` handles it as a tool with no card at all,
+//: while "5x5 squats, last one a grind, then some bench" is four numbers, a
+//: judgement and two exercise names. Editing is worth a card exactly where
+//: getting it wrong is easy and the mistake is found weeks later.
+//:
+//: What executes is what is on the card at the moment Confirm is pressed —
+//: never what the model originally proposed. That is the point, and it is why
+//: the fields are read at click time rather than copied back into `p`.
+const EDITABLE = { log_workout: true };
+
+//: One editable field. Kept as an element in a closure rather than found again
+//: with a selector: a card that reads the DOM back to itself can be handed a
+//: stale node, and a confirm that silently falls back to the proposed value is
+//: exactly the bug this feature exists to prevent.
+function field(value, { width = "5em", type = "text", label = "" } = {}) {
+  const input = document.createElement("input");
+  input.className = "ac-field";
+  input.type = type;
+  input.value = value === null || value === undefined ? "" : String(value);
+  input.style.width = width;
+  if (label) input.setAttribute("aria-label", label);
+  return input;
+}
+
+/** Literal text between two fields. */
+function sep(text) {
+  const span = document.createElement("span");
+  span.className = "ac-sep";
+  span.textContent = text;
+  return span;
+}
+
+/** The blocks of a workout card, as rows of inputs the user can correct. */
+function workoutFields(blocks) {
+  const wrap = document.createElement("div");
+  wrap.className = "ac-edit";
+  const rows = [];
+
+  for (const b of blocks) {
+    const row = document.createElement("div");
+    row.className = "ac-row ac-editrow";
+    const cells = {
+      exercise: field(b.exercise, { width: "10em", label: "Exercise" }),
+      sets: field(b.sets, { width: "3.5em", type: "number", label: "Sets" }),
+      reps: field(b.reps, { width: "3.5em", type: "number", label: "Reps" }),
+      weight: field(b.weight, { width: "5em", type: "number", label: "Weight in kg" }),
+      rpe: field(b.rpe, { width: "3.5em", type: "number", label: "How hard, 1-10" }),
+    };
+    const drop = document.createElement("button");
+    drop.className = "ac-drop ghost";
+    drop.textContent = "✕";
+    drop.setAttribute("aria-label", "Remove this exercise");
+
+    const entry = { cells, row, dropped: false };
+    drop.onclick = () => {
+      entry.dropped = !entry.dropped;
+      row.style.opacity = entry.dropped ? "0.4" : "1";
+      for (const cell of Object.values(cells)) cell.disabled = entry.dropped;
+    };
+
+    // Separators are spans, not text nodes. Twenty hand-built fake DOMs stand
+    // behind `tests/js/`, and every DOM API this file reaches for is one each
+    // of them has to implement — so it reaches for as few as it can.
+    row.appendChild(cells.exercise);
+    row.appendChild(sep(" "));
+    row.appendChild(cells.sets);
+    row.appendChild(sep(" × "));
+    row.appendChild(cells.reps);
+    row.appendChild(sep(" @ "));
+    row.appendChild(cells.weight);
+    row.appendChild(sep(" kg   RPE "));
+    row.appendChild(cells.rpe);
+    row.appendChild(drop);
+    wrap.appendChild(row);
+    rows.push(entry);
+  }
+
+  const hint = document.createElement("div");
+  hint.className = "ac-row muted";
+  hint.textContent = "Correct anything that is wrong before you confirm. "
+    + "Weight in kg; leave it 0 for bodyweight.";
+  wrap.appendChild(hint);
+
+  // Reads at call time, so what is stored is what is on screen right now.
+  wrap.readBlocks = () => rows.filter((r) => !r.dropped).map((r) => ({
+    exercise: r.cells.exercise.value.trim(),
+    sets: Number(r.cells.sets.value),
+    reps: Number(r.cells.reps.value),
+    weight: Number(r.cells.weight.value),
+    rpe: r.cells.rpe.value === "" ? null : Number(r.cells.rpe.value),
+  }));
+  return wrap;
+}
+
 //: App id -> the name a person reads. The server has the same mapping from the
 //: connectors' own labels; these are the words on the card, and the ids are
 //: what crosses the wire.
@@ -371,6 +482,17 @@ function actionCard(a) {
       return `<div class="ac-row"><b>${esc(humanKey(k))}</b> ${esc(v.slice(0, 300))}</div>`;
     }).filter(Boolean).join("");
     rows = shown || `<div class="ac-row muted">No details to fill in.</div>`;
+  } else if (a.type === "log_workout") {
+    // Chat only: there is no training screen and there is not going to be one.
+    // The user talks, this appears, they fix what is wrong, they confirm.
+    const blocks = Array.isArray(p.blocks) ? p.blocks : [];
+    const volume = blocks.reduce(
+      (sum, b) => sum + (Number(b.sets) || 0) * (Number(b.reps) || 0) * (Number(b.weight) || 0), 0);
+    title = blocks.length === 1 ? "Log this set" : `Log this session`;
+    verb = "log";
+    rows = volume
+      ? `<div class="ac-row muted">${volume.toLocaleString()} kg of work, as it stands.</div>`
+      : "";
   } else if (a.type === "message_send") {
     // The app is named, because it is half the decision — the same handle can
     // be two different people on two different apps.
@@ -415,13 +537,27 @@ function actionCard(a) {
     <div class="ac-actions"><button class="ac-confirm">Confirm & ${verb}</button>
     <button class="ac-cancel ghost">Cancel</button></div>
     <div class="ac-result"></div>`;
+  // Editable types grow real inputs. Held here, not looked up again later:
+  // the values that execute are read off these elements at click time.
+  let editor = null;
+  if (EDITABLE[a.type] && a.type === "log_workout") {
+    editor = workoutFields(Array.isArray(p.blocks) ? p.blocks : []);
+    el.appendChild(editor);
+  }
   el.querySelector(".ac-cancel").onclick = () => { el.querySelector(".ac-actions").innerHTML = "<span class='muted'>Cancelled</span>"; };
+  // What is on the card now, not what was proposed. An edit the user made and
+  // a confirm that ignored it would be the worst possible version of this.
+  const editedParams = () => {
+    const base = { ...p, agent_id: current };
+    if (editor && editor.readBlocks) base.blocks = editor.readBlocks();
+    return base;
+  };
   el.querySelector(".ac-confirm").onclick = async () => {
     const btns = el.querySelector(".ac-actions"); btns.innerHTML = "<span class='muted'>Working…</span>";
     try {
       const r = await api("/api/actions/execute", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: a.type, params: { ...p, agent_id: current } }) });
+        body: JSON.stringify({ type: a.type, params: editedParams() }) });
       const rr = el.querySelector(".ac-result");
       // The agent is told what its own proposal did, and when it failed it gets
       // one turn to answer for it. That answer is the useful part of a failed

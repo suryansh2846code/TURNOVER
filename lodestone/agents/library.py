@@ -78,6 +78,10 @@ _DIARY = ["calendar_lookup", "sync_source"]
 #: a model estimating from recalled prose. See `lodestone/metrics.py`.
 _MEASURE = ["whats_tracked", "measurement_history", "log_measurement",
             "forget_measurement"]
+#: Sets, reps and load. A session is richer than one number a day, and
+#: flattening it throws away the part that decides what to do next week.
+#: Writing is the `log_workout` action, so the user can correct a card.
+_TRAINING = ["list_exercises", "lift_progress", "training_load"]
 
 _ALL_ACTIONS = ["send_email", "create_event", "set_reminder", "create_routine"]
 #: Only for agents that can actually reach an inbox or a chat. An agent taught
@@ -334,6 +338,11 @@ TEMPLATES: tuple[Template, ...] = (
             "volume, calories, protein totals, rate of change, how many "
             "sessions they actually did. A number you estimated is a number "
             "you made up.\n"
+            "A training session is a `log_workout` action, not a tool call: "
+            "the user sees what you understood as a card and corrects it "
+            "before it is saved. Propose your best reading of what they said "
+            "rather than asking them four questions. `list_exercises` first, "
+            "so you reuse the spelling their history is already under.\n"
             "Log what they tell you, in the unit they said it in \u2014 "
             "`log_measurement` converts, it does not assume. If they correct a "
             "number, `forget_measurement` the wrong one rather than logging a "
@@ -355,9 +364,10 @@ TEMPLATES: tuple[Template, ...] = (
         # run_python because this agent lives on arithmetic; files because a
         # gym app or a food tracker exports CSV and that is where the rest of
         # the numbers are.
-        tools=[*BASE_TOOLS, *_MEASURE, *_FILES, *_DIARY, *_TASKS, *_LOOPS,
-               "run_python"],
-        actions=["set_reminder", "create_event", "create_routine"],
+        tools=[*BASE_TOOLS, *_MEASURE, *_TRAINING, *_FILES, *_DIARY, *_TASKS,
+               *_LOOPS, "run_python"],
+        actions=["set_reminder", "create_event", "create_routine",
+                 "log_workout"],
         recall_sources=["gcal", "notes", "apple_health"],
         works_with=["gcal", "notes", "apple_health"],
         # Nothing. It works on the first day with no connectors at all: the

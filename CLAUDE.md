@@ -48,7 +48,7 @@ and that document is the one to update when the rule changes.
 | `core/` | SQLite store, schema, embeddings, chunking, dates |
 | `web/` | the whole frontend. Vanilla JS, **no build step** |
 | `desktop.py` · `hud.py` | the native window and the floating sign-in card |
-| `metrics.py` | numbers over time — measurements, kept as numbers not prose |
+| `metrics.py` · `training.py` | numbers over time — measurements and sets/reps/load, kept as numbers not prose |
 | `config.py` · `log.py` | settings and logging. Leaf utilities — keep them that way |
 
 Full ownership table and the allowed dependency direction:
@@ -133,7 +133,7 @@ even when every test is green. Reasoning and measurements:
   translated, never dumped.
 - Credentials are independent: removing a key must not sign the user out.
 
-**Measurements — `metrics.py`**
+**Measurements — `metrics.py`, `training.py`**
 - **A number over time is not a memory.** Recall is linear in memory count, so
   an Apple Health export filed as memories costs every agent a second per turn,
   forever. Claims supersede; readings accumulate.
@@ -142,6 +142,10 @@ even when every test is green. Reasoning and measurements:
   rounding error.
 - **A trend is smoothed and says what it is based on.** Body weight moves a kilo
   a day on water; under ~10 days no trend is reported at all.
+- **Data entry the model interpreted lands on a card the user can correct**, and
+  what executes is what is on the card at the moment Confirm is pressed — never
+  what was proposed. Opt-in per action type (`EDITABLE` in `web/chat.js`), for
+  exactly the cases where a misread is easy and surfaces weeks later.
 
 **Brain and storage — `brain/`, `core/`**
 - **`"key" in row` on a `sqlite3.Row` tests the VALUES, not the keys.** Use
