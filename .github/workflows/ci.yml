@@ -34,6 +34,12 @@ jobs:
         # for a job that already forces LODESTONE_EMBEDDING_PROVIDER=hash. It is
         # also not "all" — it omits python-docx and python-pptx.
         #
+        # `browser` installs Playwright but NOT a browser. The parser is a
+        # pure function and runs here; the integration tests launch a real
+        # Chromium and skip themselves when one is absent. Downloading 94 MB on
+        # every push to exercise six tests is not a trade worth making, and the
+        # tests that would catch a parser regression are the ones that run.
+        #
         # `desktop` is here for the tests, not the app. Without pywebview there
         # is no AppKit, and `tests/test_signin_hud_window.py` opens with a
         # module-level `importorskip` — so its 20 tests collapsed into a single
@@ -42,7 +48,7 @@ jobs:
         # can actually check it.
         run: |
           uv venv
-          uv pip install -e ".[gdrive,desktop]"
+          uv pip install -e ".[gdrive,desktop,browser]"
           uv pip install pytest pytest-cov ruff mypy
 
       - name: Lint

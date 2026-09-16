@@ -1,0 +1,248 @@
+"""Driving a real Chromium, behind the four-method seam in `session.py`.
+
+Two decisions carry this module.
+
+**The page arrives as an ARIA snapshot, not as HTML.** Playwright's
+`aria_snapshot()` is the tree a screen reader would read — roles, accessible
+names, values — which is both an order of magnitude smaller than markup and the
+only view that does not carry `<script>`, hidden text and twenty thousand tokens
+of class soup. Parsing it is a pure function (`parse_aria`), so the part most
+likely to be wrong is tested without a browser.
+
+**Playwright runs on a thread of its own, and nothing else touches it.** Its
+sync API refuses to run inside an asyncio loop, and this is called from tool
+code that may be anywhere — a plain handler thread, a worker, a turn loop. A
+dedicated thread with a command queue sidesteps the question entirely, and gives
+the other property this needs for free: **one browser, one page, one caller at a
+time**. Two agents driving the same profile concurrently would fight over the
+cookie jar that makes a site "signed in".
+
+**A handle is a role and a name, never a selector.** That is what a future
+`browse_click` will resolve through `get_by_role`, and it is deliberately not
+something a model could compose into anything else — the ref it sees is `e3`.
+"""
+from __future__ import annotations
+
+import queue
+import re
+import threading
+from dataclasses import dataclass
+from typing import Any
+
+from ..log import get_logger, suppressed
+from .page import Node
+
+log = get_logger(__name__)
+
+#: How long any single browser operation may take before we give up on it. A
+#: page that never settles must not hold an agent's turn open indefinitely.
+TIMEOUT_MS = 20_000
+
+#: Lines in an ARIA snapshot that describe the *previous* node rather than a new
+#: one — `/url:` under a link, for instance. They are metadata, not content.
+_META = re.compile(r"^/")
+
+#: `- role "name" [level=1]: value` in its various shapes.
+_LINE = re.compile(
+    r"^-\s+"
+    r"(?P<role>[A-Za-z][\w-]*)"
+    r"(?:\s+\"(?P<name>(?:[^\"\\]|\\.)*)\")?"
+    r"(?P<attrs>(?:\s*\[[^\]]*\])*)"
+    r"(?:\s*:\s*(?P<value>.*))?"
+    r"\s*$"
+)
+
+
+def parse_aria(snapshot: str) -> list[Node]:
+    """An ARIA snapshot as a flat list of nodes.
+
+    Flattened on purpose: the model is given a readable page and refs, not a
+    tree to navigate. Nesting in the snapshot is layout, and layout is the part
+    of a page that changes every quarter.
+    """
+    found: list[Node] = []
+    for raw in (snapshot or "").splitlines():
+        line = raw.strip()
+        if not line.startswith("-"):
+            continue
+        body = line[1:].strip()
+        if not body or _META.match(body):
+            continue                     # `/url: …` belongs to the node above
+        match = _LINE.match(line)
+        if not match:
+            continue
+        role = (match.group("role") or "").lower()
+        name = match.group("name")
+        value = (match.group("value") or "").strip()
+        if name is None:
+            # `- paragraph: Three available.` — the text *is* the name, and a
+            # node whose only content sat in `value` would render as a bare role.
+            name, value = value, ""
+        found.append(Node(role=role, name=_unescape(name), value=value,
+                          handle=_handle(role, _unescape(name))))
+    return found
+
+
+def _unescape(text: str) -> str:
+    return (text or "").replace('\\"', '"').replace("\\\\", "\\")
+
+
+def _handle(role: str, name: str) -> str:
+    """How a later `browse_click` will find this element again.
+
+    Role plus accessible name — Playwright's own locator, and the same pair a
+    person would use to describe the control. Never a CSS selector: the point of
+    refs is that nothing composable reaches the model.
+    """
+    return f"{role}␟{name}" if name else role
+
+
+@dataclass
+class _Command:
+    name: str
+    args: tuple = ()
+    reply: queue.Queue = None            # type: ignore[assignment]
+
+
+class PlaywrightDriver:
+    """A real browser, owned by one thread.
+
+    Started lazily: constructing this must not launch anything, because
+    `open_session()` is called to *ask* whether browsing works.
+    """
+
+    def __init__(self, executable: str | None, profile: str, *,
+                 headless: bool = False) -> None:
+        self._executable = executable
+        self._profile = profile
+        self._headless = headless
+        self._commands: queue.Queue[_Command | None] = queue.Queue()
+        self._thread: threading.Thread | None = None
+        self._ready = threading.Event()
+        self._start_error: str = ""
+
+    # ── the public four ─────────────────────────────────────────────────
+    def goto(self, url: str) -> tuple[str, str, list[Node]]:
+        return self._call("goto", url)
+
+    def current(self) -> tuple[str, str, list[Node]]:
+        return self._call("current")
+
+    def back(self) -> tuple[str, str, list[Node]]:
+        return self._call("back")
+
+    def close(self) -> None:
+        """Safe to call twice, and safe to call before anything started."""
+        if self._thread is None:
+            return
+        with suppressed("shutting the browser down"):
+            self._commands.put(None)
+            self._thread.join(timeout=10)
+        self._thread = None
+
+    # ── the thread ──────────────────────────────────────────────────────
+    def _call(self, name: str, *args: Any) -> Any:
+        self._ensure_started()
+        reply: queue.Queue = queue.Queue(maxsize=1)
+        self._commands.put(_Command(name, args, reply))
+        ok, payload = reply.get(timeout=TIMEOUT_MS / 1000 + 10)
+        if not ok:
+            raise BrowserError(payload)
+        return payload
+
+    def _ensure_started(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._ready.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="lodestone-browser")
+        self._thread.start()
+        if not self._ready.wait(timeout=60):
+            raise BrowserError("The browser did not start.")
+        if self._start_error:
+            raise BrowserError(self._start_error)
+
+    def _run(self) -> None:                       # pragma: no cover - needs a browser
+        from playwright.sync_api import sync_playwright
+
+        context = None
+        try:
+            with sync_playwright() as pw:
+                launch: dict[str, Any] = {"headless": self._headless}
+                if self._executable:
+                    launch["executable_path"] = self._executable
+                # A persistent context is what makes a site stay signed in. The
+                # profile is ours, never the user's own Chrome — see
+                # `chromium.py`.
+                context = pw.chromium.launch_persistent_context(
+                    self._profile, **launch)
+                page = context.pages[0] if context.pages else context.new_page()
+                page.set_default_timeout(TIMEOUT_MS)
+                self._ready.set()
+                self._serve(page)
+        except Exception as exc:
+            self._start_error = str(exc)[:300]
+            self._ready.set()
+            log.warning("browser thread stopped: %s", exc)
+        finally:
+            if context is not None:
+                with suppressed("closing the browser context"):
+                    context.close()
+
+    def _serve(self, page: Any) -> None:          # pragma: no cover - needs a browser
+        while True:
+            command = self._commands.get()
+            if command is None:
+                return
+            try:
+                command.reply.put((True, self._do(page, command)))
+            except Exception as exc:
+                command.reply.put((False, str(exc)[:300]))
+
+    def _do(self, page: Any, command: _Command) -> Any:  # pragma: no cover
+        if command.name == "goto":
+            page.goto(command.args[0], wait_until="load")
+            settle(page)
+        elif command.name == "back":
+            page.go_back(wait_until="load")
+            settle(page)
+        elif command.name != "current":
+            raise BrowserError(f"unknown command {command.name!r}")
+        return read_page(page)
+
+
+class BrowserError(RuntimeError):
+    """Something went wrong driving the browser. Carries a readable message."""
+
+
+#: How long to let a page move itself after it has loaded, before deciding where
+#: we are. Short: it is a guard against a redirect, not a wait for a slow site.
+SETTLE_MS = 3_000
+
+
+def settle(page: Any) -> None:
+    """Let a page finish going wherever it is going.
+
+    **`goto` returning is not the same as having arrived.** An HTTP redirect is
+    followed before it returns, but a `<meta http-equiv="refresh">` or a script
+    that sets `location` runs *after* load — and a session that expired redirects
+    exactly that way. Snapshotting without this reads the page we were sent to
+    while the browser is already somewhere else, and hands `session._land` an
+    origin that is no longer true. That is a boundary check answering about the
+    wrong page, which is the one failure this whole package exists to prevent.
+
+    Bounded and best-effort: a site that never goes idle is common, and the
+    landing check runs again on every read, so the cost of giving up here is one
+    stale read rather than a wrong decision.
+    """
+    with suppressed("letting a page finish redirecting"):
+        page.wait_for_load_state("networkidle", timeout=SETTLE_MS)
+
+
+def read_page(page: Any) -> tuple[str, str, list[Node]]:
+    """`(url, title, nodes)` for an open Playwright page.
+
+    Separate from the driver so a test can hand it a real page without a thread,
+    and so the snapshot call lives next to the parser it feeds.
+    """
+    return page.url, page.title(), parse_aria(page.aria_snapshot())

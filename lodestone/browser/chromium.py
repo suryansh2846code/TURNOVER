@@ -30,15 +30,23 @@ recorded to disk through `models/login_processes.py` — the generic reaper that
 problem produced — and reaped on launch and on quit. Only recorded PIDs are ever
 signalled, each re-checked against the command line recorded with it.
 
-**What is not here yet: the driver.** `session.Driver` is the seam, and the CDP
-implementation behind it is the next landing. Until it exists `open_session()`
-refuses with a sentence a user can act on rather than pretending — a control that
-cannot work is the failure `/CLAUDE.md` names first, and a browser layer that
-half-drives a real browser is worse than one that says it is not ready.
+**Playwright is optional, and the UI has to know.** A build without it is
+perfectly healthy and simply cannot open a page, so `can_drive()` is a separate
+question from `is_installed()` and `install_status()` reports both. Offering a
+150 MB download that leads nowhere is the "control that cannot work" failure
+`/CLAUDE.md` names first, in its most expensive form.
+
+**Visible, not headless.** `docs/BROWSER.md`: a user who can watch is a user who
+can stop — and MFA, which is never automated, needs a window a person can reach.
 """
 from __future__ import annotations
 
+import importlib.util
+import os
+import re
 import shutil
+import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -85,16 +93,31 @@ def executable() -> Path | None:
     directory has uninstalled it, and a stored "yes it is installed" would make
     the app insist otherwise. Detection is not consent in `models/`; here,
     detection is the *only* truth about installation.
+
+    Globbed rather than hardcoded because the payload directory carries a build
+    number (`chromium-1243`) and the app inside it is named by whoever packaged
+    it. A path written out in full here is a path that breaks on the next
+    version, silently, as "the browser is not installed".
     """
-    app = install_dir() / "Chromium.app" / "Contents" / "MacOS" / "Chromium"
-    if app.exists():
-        return app
-    plain = install_dir() / "chrome"
-    return plain if plain.exists() else None
+    for build in sorted(install_dir().glob("chromium-*"), reverse=True):
+        for found in build.glob("*/*.app/Contents/MacOS/*"):
+            if found.is_file():
+                return found
+    return None
 
 
 def is_installed() -> bool:
     return executable() is not None
+
+
+def _browsers_env() -> dict[str, str]:
+    """Environment that points Playwright at *our* directory, not its own.
+
+    Without this the browser lands in `~/Library/Caches/ms-playwright`, which is
+    somebody else's namespace: uninstalling ours would either miss it or delete a
+    copy another tool was relying on.
+    """
+    return {**os.environ, "PLAYWRIGHT_BROWSERS_PATH": str(install_dir())}
 
 
 def profile_sites() -> int:
@@ -140,9 +163,11 @@ def install_status() -> dict[str, Any]:
         # Said up front, because 150 MB on a slow connection is a surprise worth
         # not having. The number is approximate and labelled as such.
         "approx_mb": 150,
-        # The driver is the next landing; the UI must not offer to drive a
-        # browser it cannot drive.
-        "drivable": False,
+        # Whether a page could actually be opened, which is not the same
+        # question as whether the browser is downloaded: Playwright is an
+        # optional dependency. The UI must not offer a download that leads
+        # nowhere.
+        "drivable": can_drive(),
     }
 
 
@@ -185,16 +210,47 @@ def start_install(fetch=None) -> dict[str, Any]:
     return install_status()
 
 
-def _download_chromium(target: Path, note) -> None:   # pragma: no cover - network
-    """Fetch and unpack a Chromium build into `target`.
+#: Recognises Playwright's progress output — `|■■■   | 40% of 94.3 MiB`.
+_PERCENT = re.compile(r"(\d{1,3})%")
 
-    Not implemented, and failing loudly rather than silently: this is the one
-    part of the package that cannot be exercised offline, and a stub that
-    pretended to succeed would make `install_status()` report a browser that is
-    not there.
+
+def _download_chromium(target: Path, note) -> None:   # pragma: no cover - network
+    """Fetch a Chromium build into `target`, reporting progress as it goes.
+
+    Playwright's own downloader is used rather than a hand-rolled fetch: it knows
+    which build matches the installed client, checks what it got, and unpacks it.
+    Reimplementing that would mean pinning a build number in our source and
+    discovering it had drifted when a user's browser refused to start.
+
+    Run as a subprocess and **never as a shell string**, for the same reason
+    `models/cli_manager.py` refuses to pipe a vendor's installer into a shell:
+    the arguments are ours, and nothing a downloaded file contains can become a
+    command.
     """
-    raise BrowserNotReadyError(
-        "Setting up the browser is not available in this build yet.")
+    note("Starting the download…", 1)
+    process = subprocess.Popen(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        env=_browsers_env(), cwd=str(target))
+
+    last = 0
+    assert process.stdout is not None
+    for line in process.stdout:
+        found = _PERCENT.search(line)
+        if found:
+            # Scaled into 5–95: the bar reaching 100% while the app is still
+            # unpacking reads as a hang, and starting at 0 reads as nothing
+            # having happened.
+            last = max(last, min(95, 5 + int(found.group(1)) * 9 // 10))
+            note(f"Downloading the browser… {last}%", last)
+        elif line.strip():
+            log.debug("playwright install: %s", line.strip())
+
+    if process.wait() != 0:
+        raise BrowserNotReadyError(
+            "The browser download did not finish. Check your connection and "
+            "try again.")
+    note("Finishing up…", 97)
 
 
 def uninstall() -> bool:
@@ -223,21 +279,44 @@ def forget_everything() -> bool:
 
 
 # ── the live session ────────────────────────────────────────────────────
+def can_drive() -> bool:
+    """Is the driver itself available, separately from the browser?
+
+    Playwright is an optional dependency, so a build can be perfectly healthy and
+    still unable to open a page. The UI reads this to decide whether offering a
+    download would lead anywhere.
+    """
+    return importlib.util.find_spec("playwright") is not None
+
+
 def open_session():
     """A `Session` over the managed browser.
 
-    Raises `BrowserNotReadyError` with something a person can act on. Two
-    different refusals, because "set it up" and "this build cannot drive it" call
-    for different actions from the user and conflating them would send them to
-    press a button that will not help.
+    Raises `BrowserNotReadyError` with something a person can act on. The two
+    refusals are separate because "set it up" and "this build cannot drive one"
+    call for different things from the user, and conflating them sends somebody
+    to press a button that will not help.
     """
+    if not can_drive():
+        raise BrowserNotReadyError(
+            "This copy of the app was built without browsing support. "
+            "Nothing is wrong with your setup.")
     if not is_installed():
         raise BrowserNotReadyError(
-            "The browser has not been set up yet. Open Settings and choose "
+            "The browser has not been set up yet. Open Connectors and choose "
             "“Set up browsing” — it is a one-time download of about 150 MB.")
-    raise BrowserNotReadyError(
-        "This build can store which sites you allow, but cannot drive the "
-        "browser yet. Nothing is wrong with your setup.")
+
+    from .driver import PlaywrightDriver
+    from .session import Session
+
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(install_dir()))
+    profile_dir().mkdir(parents=True, exist_ok=True)
+    binary = executable()
+    # **Visible, not headless.** `docs/BROWSER.md`: a user who can watch is a
+    # user who can stop — and MFA, which is never automated, needs a window the
+    # person can actually reach.
+    return Session(PlaywrightDriver(str(binary) if binary else None,
+                                    str(profile_dir()), headless=False))
 
 
 def reap() -> int:

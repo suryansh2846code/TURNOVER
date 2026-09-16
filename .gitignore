@@ -40,3 +40,5 @@ htmlcov/
 # code. Kept on disk, out of the repo.
 *.usdz
 
+# Chromium downloaded for the browser integration tests
+.pw-browsers/

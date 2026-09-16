@@ -100,10 +100,19 @@ def test_a_refused_address_is_not_stored(client):
 # ── setup ───────────────────────────────────────────────────────────────
 def test_status_says_whether_a_page_can_actually_be_opened(client):
     """`drivable` is what stops the UI offering a Set up button in a build that
-    cannot drive a browser — a control that cannot work reads as breakage."""
+    cannot drive a browser — a control that cannot work reads as breakage.
+
+    Asserted against `can_drive()` rather than against `False`. The first version
+    of this test hardcoded the answer, which was true only because Playwright
+    happened not to be installed that afternoon; it started failing the moment
+    the driver landed, having tested the machine rather than the contract.
+    """
+    from lodestone.browser import chromium
+
     body = client.get("/api/browser/status").json()
 
-    assert body["drivable"] is False
+    assert body["drivable"] is chromium.can_drive()
+    assert isinstance(body["drivable"], bool), "the UI switches on this"
     assert body["approx_mb"], "the download size is said before it starts"
 
 

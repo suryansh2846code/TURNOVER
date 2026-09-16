@@ -1,6 +1,6 @@
 # A browser inside Chitragupta
 
-> **Status: steps 1–3 are built, reading only. The driver is not.** The rest of
+> **Status: steps 1–3 are built and drive a real browser. Reading only.** The rest of
 > this document is the plan it was built from; §8 records what the building
 > changed, because three of the decisions below did not survive contact and
 > pretending otherwise would make this file the wrong thing to read next.
@@ -11,8 +11,9 @@
 > | `browser/page.py` | **built** — bounded, ref-based, quarantined page text |
 > | `browser/session.py` | **built** — navigation, and the landing check |
 > | `agents/browse_tools.py` | **built** — `browse_open` / `read` / `find` / `sites` |
-> | `browser/chromium.py` | **partly** — profile, install job, reaping. No fetch |
-> | the CDP driver | **not built** — `session.Driver` is the seam it plugs into |
+> | `browser/chromium.py` | **built** — profile, the one-time download, reaping |
+> | `browser/driver.py` | **built** — real Chromium, ARIA snapshots, own thread |
+> | `api/routes/browser.py` + `web/browser.js` | **built** — the list, on the Connectors screen |
 >
 > Acting — `browse_click` and friends — is untouched, and `may_act` is granted by
 > nothing. A test fails the day a write tool appears without being in
@@ -368,13 +369,46 @@ so rather than reach for something nearby.
   itself. The general lesson is worth keeping: an assertion borrowed from the
   code under test agrees with its bugs.
 
+### The driver, and what building it changed again
+
+**Playwright, not hand-rolled CDP.** `aria_snapshot()` is exactly the view §4
+asked for — roles, names and values, the tree a screen reader reads — and it
+drops `<script>` bodies and `display:none` text on the way, both verified
+against a real page. Writing CDP by hand would have meant reimplementing that
+and pinning a Chromium build number in our own source.
+
+**Parsing is a pure function.** `parse_aria` takes the snapshot text and returns
+nodes, so the part most likely to be wrong is tested exhaustively with no
+browser. It handled every real shape first try: `[level=1]` attributes, a
+`/url:` line that belongs to the link above it, `paragraph: text` with no quoted
+name, and escaped quotes in link text a site wrote.
+
+**Playwright gets a thread of its own.** Its sync API refuses to run inside an
+asyncio loop and tool code is called from anywhere. A dedicated thread with a
+command queue removes the question, and gives the other property this needs for
+free: one browser, one page, one caller at a time. Two agents on one profile
+would fight over the cookie jar that makes a site "signed in".
+
+**`goto` returning is not the same as having arrived — a real defect.** An HTTP
+redirect is followed before `goto` returns, but a `<meta refresh>` or a script
+setting `location` runs *after* load, and an expired session redirects exactly
+that way. Without a settle, the snapshot is of the page we were sent to while
+the browser is already elsewhere, and `_land` then decides about the wrong
+origin. Removing `driver.settle` turns that test red; the integration suite uses
+a client-side redirect rather than a 302 for this reason (Chromium also does not
+re-route a redirect it follows itself, so a 302 cannot be intercepted anyway).
+
+**Headless or visible — answered: visible.** A user who can watch is a user who
+can stop, and MFA is never automated, so it needs a window a person can reach.
+
 ### Still open
 
-* **The CDP driver.** `session.Driver` is four methods and a fake satisfies it,
-  which is what let everything above be tested offline. The real one cannot be
-  verified without a downloaded Chromium and a network, so it was not written
-  blind — §7 step 1's download is a job with progress and no fetch behind it yet.
-* **Headless or visible** — unchanged, and still "visible, shown when an agent
-  starts driving".
+* **Acting.** Unchanged and untouched: `browse_click` and friends, behind
+  `approvals.run_or_queue` with the screenshot card, and in `NEVER_UNATTENDED`
+  in the same commit. `may_act` is stored and granted by nothing.
 * **Downloads through `file_tools` grants** — unchanged, and still the answer:
   one boundary, not two.
+* **The `.dmg`.** `scripts/build-dmg.sh` does not yet know about Playwright, and
+  the browser is fetched at runtime rather than signed into the bundle. That is
+  the deliberate trade from §2 — but a notarised app spawning a downloaded
+  binary is its own problem, and it has not been faced yet.
