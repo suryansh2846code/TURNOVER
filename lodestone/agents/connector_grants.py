@@ -72,6 +72,55 @@ def _conn() -> sqlite3.Connection:
     return _DB
 
 
+#: Built-in tools that reach a connector, and which one.
+#:
+#: MCP tools carry their connector with them — `mcp_tools.connector_of` reads it
+#: off the same pass that built the tool, so it cannot drift. A first-party tool
+#: has no such registry: `list_mail` is a Python function, and nothing about it
+#: says "Gmail" except this table.
+#:
+#: Without it the whole permission model had a hole in the shape of its own
+#: motivating example — an agent had to ask before reading a Notion page and
+#: could read the user's entire inbox without a word. `test_mail_tools.py` pins
+#: every name here against the live tool table, because a renamed tool that
+#: silently falls out of this map is a tool that silently stops asking.
+FIRST_PARTY_TOOLS: dict[str, str] = {
+    "gmail_search": "gmail",
+    "list_mail": "gmail",
+    "read_thread": "gmail",
+    "calendar_lookup": "gcal",
+}
+
+
+def connector_of(tool_name: str) -> str:
+    """Which connector a tool reaches, by id, or "" if it reaches none.
+
+    The one answer both kinds of tool go through, so `loop.py` asks once.
+    """
+    from .mcp_tools import connector_of as mcp_connector_of
+
+    found = mcp_connector_of(tool_name)
+    return found or FIRST_PARTY_TOOLS.get(tool_name, "")
+
+
+def first_party_labels() -> dict[str, str]:
+    """Connector id → display name, for the first-party connectors in use here.
+
+    Only the ones actually set up: offering to grant a connector the user has
+    not connected is offering a control that cannot do anything.
+    """
+    labels: dict[str, str] = {}
+    for connector_id in set(FIRST_PARTY_TOOLS.values()):
+        with suppressed("naming a built-in connector for the permission picker"):
+            from ..connectors import get_connector
+
+            connector = get_connector(connector_id)
+            ready, _reason = connector.is_configured()
+            if ready:
+                labels[connector_id] = str(getattr(connector, "label", connector_id))
+    return labels
+
+
 # ── the one-turn grant ───────────────────────────────────────────────────
 def allow_for_this_turn(connectors: list[str] | None):
     """Grant these connectors for the current turn. Returns a token for `reset`."""
@@ -168,7 +217,8 @@ def describe(agent_id: str) -> dict:
     """What this agent may use, and what it would have to ask for."""
     from .mcp_tools import connector_ids
 
-    every = connector_ids()
+    from_mcp = list(connector_ids())
+    every = from_mcp + [c for c in first_party_labels() if c not in set(from_mcp)]
     if unrestricted(agent_id):
         return {"agent_id": agent_id, "unrestricted": True,
                 "allowed": list(every), "must_ask": [], "this_turn": []}

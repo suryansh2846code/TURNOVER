@@ -293,13 +293,16 @@ class ConnectorGrantIn(BaseModel):
 @probes_a_provider
 def agent_connectors(agent_id: str):
     """What this agent may reach, and what it would have to ask for."""
-    from ...agents.connector_grants import describe
+    from ...agents.connector_grants import describe, first_party_labels
     from ...agents.mcp_tools import labels_by_id
 
     out = describe(agent_id)
     # Ids decide permission; labels are what a person reads. Both, so the
     # caller never has to guess one from the other.
-    out["labels"] = labels_by_id()
+    # Both kinds of connector, so the `@` picker offers everything the gate
+    # can actually refuse. A connector that is enforced and not offerable is a
+    # dead end the user has no way out of.
+    out["labels"] = {**first_party_labels(), **labels_by_id()}
     return out
 
 

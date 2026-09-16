@@ -32,8 +32,11 @@ permissions — and `library.py`, which is what Lodestone *offers*.
   — no history in, nothing written out, no learning — because the "user" of that
   turn is another agent. The brain stays shared; the chat does not.
 - **An agent asks before it reaches a connector**, and the asking is enforced in
-  `loop.py`, never in a prompt. Three ways in: `once` (a turn, from `@` or
-  *Allow once*), `always` (stored per agent+connector), and `unrestricted` —
+  `loop.py`, never in a prompt. This covers built-in connector tools too
+  (`list_mail`, `gmail_search`, `calendar_lookup`) via
+  `connector_grants.FIRST_PARTY_TOOLS` — without it the gate stopped an agent
+  reading a Notion page and let it read the whole inbox. Three ways in: `once`
+  (a turn, from `@` or *Allow once*), `always` (per agent+connector), `unrestricted` —
   declared by a template, and only Chief of Staff has it.
   [`connector-permissions.md`](../../docs/development/connector-permissions.md)
 - A routine pre-authorises the routine, not the stranger who wrote the email it

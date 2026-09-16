@@ -170,10 +170,12 @@ class ToolRunner:
         where the call actually happens — the same reason the outbound
         allow-list is not a sentence in the system prompt.
         """
-        connector = mcp_tools.connector_of(name)
+        connector = connector_grants.connector_of(name)
         if not connector or connector_grants.may_use(self.agent_id, connector):
             return None
-        label = mcp_tools.labels_by_id().get(connector, connector)
+        label = (mcp_tools.labels_by_id().get(connector)
+                 or connector_grants.first_party_labels().get(connector)
+                 or connector)
         return ToolResult.failed(NEEDS_PERMISSION.format(label=label))
 
     def _execute(self, call: ToolCall, key: str) -> ToolOutcome:
