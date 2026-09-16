@@ -353,6 +353,40 @@ def run(*, include_slow: bool = True) -> Scorecard:
               "An agent asks before it reaches a connector")(
             bool(refused), refused[0].result[:48] if refused else "reached it anyway")
 
+        # ── changing the inbox, as one approved batch ────────────────────
+        #
+        # An agent could send mail for as long as this project existed and
+        # could not archive one message: `gmail.send` cannot touch a message
+        # that already exists. The capability is the whole loop — ids from
+        # `list_mail`, one proposal covering all of them, one card.
+        from ..actions import parse_actions
+        from .approvals import describe as describe_action
+
+        tools_mod.TOOL_IMPLS["list_mail"] = lambda **kw: (
+            "- id=m1 thread=t1 [unread]\n  subject: Flash sale\n"
+            "- id=m2 thread=t2\n  subject: Weekly newsletter")
+        provider = _scripted([
+            [("list_mail", {"query": "in:inbox"})],
+            'Tidying these two.\n<action type="mail_triage">'
+            '{"items":[{"id":"m1","do":"archive","subject":"Flash sale"},'
+            '{"id":"m2","do":"archive","subject":"Weekly newsletter"}]}</action>',
+        ])
+        use(provider)
+        triaged = runtime.run_turn("inbox", "clear my inbox", effort="medium",
+                                   connectors=["gmail"])
+        reply = triaged.reply or ""
+        proposals = parse_actions(reply)
+        batch = proposals[0]["params"]["items"] if proposals else []
+        check("mail_triage",
+              "An agent can change the inbox, not only read it")(
+            len(proposals) == 1 and len(batch) == 2,
+            f"{len(proposals)} card(s) for {len(batch)} email(s)")
+        check("mail_triage_card",
+              "The batch card names the emails and shows no internals")(
+            bool(batch)
+            and "Flash sale" in describe_action("mail_triage", {"items": batch})
+            and "m1" not in describe_action("mail_triage", {"items": batch}))
+
     finally:
         _swap(mcp, "_supplier", saved_supplier)
         mcp.clear_cache()

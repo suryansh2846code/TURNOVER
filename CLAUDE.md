@@ -147,6 +147,10 @@ even when every test is green. Reasoning and measurements:
   read.** Outbound actions need a recipient on the explicit allow-list; a derived
   list is exactly what an injection would name. Interactive chat is deliberately
   not gated.
+- **Changing a third-party account always waits for one tap** — `mcp_action` and
+  `mail_triage` are in `NEVER_UNATTENDED` and there is nothing to allow-list
+  there. A batch is **one** card covering every item, never one card each: a
+  tap nobody reads by the fourth time is not consent.
 - Streaming is a callback on the same loop, never a second loop.
 - Delegation guards live in a `ContextVar`: one `copy_context()` **per call**,
   and the chain is left on every exit path.
@@ -290,6 +294,8 @@ The boundaries and what each must name:
 | the first-run flow | [`docs/development/onboarding-flow.md`](docs/development/onboarding-flow.md) |
 | the brain's data model | [`docs/BRAIN-V1.5.md`](docs/BRAIN-V1.5.md) |
 | connectors | [`docs/CONNECTORS.md`](docs/CONNECTORS.md) |
+| changing the user's inbox, and why it could not | [`docs/development/mail-triage.md`](docs/development/mail-triage.md) |
+| which messaging apps are actually reachable | [`docs/MESSAGING.md`](docs/MESSAGING.md) |
 | driving a real browser (planned) | [`docs/BROWSER.md`](docs/BROWSER.md) |
 | building and shipping | [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) |
 | known gaps | [`docs/AUDIT.md`](docs/AUDIT.md) |

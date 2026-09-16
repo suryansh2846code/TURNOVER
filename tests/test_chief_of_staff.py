@@ -172,5 +172,8 @@ def test_acting_on_the_world_still_goes_through_the_user():
 
     assert "mcp_action" in NEVER_UNATTENDED
     assert "create_routine" in NEVER_UNATTENDED
+    assert "mail_triage" in NEVER_UNATTENDED, (
+        "the one agent that never asks to READ still asks before it CHANGES")
     assert set(get_agent(CHIEF).actions) == {
-        "send_email", "create_event", "set_reminder", "create_routine"}
+        "send_email", "create_event", "set_reminder", "create_routine",
+        "mail_triage"}
