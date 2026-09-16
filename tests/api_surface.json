@@ -68,6 +68,7 @@
  "GET /api/routines",
  "GET /api/sync/status",
  "GET /api/tasks",
+ "GET /api/telegram/status",
  "GET /api/usage",
  "GET /onboarding",
  "GET /signin-hud",
@@ -139,6 +140,11 @@
  "POST /api/sync/now",
  "POST /api/tasks",
  "POST /api/tasks/{tid}/complete",
+ "POST /api/telegram/code",
+ "POST /api/telegram/credentials",
+ "POST /api/telegram/disconnect",
+ "POST /api/telegram/login",
+ "POST /api/telegram/password",
  "POST /api/usage/reset",
  "PUT /api/agents/{agent_id}/model"
 ]

@@ -121,6 +121,33 @@ def first_party_labels() -> dict[str, str]:
     return labels
 
 
+#: The agent whose turn is currently running.
+#:
+#: `_blocked` maps a tool NAME to a connector, which is enough for every tool
+#: that reaches exactly one. It is not enough for `list_chats`, which reaches
+#: whichever app the model named in the arguments — the gate cannot see those.
+#: So those tools ask the question themselves, and this is how they know who is
+#: asking. A ContextVar for the same reason `_ONCE` is one: tool calls run in a
+#: thread pool, under one `copy_context()` per call.
+_ACTING: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "lodestone_acting_agent", default="")
+
+
+def acting_as(agent_id: str):
+    """Mark whose turn is running. Returns a token for `stop_acting`."""
+    return _ACTING.set(str(agent_id or ""))
+
+
+def stop_acting(token) -> None:
+    with suppressed("clearing the acting agent"):
+        _ACTING.reset(token)
+
+
+def acting() -> str:
+    """The agent currently running, for a tool that must gate itself."""
+    return _ACTING.get()
+
+
 # ── the one-turn grant ───────────────────────────────────────────────────
 def allow_for_this_turn(connectors: list[str] | None):
     """Grant these connectors for the current turn. Returns a token for `reset`."""

@@ -23,7 +23,7 @@ from ..log import suppressed
 #: Every action an agent can propose. `Agent.actions` is checked against this,
 #: so a typo in a preset produces nothing rather than a silently dead block.
 KNOWN_ACTIONS = ("send_email", "create_event", "set_reminder", "create_routine",
-                 "mail_triage")
+                 "mail_triage", "message_send")
 
 #: Argument names listed per connector tool. Enough for a model to fill a call
 #: in correctly; few enough that twenty tools do not become the system prompt.
@@ -169,6 +169,14 @@ _BLOCKS: dict[str, str] = {
         'trigger is "new_email" or "schedule" (add interval_min="60"). Put the '
         "full rule, including the filter and the exact action, in the tag's "
         "inner text. Check `list_routines` first so you don't duplicate one."
+    ),
+    "message_send": (
+        "To send a message on a messaging app (Telegram, Slack - NOT email):\n"
+        '<action type="message_send" app="telegram" chat="@dana">'
+        "See you at six.</action>\n"
+        "`app` and `chat` must both come from `list_chats` - you cannot guess a "
+        "conversation id. The message itself is the tag's inner text. One "
+        "action per message. Use send_email for email; this is not that."
     ),
     "mail_triage": (
         "To CHANGE emails — archive, label, mark read — propose ONE action "

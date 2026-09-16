@@ -31,6 +31,8 @@ def parse_actions(text: str) -> list[dict]:
             a["params"]["body"] = inner.strip()
         elif t == "create_event":
             a["params"]["description"] = inner.strip()
+        elif t == "message_send":
+            a["params"]["text"] = inner.strip()
         elif t == "set_reminder":
             a["params"]["message"] = inner.strip()
         elif t == "create_routine":
@@ -171,6 +173,32 @@ def _mail_triage(params: dict) -> dict:
     return {"ok": True, "count": changed, "detail": summarise(items)}
 
 
+def _message_send(params: dict) -> dict:
+    """Send one message on a messaging app the user connected.
+
+    Separate from `send_email` on purpose. They look alike and they are not:
+    an email address is a global identifier and a chat id means nothing outside
+    the app it came from, so they are allow-listed separately and the card says
+    which app it is going to.
+    """
+    from .messaging import get_app
+
+    app = str(params.get("app") or "").strip().lower()
+    chat = str(params.get("chat") or params.get("to") or "").strip()
+    text = str(params.get("text") or params.get("body") or "").strip()
+
+    if not app or not chat:
+        return {"ok": False, "error": "A message needs an app and a conversation."}
+    if not text:
+        return {"ok": False, "error": "There is nothing to send."}
+
+    connector = get_app(app)
+    if connector is None:
+        return {"ok": False,
+                "error": f"{app.title()} is not connected for messaging."}
+    return connector.send(chat, text)
+
+
 def _writer(source: str, capability: str):
     """The connector for `source`, only if it can actually perform `capability`.
 
@@ -285,6 +313,10 @@ REGISTRY: dict[str, dict[str, Any]] = {
     "mail_triage": {
         "handler": _mail_triage, "label": "Inbox changes",
         "fields": ["items"],
+    },
+    "message_send": {
+        "handler": _message_send, "label": "Send a message",
+        "fields": ["app", "chat", "text"],
     },
 }
 

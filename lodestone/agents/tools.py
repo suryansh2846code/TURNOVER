@@ -17,6 +17,7 @@ from . import (
     file_tools,
     mail_tools,
     mcp_tools,
+    message_tools,
     source_tools,
 )
 from .effort import get_effort
@@ -259,6 +260,8 @@ TOOL_IMPLS = {
     "sync_source": source_tools.sync_source,
     "list_mail": mail_tools.list_mail,
     "read_thread": mail_tools.read_thread,
+    "list_chats": message_tools.list_chats,
+    "read_chat": message_tools.read_chat,
     "search_source": source_tools.search_source,
     "add_task": _add_task,
     "list_tasks": _list_tasks,
@@ -491,6 +494,31 @@ TOOL_DEFS: dict[str, Tool] = {
                        "description": "A thread id from list_mail"},
             "max_messages": {"type": "integer", "default": 20}},
             "required": ["thread"]},
+    ),
+    "list_chats": Tool(
+        name="list_chats",
+        description=(
+            "The user's conversations across every messaging app they have "
+            "connected (Telegram, Slack). Gives each one's id, which is what "
+            "read_chat and a message_send action need. Call with no app to see "
+            "everything."
+        ),
+        parameters={"type": "object", "properties": {
+            "app": {"type": "string",
+                    "description": "Omit for all; or telegram \u00b7 slack"}}},
+    ),
+    "read_chat": Tool(
+        name="read_chat",
+        description=(
+            "Read one conversation in order, oldest first. Do this before "
+            "replying to or judging anything in a back and forth - the newest "
+            "message is the end of it, not the whole of it."
+        ),
+        parameters={"type": "object", "properties": {
+            "app": {"type": "string", "description": "telegram \u00b7 slack"},
+            "chat": {"type": "string", "description": "id from list_chats"},
+            "limit": {"type": "integer", "default": 40}},
+            "required": ["app", "chat"]},
     ),
     "list_dir": Tool(
         name="list_dir",
@@ -759,6 +787,8 @@ _LABELS: dict[str, tuple[str, str]] = {
     "gmail_search":             ("Search",    "Email"),
     "list_mail":                ("List",      "Email"),
     "read_thread":              ("Read",      "Email"),
+    "list_chats":               ("List",      "Messages"),
+    "read_chat":                ("Read",      "Messages"),
     "calendar_lookup":          ("Schedule",  "Calendar"),
     "web_search":               ("Search",    "Web"),
     # Your Mac — the powers worth naming as a group, because they are the ones

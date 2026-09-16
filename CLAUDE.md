@@ -149,7 +149,9 @@ even when every test is green. Reasoning and measurements:
   not gated.
 - **Changing a third-party account always waits for one tap** — `mcp_action` and
   `mail_triage` are in `NEVER_UNATTENDED` and there is nothing to allow-list
-  there. A batch is **one** card covering every item, never one card each: a
+  there. `message_send` *is* allow-listable, against its own list keyed
+  `app:chat` — a chat id means nothing outside the app it came from, so it is
+  never judged against the email list. A batch is **one** card covering every item, never one card each: a
   tap nobody reads by the fourth time is not consent.
 - Streaming is a callback on the same loop, never a second loop.
 - Delegation guards live in a `ContextVar`: one `copy_context()` **per call**,
@@ -294,6 +296,7 @@ The boundaries and what each must name:
 | the first-run flow | [`docs/development/onboarding-flow.md`](docs/development/onboarding-flow.md) |
 | the brain's data model | [`docs/BRAIN-V1.5.md`](docs/BRAIN-V1.5.md) |
 | connectors | [`docs/CONNECTORS.md`](docs/CONNECTORS.md) |
+| connecting Telegram | [`docs/development/telegram.md`](docs/development/telegram.md) |
 | changing the user's inbox, and why it could not | [`docs/development/mail-triage.md`](docs/development/mail-triage.md) |
 | which messaging apps are actually reachable | [`docs/MESSAGING.md`](docs/MESSAGING.md) |
 | driving a real browser (planned) | [`docs/BROWSER.md`](docs/BROWSER.md) |

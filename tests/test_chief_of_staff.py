@@ -176,4 +176,4 @@ def test_acting_on_the_world_still_goes_through_the_user():
         "the one agent that never asks to READ still asks before it CHANGES")
     assert set(get_agent(CHIEF).actions) == {
         "send_email", "create_event", "set_reminder", "create_routine",
-        "mail_triage"}
+        "mail_triage", "message_send"}

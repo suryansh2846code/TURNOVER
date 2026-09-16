@@ -130,6 +130,17 @@ class ToolRunner:
                 this_round[key] = i
                 pending.append((i, call, key))
 
+        # Tools that reach exactly one connector are gated by name in
+        # `_blocked`. A tool that reaches whichever app the model named has to
+        # ask for itself, and this is how it knows who is asking. Set before
+        # the context is copied, so the pool workers inherit it.
+        acting = connector_grants.acting_as(self.agent_id)
+        try:
+            return self._run_pending(calls, outcomes, pending, echoes)
+        finally:
+            connector_grants.stop_acting(acting)
+
+    def _run_pending(self, calls, outcomes, pending, echoes):
         if pending:
             width = max(1, min(len(pending), self.effort.max_parallel_tools))
             if width == 1 or len(pending) == 1:

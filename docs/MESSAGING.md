@@ -10,6 +10,19 @@
 > build this.** A connector that risks the user's account is not a connector
 > with a caveat; it is a connector we do not ship by default.
 
+## What has shipped
+
+**Telegram** and **Slack** are built — connector, agent tools, and a
+`message_send` action behind one tap. Both are official, personal-account APIs;
+neither risks the user's account.
+
+Everything else on this page is still a plan, and the three apps people ask for
+most are the three with no sanctioned API. **They are the browser's job, not a
+connector's** — see §7. That is not a workaround dressed up as a decision: a
+browser session is the user driving their own logged-in account in a window
+they can see, which is a different thing from us reimplementing a private
+protocol behind their back.
+
 ## The short answer
 
 | | personal account, read + send | how | ship |
@@ -18,10 +31,10 @@
 | **Slack** | yes | official API, user token, OAuth | **second** |
 | **Signal** | yes | `signal-cli` paired as a linked device | third |
 | **iMessage / SMS** | read yes (already), send yes | `chat.db` + AppleScript to Messages | third |
-| **Discord** | bot channels only | bot token. *User* tokens are a ban offence | fourth |
-| **WhatsApp** | **no sanctioned path** | Business Cloud API is a different number; linked-device libraries risk the ban | **not by default** |
-| **Instagram DM** | business accounts only | Messenger API for Instagram | no |
-| **LinkedIn** | **no** | messaging API is partner-only | **no** |
+| **Discord** | bot channels only | bot token. *User* tokens are a ban offence | **browser** |
+| **WhatsApp** | **no sanctioned path** | Business Cloud API is a different number; linked-device libraries risk the ban | **browser** |
+| **Instagram DM** | business accounts only | Messenger API for Instagram | browser |
+| **LinkedIn** | **no** | messaging API is partner-only | **browser** |
 
 Two of the three the user named are the two that do not work. That is worth
 saying plainly rather than discovering it halfway through a sprint.
@@ -136,6 +149,34 @@ LinkedIn's terms of service say something different.
 
 ---
 
+## 6a. The three that go through the browser
+
+WhatsApp, LinkedIn and Discord have one thing in common: the only way to reach
+a *personal* account is the web app the user is already signed into. So that is
+how they are reached — through the browser in
+[`BROWSER.md`](BROWSER.md), not a connector here.
+
+This is a better answer than a connector, not a lesser one:
+
+* **Nothing reimplements a private protocol.** The failure mode of a
+  linked-device library is a banned account, and it happens late enough that
+  the user is already relying on it. A browser session is the user's own
+  session, in a window, doing what a browser does.
+* **The user signs in, and can see it.** The profile is Lodestone's own, so the
+  blast radius is the set of sites they deliberately logged into *here*.
+* **One mechanism, three apps.** And the fourth, whatever it is, needs no code.
+
+What it costs, and it is a real cost: it is slower, it breaks when a site
+changes its markup, and **it does not make anybody's terms of service say
+something different**. LinkedIn restricts accounts for automation, and driving
+it from a browser is still automation. The right shape there is the user
+watching it happen, one action at a time — which is what `BROWSER.md`'s
+approval model already is.
+
+Order, once the browser lands: **WhatsApp Web** (the one people ask for and the
+one with no alternative), **Discord** (a bot covers servers; the browser covers
+DMs), **LinkedIn** last, read-mostly.
+
 ## 7. What this means for the roster
 
 The Inbox agent's description is *email*. If Telegram and Slack land, the right
@@ -148,10 +189,12 @@ agent, *once* or *always*, and only Chief of Staff skips the asking.
 
 ## 8. Order of work
 
-1. **Telegram.** Real API, no risk, highest ratio of value to trouble.
-2. **Slack** — or discover that an existing MCP server is enough and skip it.
-3. **iMessage send** + the permission walkthrough. Mostly already here.
+1. ~~**Telegram.**~~ **Done** — `connectors/telegram.py`, contract in
+   [`development/telegram.md`](development/telegram.md).
+2. ~~**Slack.**~~ **Done** — `connectors/slack.py`, official Web API, no new
+   dependency.
+3. **iMessage send** + the permission walkthrough. Reading already ships.
 4. **Signal**, with the no-backfill limit stated at connect time.
-5. Revisit WhatsApp only as an explicit, warned, user-chosen bridge.
-6. LinkedIn: the data export. Not messaging.
+5. **The browser**, and then WhatsApp / Discord / LinkedIn through it (§6a).
+6. LinkedIn's data export, separately — that is ingest, not messaging.
 

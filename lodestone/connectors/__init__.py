@@ -13,6 +13,8 @@ from .imessage import IMessageConnector
 from .linear import LinearConnector
 from .notes import NotesConnector
 from .notion import NotionConnector
+from .slack import SlackConnector
+from .telegram import TelegramConnector
 
 REGISTRY: dict[str, type[Connector]] = {
     FilesConnector.name: FilesConnector,
@@ -26,6 +28,8 @@ REGISTRY: dict[str, type[Connector]] = {
     AppleCalendarConnector.name: AppleCalendarConnector,
     LinearConnector.name: LinearConnector,
     GitHubConnector.name: GitHubConnector,
+    SlackConnector.name: SlackConnector,
+    TelegramConnector.name: TelegramConnector,
 }
 
 

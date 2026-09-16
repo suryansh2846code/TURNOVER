@@ -4,9 +4,18 @@ One class per source, registered in `__init__.py::REGISTRY`.
 
 - Sync idempotently, redact secrets on ingest, survive a crash without taking the
   whole sync down, and stay cancellable.
-- Hand-written connectors are read-only by design. `mcp_source.py` is the one
-  path that changes something at a vendor, and `perform()`'s `confirmed` gate is
-  required rather than defaulted, so a caller that forgets it fails closed.
+- **A connector's writes are named methods, never part of `sync()`.** Sync only
+  ingests — it runs on a timer, so anything it could change would change without
+  anyone asking. A write (`send_email`, `modify_messages`, `send`) is a separate
+  method reachable only through a confirmed action in `actions.py::REGISTRY`.
+  `mcp_source.py` is the same rule for somebody else's server, and `perform()`'s
+  `confirmed` gate is required rather than defaulted, so a caller that forgets
+  it fails closed.
+- **A connector that carries conversations implements three methods** — `chats`,
+  `history`, `send` — and `../messaging.py` finds it by duck typing. `history`
+  returns **oldest first**; every chat API returns the opposite, and a
+  conversation read backwards is answered backwards. Which apps are reachable at
+  all: [`docs/MESSAGING.md`](../../docs/MESSAGING.md).
 - **A tool is a write unless it proves otherwise.** `_is_write()` needs evidence
   to call something a read — the server's own `readOnlyHint`, or a recognised
   read verb. It ran the other way once, and handed `merge_pull_request` to a

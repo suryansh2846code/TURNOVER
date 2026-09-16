@@ -115,6 +115,7 @@ function parseActions(text) {
     else if (a.type === "create_event") a.params.description = inner.trim();
     else if (a.type === "set_reminder") a.params.message = inner.trim();
     else if (a.type === "create_routine") a.params.instruction = inner.trim();
+    else if (a.type === "message_send") a.params.text = inner.trim();
     else if (a.type === "mcp_action") {
       // A connector tool takes an object, and attributes are flat strings — so
       // the arguments are the body, as JSON. Mirrors `actions.parse_actions`.
@@ -260,6 +261,11 @@ function updateConnectorPicker() {
 // actually read is not a confirmation.
 
 /** "notion-update-page" + "Notion" → "Update page in Notion". */
+//: App id -> the name a person reads. The server has the same mapping from the
+//: connectors' own labels; these are the words on the card, and the ids are
+//: what crosses the wire.
+const MESSAGING_APPS = { telegram: "Telegram", slack: "Slack" };
+
 //: What each triage verb is called on screen. The server has the same table in
 //: `lodestone/mail_triage.py`; these are the words a person reads, and the ids
 //: that cross the wire are the keys — never the other way round.
@@ -365,6 +371,13 @@ function actionCard(a) {
       return `<div class="ac-row"><b>${esc(humanKey(k))}</b> ${esc(v.slice(0, 300))}</div>`;
     }).filter(Boolean).join("");
     rows = shown || `<div class="ac-row muted">No details to fill in.</div>`;
+  } else if (a.type === "message_send") {
+    // The app is named, because it is half the decision — the same handle can
+    // be two different people on two different apps.
+    const where = MESSAGING_APPS[(p.app || "").toLowerCase()] || p.app || "a messaging app";
+    title = `Send a message on ${esc(where)}`; verb = "send";
+    rows = `<div class="ac-row"><b>To</b> ${esc(p.chat || p.to || "someone")}</div>
+       <div class="ac-body">${esc(p.text || "")}</div>`;
   } else if (a.type === "mail_triage") {
     // Plain verbs and real subjects. The user is approving a change to their
     // own inbox, so the card has to read like one — never a message id, never

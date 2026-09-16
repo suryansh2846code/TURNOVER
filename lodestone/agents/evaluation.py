@@ -387,6 +387,55 @@ def run(*, include_slow: bool = True) -> Scorecard:
             and "Flash sale" in describe_action("mail_triage", {"items": batch})
             and "m1" not in describe_action("mail_triage", {"items": batch}))
 
+        # ── messaging, across whichever app it is on ─────────────────────
+        #
+        # Two apps landed together because one app is a feature and two is a
+        # contract: the tools, the action and the card must not know which one
+        # they are talking to, or a third app costs a copy of all three.
+        from .. import messaging as messaging_mod
+        from ..messaging import Chat
+
+        class _App:
+            name, label = "demo_chat", "DemoChat"
+
+            def is_configured(self):
+                return True, ""
+
+            def chats(self, limit=30):
+                return [Chat(id="101", name="Dana", kind="dm", unread=1)]
+
+            def history(self, chat_id, limit=50):
+                return []
+
+            def send(self, chat_id, text):
+                return {"ok": True, "detail": "sent"}
+
+        saved_apps = messaging_mod.apps
+        _swap(messaging_mod, "apps", lambda: [_App()])
+        try:
+            provider = _scripted([
+                [("list_chats", {})],
+                'I will tell her.\n<action type="message_send" app="demo_chat" '
+                'chat="101">On my way.</action>',
+            ])
+            use(provider)
+            chatted = runtime.run_turn("inbox", "tell Dana I am coming",
+                                       effort="medium", connectors=["demo_chat"])
+            listed = [s for s in chatted.trace
+                      if s.kind == "tool_result" and "id=101" in s.result]
+            reply = chatted.reply or ""
+            proposed = parse_actions(reply)
+            check("messaging",
+                  "An agent can read the user's messaging apps, whichever they are")(
+                bool(listed), "list_chats returned nothing addressable")
+            check("messaging_send",
+                  "Sending a message is proposed, never done unattended")(
+                len(proposed) == 1
+                and proposed[0]["params"].get("app") == "demo_chat",
+                f"{len(proposed)} proposal(s)")
+        finally:
+            _swap(messaging_mod, "apps", saved_apps)
+
     finally:
         _swap(mcp, "_supplier", saved_supplier)
         mcp.clear_cache()

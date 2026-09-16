@@ -46,9 +46,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_perm_kind_value
 
 EMAIL_RECIPIENT = "email_recipient"
 
+#: A conversation on a messaging app, stored as `app:chat` — `telegram:@dana`.
+#:
+#: A separate list from the email one, and separately scoped by app, because an
+#: email address is a global identifier and a chat id means nothing outside the
+#: app it came from. Allowing `@dana` on Telegram must not also allow a `#dana`
+#: in Slack; they are different people as often as not.
+CHAT_RECIPIENT = "chat_recipient"
+
 #: Actions whose effect reaches someone other than the user. These are the ones
 #: that need a permitted recipient before an unattended agent may run them.
-OUTBOUND_ACTIONS = {"send_email", "create_event"}
+OUTBOUND_ACTIONS = {"send_email", "create_event", "message_send"}
+
+#: Which allow-list each outbound action is judged against. A dict rather than
+#: a branch in `check`, so adding an action that reaches people is a line here
+#: and cannot be forgotten somewhere else.
+RECIPIENT_KINDS = {
+    "send_email": EMAIL_RECIPIENT,
+    "create_event": EMAIL_RECIPIENT,
+    "message_send": CHAT_RECIPIENT,
+}
 
 #: Actions an unattended agent may never take, permitted recipient or not.
 #: `create_routine` is privilege escalation: a routine that creates routines can
@@ -135,6 +152,15 @@ def recipients_of(action_type: str, params: dict) -> list[str]:
         for one in attendees:
             out.extend(_every_address_in(str(one)))
         return list(dict.fromkeys(out))
+    if action_type == "message_send":
+        # Exactly one conversation, and the app is part of its identity. No
+        # splitting: a chat id is opaque and picking addresses out of it the
+        # way `_every_address_in` does would invent recipients that are not
+        # there — and fail open on the ones that are.
+        from ..messaging import target
+
+        chat = str(params.get("chat") or params.get("to") or "").strip()
+        return [target(params.get("app") or "", chat)] if chat else []
     return []
 
 
@@ -205,7 +231,8 @@ def check(action_type: str, params: dict) -> Verdict:
         # A calendar entry with no attendees reaches nobody but the user.
         return Verdict(True)
 
-    blocked = tuple(t for t in targets if not is_permitted(t))
+    kind = RECIPIENT_KINDS.get(action_type, EMAIL_RECIPIENT)
+    blocked = tuple(t for t in targets if not is_permitted(t, kind=kind))
     if blocked:
         return Verdict(
             False,

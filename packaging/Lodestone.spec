@@ -49,6 +49,9 @@ HIDDEN = [
     "webview", "webview.platforms.cocoa",
     "googleapiclient", "google_auth_oauthlib", "google.auth",
     "notion_client", "pypdf", "docx", "pptx", "ddgs",
+    # Telethon is imported inside functions so a build without it still runs;
+    # that is also why the analyser cannot see it and it has to be named here.
+    "telethon",
     "anyio._backends._asyncio",
 ]
 HIDDEN += collect_submodules("lodestone")

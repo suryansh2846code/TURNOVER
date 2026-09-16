@@ -467,6 +467,86 @@ def google_status():
             "services": granted_services()}
 
 
+# ── Telegram: credentials, then a three-step sign-in ─────────────────────
+#
+# Not a `secret_field`, because this is not one box. It is an API id and hash
+# the user fetches once from my.telegram.org, then a phone number, then the
+# code Telegram sends, then a password if the account has two-factor on.
+#
+# Every step returns `{ok, error}` in the same shape, so the card driving it
+# never has to tell them apart. `needs_password: true` is the only branch, and
+# it is a step rather than a failure.
+#
+# Contract: docs/development/telegram.md
+class TelegramCredentialsIn(BaseModel):
+    api_id: str
+    api_hash: str
+
+
+class TelegramPhoneIn(BaseModel):
+    phone: str
+
+
+class TelegramCodeIn(BaseModel):
+    code: str
+
+
+class TelegramPasswordIn(BaseModel):
+    password: str
+
+
+@router.get("/api/telegram/status")
+@probes_a_provider
+def telegram_status():
+    """Where the user is in setting Telegram up."""
+    from ...connectors.telegram_auth import status
+
+    return status()
+
+
+@router.post("/api/telegram/credentials")
+def telegram_credentials(body: TelegramCredentialsIn):
+    from ...connectors.telegram_auth import save_credentials
+
+    return save_credentials(body.api_id, body.api_hash)
+
+
+@router.post("/api/telegram/login")
+@probes_a_provider
+def telegram_login(body: TelegramPhoneIn):
+    """Ask Telegram to send a login code to the user's number."""
+    from ...connectors.telegram_auth import start_login
+
+    return start_login(body.phone)
+
+
+@router.post("/api/telegram/code")
+@probes_a_provider
+def telegram_code(body: TelegramCodeIn):
+    """Finish signing in with the code Telegram sent."""
+    from ...connectors.telegram_auth import submit_code
+
+    return submit_code(body.code)
+
+
+@router.post("/api/telegram/password")
+@probes_a_provider
+def telegram_password(body: TelegramPasswordIn):
+    """The two-factor password, for accounts that have one."""
+    from ...connectors.telegram_auth import submit_password
+
+    return submit_password(body.password)
+
+
+@router.post("/api/telegram/disconnect")
+@probes_a_provider
+def telegram_disconnect():
+    """Sign out on Telegram's side as well as ours."""
+    from ...connectors.telegram_auth import disconnect
+
+    return disconnect()
+
+
 @router.post("/api/google/disconnect")
 def google_disconnect():
     from ...connectors.google_auth import disconnect

@@ -64,7 +64,7 @@ die()  { printf "\n\033[31m✗ %s\033[0m\n" "$1" >&2; exit 1; }
 
 # ── 0. Preflight ────────────────────────────────────────────────────────────
 step "Preflight"
-[ -d .venv ] || die "No .venv — run: uv venv && uv pip install -e '.[desktop,gmail,gdrive,notion]'"
+[ -d .venv ] || die "No .venv — run: uv venv && uv pip install -e '.[desktop,gmail,gdrive,notion,telegram]'"
 ./.venv/bin/python -c "import webview" 2>/dev/null \
   || die "pywebview missing — run: uv pip install -e '.[desktop]'"
 ./.venv/bin/python -c "import PyInstaller" 2>/dev/null \

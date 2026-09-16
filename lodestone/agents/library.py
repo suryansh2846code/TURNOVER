@@ -69,13 +69,16 @@ _TASKS = ["add_task", "list_tasks", "complete_task"]
 _LOOPS = ["create_open_loop", "list_open_loops", "complete_open_loop"]
 _MAIL = ["search_source", "sync_source", "gmail_search",
          "list_mail", "read_thread"]
+#: Telegram, Slack — one pair of tools across every app, not one pair each.
+#: Which apps are reachable at all: docs/MESSAGING.md.
+_MESSAGES = ["list_chats", "read_chat"]
 _DIARY = ["calendar_lookup", "sync_source"]
 
 _ALL_ACTIONS = ["send_email", "create_event", "set_reminder", "create_routine"]
-#: Only for agents that can actually reach an inbox. An agent taught to
-#: propose a change it has no tool to address is an agent that will claim it
+#: Only for agents that can actually reach an inbox or a chat. An agent taught
+#: to propose a change it has no tool to address is an agent that will claim it
 #: archived something.
-_MAIL_ACTIONS = [*_ALL_ACTIONS, "mail_triage"]
+_COMMS_ACTIONS = [*_ALL_ACTIONS, "mail_triage", "message_send"]
 
 #: Stands for "every tool there is" in a template's list.
 #:
@@ -174,7 +177,7 @@ TEMPLATES: tuple[Template, ...] = (
         # The one agent that does not stop to ask. Asking on every turn for the
         # agent whose whole job is "whatever you need" is a prompt nobody reads.
         unrestricted_connectors=True,
-        actions=_MAIL_ACTIONS,
+        actions=_COMMS_ACTIONS,
         recall_sources=["gmail", "gcal"],
         works_with=["gmail", "gcal"],
     ),
@@ -208,15 +211,20 @@ TEMPLATES: tuple[Template, ...] = (
             "forth, `read_thread` it. One matched message is the end of an "
             "argument, and answering it as if it were the start is how you get "
             "it wrong.\n"
+            "Email is not the only place people write to them. `list_chats` "
+            "covers every messaging app they connected, and the same rules "
+            "apply: `read_chat` the whole conversation before you judge it, "
+            "and propose a message_send action rather than claiming to have "
+            "replied.\n"
             "Draft; never claim to have sent."
         ),
         # Open loops matter more here than anywhere: email is where people
         # commit to things. run_python because triage is counting and dates.
-        tools=[*BASE_TOOLS, *_FILES, *_MAIL, *_DIARY, *_TASKS, *_LOOPS,
-               "run_python"],
-        actions=_MAIL_ACTIONS,
-        recall_sources=["gmail", "gcal"],
-        works_with=["gmail", "gcal"],
+        tools=[*BASE_TOOLS, *_FILES, *_MAIL, *_MESSAGES, *_DIARY, *_TASKS,
+               *_LOOPS, "run_python"],
+        actions=_COMMS_ACTIONS,
+        recall_sources=["gmail", "gcal", "telegram", "slack"],
+        works_with=["gmail", "gcal", "telegram", "slack"],
         needs=["gmail"],
     ),
     Template(

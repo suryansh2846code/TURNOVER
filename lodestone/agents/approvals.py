@@ -62,6 +62,16 @@ def describe(action_type: str, params: dict) -> str:
         return f"New automation “{params.get('name') or 'untitled'}”"
     if action_type == "set_reminder":
         return f"Reminder: {params.get('message') or ''}"
+    if action_type == "message_send":
+        # The app is named because it is half the decision: the same handle can
+        # be two different people on two different apps, and "send a message to
+        # dana" does not say which one is about to get it.
+        from ..messaging import labels
+
+        app = str(params.get("app") or "").strip().lower()
+        where = labels().get(app) or app.title() or "a messaging app"
+        who = params.get("chat") or params.get("to") or "someone"
+        return f"Message {who} on {where}"
     if action_type == "mail_triage":
         # Plain verbs and real subjects, never a label id: "Archive 12 emails"
         # is the decision, and REMOVE INBOX is the implementation.
