@@ -966,6 +966,9 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   color: var(--text); border: 1px solid var(--line2); border-radius: 9px;
   padding: 8px 11px; font: inherit; font-size: 13.5px; }
 .set-input-num { min-width: 0; width: 86px; }
+/* An address and the button that grants it read as one control, because they
+   are one decision. */
+.allow-add { display: flex; align-items: center; gap: 8px; }
 .set-select:focus, .set-input:focus { outline: none; border-color: var(--accent); }
 .set-select:disabled { opacity: .5; }
 

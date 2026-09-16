@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS action_approvals (
     params_json TEXT NOT NULL,
     summary     TEXT NOT NULL DEFAULT '',
     reason      TEXT NOT NULL DEFAULT '',
+    blocked_json TEXT NOT NULL DEFAULT '[]',      -- see `blocked` in _public()
     status      TEXT NOT NULL DEFAULT 'pending',  -- pending|approved|rejected
     result      TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL,
@@ -41,6 +42,12 @@ CREATE INDEX IF NOT EXISTS idx_approvals_status
     ON action_approvals(status, created_at);
 """
 
+#: Columns added after the table shipped. `CREATE TABLE IF NOT EXISTS` does
+#: nothing to a table that already exists, so a user upgrading in place keeps the
+#: old shape and every read of the new column raises — which is why this list
+#: exists rather than a second CREATE.
+_ADDED_COLUMNS = {"blocked_json": "TEXT NOT NULL DEFAULT '[]'"}
+
 
 def _conn() -> sqlite3.Connection:
     path = get_settings().home / "agents.db"
@@ -48,6 +55,11 @@ def _conn() -> sqlite3.Connection:
     conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript(_SCHEMA)
+    have = {r["name"] for r in conn.execute("PRAGMA table_info(action_approvals)")}
+    for column, decl in _ADDED_COLUMNS.items():
+        if column not in have:
+            conn.execute(f"ALTER TABLE action_approvals ADD COLUMN {column} {decl}")
+            conn.commit()
     return conn
 
 
@@ -111,17 +123,25 @@ def _argument_summary(arguments: object, limit: int = 90) -> str:
 
 
 def queue(action_type: str, params: dict, *, reason: str = "",
-          routine_id: str = "", routine_name: str = "", agent_id: str = "") -> dict:
-    """Hold an action for approval and tell the user it is waiting."""
+          blocked: tuple[str, ...] = (), routine_id: str = "",
+          routine_name: str = "", agent_id: str = "") -> dict:
+    """Hold an action for approval and tell the user it is waiting.
+
+    `blocked` is who the allow-list refused, as `permissions.check()` computed
+    them — kept as data beside the sentence in `reason`, never parsed back out
+    of it. The UI offers a standing grant for exactly these addresses, and an
+    address read out of a display string is one nobody can be sure of.
+    """
     row_id = str(uuid.uuid4())
     summary = describe(action_type, params)
     conn = _conn()
     conn.execute(
         "INSERT INTO action_approvals "
         "(id,routine_id,routine_name,agent_id,action_type,params_json,summary,"
-        " reason,status,created_at) VALUES (?,?,?,?,?,?,?,?,'pending',?)",
+        " reason,blocked_json,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,'pending',?)",
         (row_id, routine_id, routine_name, agent_id, action_type,
-         json.dumps(params or {}), summary, reason, datetime.now(UTC).isoformat()))
+         json.dumps(params or {}), summary, reason, json.dumps(list(blocked)),
+         datetime.now(UTC).isoformat()))
     conn.commit()
 
     with suppressed("notifying the user about a queued action"):
@@ -147,7 +167,22 @@ def history(limit: int = 50) -> list[dict]:
 
 
 def _public(row: dict) -> dict:
+    """The row as the UI sees it.
+
+    `reason` is the sentence a person reads; `blocked` is the addresses a grant
+    would be written against. They are separate fields on purpose — the moment
+    the UI has to recover an address from prose is the moment it disagrees with
+    `permissions.recipients_of()` about what an injected `to:` field contained.
+
+    `blocked` is empty when the action was refused for a reason no allow-list
+    can clear (`permissions.NEVER_UNATTENDED`), and that emptiness is the signal
+    not to offer a standing grant at all.
+    """
     row["params"] = json.loads(row.pop("params_json") or "{}")
+    with suppressed("reading the blocked recipients of a queued action"):
+        row["blocked"] = json.loads(row.pop("blocked_json", None) or "[]")
+    row.setdefault("blocked", [])
+    row.pop("blocked_json", None)
     return row
 
 
@@ -216,6 +251,7 @@ def run_or_queue(action_type: str, params: dict, *, routine_id: str = "",
         return run_now(action_type, params)
 
     queued = queue(action_type, params, reason=verdict.reason,
+                   blocked=verdict.blocked_recipients,
                    routine_id=routine_id, routine_name=routine_name,
                    agent_id=agent_id)
     return {"ok": True, "queued": True, "approval_id": queued["id"],

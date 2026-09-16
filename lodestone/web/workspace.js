@@ -28,16 +28,33 @@ async function loadApprovals() {
   box.hidden = false;
   box.innerHTML =
     `<div class="ctx-label">Waiting for you (${rows.length})</div>` +
-    rows.map((a) => `
+    rows.map((a) => {
+      // Offered only when the server said an allow-list could clear this one.
+      // `blocked` comes from `permissions.check()` as data; reading the address
+      // out of `reason` instead would be the UI guessing at what an injected
+      // `to:` field contained. Empty means no grant could help — an action in
+      // NEVER_UNATTENDED — and a button that cannot work must not be shown.
+      const blocked = Array.isArray(a.blocked) ? a.blocked : [];
+      const who = blocked.length === 1 ? blocked[0] : `${blocked.length} people`;
+      // Spelled out in the label, never "Always allow this": a standing grant
+      // the user cannot read is a tap, not consent. Secondary styling, and
+      // second in the row, so approving once stays the easy answer.
+      const allow = blocked.length
+        ? `<button class="tiny ghost" data-apralw="${esc(a.id)}"
+             title="${esc(blocked.join(", "))}">Always allow ${esc(who)}</button>`
+        : "";
+      return `
       <div class="apr" data-apr="${esc(a.id)}">
         <div class="apr-sum">${esc(a.summary)}</div>
         <div class="apr-why">${esc(a.reason || "")}${
           a.routine_name ? ` · from “${esc(a.routine_name)}”` : ""}</div>
         <div class="apr-btns">
           <button class="tiny" data-aprok="${esc(a.id)}">Approve</button>
+          ${allow}
           <button class="tiny ghost" data-aprno="${esc(a.id)}">Dismiss</button>
         </div>
-      </div>`).join("");
+      </div>`;
+    }).join("");
 
   const decide = async (id, verb, path) => {
     const card = box.querySelector(`[data-apr="${id}"]`);
@@ -55,10 +72,114 @@ async function loadApprovals() {
     loadApprovals();
   };
 
+  // Grant first, then run the action that was waiting on it. In that order the
+  // approval still happens if the grant fails, and the user is told which part
+  // did not work rather than watching one button do two things silently.
+  const allowAlways = async (id) => {
+    const row = rows.find((r) => r.id === id);
+    const who = (row && row.blocked) || [];
+    const card = box.querySelector(`[data-apr="${id}"]`);
+    if (card) card.classList.add("apr-busy");
+    try {
+      for (const value of who) {
+        await api("/api/agents/permissions", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value, note: "allowed from an approval" }) });
+      }
+    } catch (e) {
+      toast(`Could not save that permission — ${String(e)}`);
+      if (card) card.classList.remove("apr-busy");
+      return;
+    }
+    toast(who.length === 1 ? `${who[0]} won't be asked about again`
+                           : `${who.length} recipients won't be asked about again`);
+    decide(id, "approve", "approve");
+  };
+
   box.querySelectorAll("[data-aprok]").forEach((b) =>
     b.onclick = () => decide(b.dataset.aprok, "approve", "approve"));
+  box.querySelectorAll("[data-apralw]").forEach((b) =>
+    b.onclick = () => allowAlways(b.dataset.apralw));
   box.querySelectorAll("[data-aprno]").forEach((b) =>
     b.onclick = () => decide(b.dataset.aprno, "dismiss", "reject"));
+}
+
+
+// ── the standing half of the gate ────────────────────────────────────────
+/**
+ * Who unattended agents may reach without asking each time.
+ *
+ * The approvals card is where a grant is normally made, because that is the
+ * moment a user learns they want one. This is the other half: every standing
+ * grant, reviewable and revocable. A permission the user cannot find is one
+ * they cannot take back, and `permissions.py` is explicit that this list is the
+ * whole boundary — so it has to be visible.
+ */
+async function loadAllowList() {
+  const box = $("#allowList");
+  if (!box) return;
+  let rows;
+  try {
+    rows = (await api("/api/agents/permissions")).permissions || [];
+  } catch {
+    return;                       // a failed poll must not blank a live list
+  }
+
+  box.innerHTML = rows.length
+    ? rows.map((p) => `
+        <div class="set-row" data-allow="${esc(p.value)}">
+          <div class="set-main">
+            <div class="set-label">${esc(p.value)}</div>
+            <div class="set-desc">${esc(p.note || "Agents may reach them unattended.")}</div>
+          </div>
+          <div class="set-ctl">
+            <button class="tiny ghost" data-allowdel="${esc(p.value)}">Remove</button>
+          </div>
+        </div>`).join("")
+    // Not an error state, and said in the user's terms: the app is working
+    // exactly as designed, and every outbound action is waiting for a tap.
+    : `<div class="set-row"><div class="set-main">
+         <div class="set-desc">Nobody yet — every email or invitation an agent
+         sends on its own is waiting for you to approve it.</div>
+       </div></div>`;
+
+  box.querySelectorAll("[data-allowdel]").forEach((b) =>
+    b.onclick = async () => {
+      const value = b.dataset.allowdel;
+      b.disabled = true;
+      try {
+        await api(`/api/agents/permissions/${encodeURIComponent(value)}`,
+                  { method: "DELETE" });
+        toast(`${value} will be asked about again`);
+      } catch (e) {
+        toast(`Could not remove that — ${String(e)}`);
+        b.disabled = false;
+        return;
+      }
+      loadAllowList();
+    });
+}
+
+{
+  const add = $("#allowAdd"), input = $("#allowInput");
+  const grant = async () => {
+    const value = (input && input.value || "").trim();
+    if (!value) return;
+    if (add) add.disabled = true;
+    try {
+      await api("/api/agents/permissions", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value, note: "" }) });
+      if (input) input.value = "";
+      toast(`${value} won't be asked about again`);
+    } catch (e) {
+      toast(`Could not allow that — ${String(e)}`);
+    }
+    if (add) add.disabled = false;
+    loadAllowList();
+  };
+  if (add) add.onclick = grant;
+  if (input) input.onkeydown = (e) => { if (e.key === "Enter") grant(); };
 }
 
 

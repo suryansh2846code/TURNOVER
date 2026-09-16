@@ -445,6 +445,27 @@
         </div>
       </section>
 
+      <!-- The standing half of the unattended-action gate. The approvals card
+           is where a grant is normally made, because that is where the user
+           learns they want one; this is where every grant can be reviewed and
+           taken back, so a standing permission is never invisible. -->
+      <section class="ms-sec">
+        <h2 class="ms-h2">Acting without asking</h2>
+        <p class="ms-sub">Agents running on their own always ask before emailing or inviting someone new. These are the people they may reach without asking each time.</p>
+        <div id="allowList" class="set-group"></div>
+        <div class="set-row">
+          <div class="set-main">
+            <div class="set-label">Allow someone</div>
+            <div class="set-desc">An email address agents may reach unattended.</div>
+          </div>
+          <div class="set-ctl allow-add">
+            <input id="allowInput" class="set-input" type="email"
+                   placeholder="someone@example.com" autocomplete="off" />
+            <button id="allowAdd" class="tiny">Allow</button>
+          </div>
+        </div>
+      </section>
+
       <!-- No wrapper heading: each provider group renders its own h3, and a
            heading above them put "OpenAI" and "Providers & accounts" at the
            same apparent level. -->
