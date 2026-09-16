@@ -15,6 +15,7 @@ from . import (
     brain_tools,
     code_tools,
     file_tools,
+    mail_tools,
     mcp_tools,
     source_tools,
 )
@@ -256,6 +257,8 @@ TOOL_IMPLS = {
     "list_pending_approvals": automation_tools.list_pending_approvals,
     "list_scheduled": automation_tools.list_scheduled,
     "sync_source": source_tools.sync_source,
+    "list_mail": mail_tools.list_mail,
+    "read_thread": mail_tools.read_thread,
     "search_source": source_tools.search_source,
     "add_task": _add_task,
     "list_tasks": _list_tasks,
@@ -461,6 +464,33 @@ TOOL_DEFS: dict[str, Tool] = {
         parameters={"type": "object", "properties": {
             "query": {"type": "string", "description": "Gmail search query"},
             "max_results": {"type": "integer", "default": 10}}},
+    ),
+    "list_mail": Tool(
+        name="list_mail",
+        description=(
+            "List emails with the ID needed to act on each one. Use this — not "
+            "gmail_search — whenever the user wants the inbox CHANGED "
+            "(archived, labelled, marked read), because gmail_search returns "
+            "prose with no ids in it. Gmail query syntax: is:unread, "
+            "from:x@y.com, newer_than:7d, in:inbox, has:attachment."
+        ),
+        parameters={"type": "object", "properties": {
+            "query": {"type": "string", "default": "in:inbox",
+                      "description": "Gmail search syntax"},
+            "max_results": {"type": "integer", "default": 20}}},
+    ),
+    "read_thread": Tool(
+        name="read_thread",
+        description=(
+            "Read a whole email conversation in order, oldest first. Use it "
+            "before replying to or judging any message that is part of a back "
+            "and forth — one matched message is the end of an argument."
+        ),
+        parameters={"type": "object", "properties": {
+            "thread": {"type": "string",
+                       "description": "A thread id from list_mail"},
+            "max_messages": {"type": "integer", "default": 20}},
+            "required": ["thread"]},
     ),
     "list_dir": Tool(
         name="list_dir",
@@ -727,6 +757,8 @@ _LABELS: dict[str, tuple[str, str]] = {
     "complete_open_loop":       ("Close",     "Tasks"),
     # The things it can reach
     "gmail_search":             ("Search",    "Email"),
+    "list_mail":                ("List",      "Email"),
+    "read_thread":              ("Read",      "Email"),
     "calendar_lookup":          ("Schedule",  "Calendar"),
     "web_search":               ("Search",    "Web"),
     # Your Mac — the powers worth naming as a group, because they are the ones

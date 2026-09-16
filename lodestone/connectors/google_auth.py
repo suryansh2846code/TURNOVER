@@ -11,11 +11,22 @@ from ..config import get_settings
 from ..log import suppressed
 
 # Read scopes + narrow WRITE scopes for confirmed actions (send email, create
-# event). Reading never modifies data; writes only run after explicit user
-# confirmation. gmail.send can only send, not read/delete.
+# event, triage the inbox). Reading never modifies data; writes only run after
+# explicit user confirmation.
+#
+# `gmail.send` can only send — it cannot touch a message that already exists.
+# That is why an agent could compose mail for a year and still not archive
+# anything: archiving, labelling and marking read are all *modifications of an
+# existing message*, and Google puts every one of them behind `gmail.modify`.
+#
+# `gmail.modify` is the narrowest scope that allows them. It does not permit
+# permanent deletion — that is the full-mailbox scope, which we do not ask for
+# and do not want. Trashing is possible under it; we deliberately expose no
+# tool that does (see `docs/development/mail-triage.md`).
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/calendar.events",
@@ -90,6 +101,35 @@ def granted_services() -> list[str]:
         return []
     return [label for key, label in _SCOPE_SERVICES
             if any(key in s for s in scopes)]
+
+
+def granted_scopes() -> list[str]:
+    """The exact scope strings the stored token carries."""
+    if not _token_path().exists():
+        return []
+    with suppressed("reading the scopes Google granted"):
+        return list(json.loads(_token_path().read_text()).get("scopes", []))
+    return []
+
+
+def may_modify_mail() -> bool:
+    """Can we change an existing message — archive, label, mark read?
+
+    Not derivable from "is Gmail connected". A token issued before we asked for
+    `gmail.modify` carries read and send and nothing else, so every triage call
+    it makes comes back 403. Asked *before* proposing anything, so the user is
+    told to reconnect instead of approving a card that cannot work.
+    """
+    return any("gmail.modify" in s for s in granted_scopes())
+
+
+#: What to tell the user when the token predates the modify scope. Named once
+#: because the connector, the action and the agent's prompt all say it.
+NEEDS_MODIFY_SCOPE = (
+    "Gmail is connected for reading and sending, but not for changing messages. "
+    "Reconnect Google under Connectors and approve the extra permission, then "
+    "this will work."
+)
 
 
 def _account_path() -> Path:

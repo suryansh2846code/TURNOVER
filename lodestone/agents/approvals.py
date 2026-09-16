@@ -62,6 +62,13 @@ def describe(action_type: str, params: dict) -> str:
         return f"New automation “{params.get('name') or 'untitled'}”"
     if action_type == "set_reminder":
         return f"Reminder: {params.get('message') or ''}"
+    if action_type == "mail_triage":
+        # Plain verbs and real subjects, never a label id: "Archive 12 emails"
+        # is the decision, and REMOVE INBOX is the implementation.
+        from ..mail_triage import parse_items, summarise
+
+        items, problem = parse_items(params.get("items"))
+        return summarise(items) if items else (problem or "Change your inbox")
     if action_type == "mcp_action":
         # The tool name is the vendor's, so it is shown as a name rather than
         # explained — inventing a description of somebody else's verb would be

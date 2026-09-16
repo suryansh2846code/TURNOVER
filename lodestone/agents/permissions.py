@@ -65,12 +65,17 @@ OUTBOUND_ACTIONS = {"send_email", "create_event"}
 #: It matters most for exactly the case that motivated this file: the text these
 #: connectors read — a Slack message, a GitHub issue body — is written by
 #: strangers, and it reaches an agent that can now act on their service.
-NEVER_UNATTENDED = {"create_routine", "mcp_action"}
+NEVER_UNATTENDED = {"create_routine", "mcp_action", "mail_triage"}
 
 #: Why each of them waits, in the user's terms.
 _ALWAYS_ASK = {
     "create_routine": "Creating automations always needs your approval.",
     "mcp_action": "Anything a connector changes needs your approval.",
+    # The exact case this file was written for. A triage agent's whole input is
+    # text strangers sent, and "archive everything from the bank" is a sentence
+    # an email can contain. There is no recipient to check against an allow-list
+    # — the messages are already the user's own — so it waits for one tap.
+    "mail_triage": "Changing your inbox always needs your approval.",
 }
 
 _ADDRESS = re.compile(r"[^\s<>,;]+@[^\s<>,;]+")

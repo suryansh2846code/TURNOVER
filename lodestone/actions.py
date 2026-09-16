@@ -47,6 +47,13 @@ def parse_actions(text: str) -> list[dict]:
                 # does something nobody proposed.
                 continue
             a["params"]["arguments"] = parsed
+        elif t == "mail_triage":
+            # A list of messages will not fit in flat attributes either, so the
+            # body is JSON here too — `{"items": [...]}` or the bare list.
+            items = _items(inner)
+            if items is None:
+                continue
+            a["params"]["items"] = items
         if t:
             out.append(a)
     return out
@@ -75,6 +82,31 @@ def _arguments(inner: str) -> dict | None:
     return value if isinstance(value, dict) else None
 
 
+def _items(inner: str) -> list | None:
+    """The message list inside a `mail_triage` tag, or None if it is not one.
+
+    Accepts `{"items": [...]}` and a bare `[...]`, because both are natural
+    ways to write it and refusing one teaches the user nothing.
+    """
+    import json
+
+    text = (inner or "").strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1] if "\n" in text else ""
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3]
+    text = text.strip()
+    if not text:
+        return None
+    try:
+        value = json.loads(text)
+    except (ValueError, TypeError):
+        return None
+    if isinstance(value, dict):
+        value = value.get("items")
+    return value if isinstance(value, list) else None
+
+
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -90,6 +122,53 @@ def _send_email(params: dict) -> dict:
     if gmail is None:
         return {"ok": False, "error": "Gmail is not connected for sending mail."}
     return gmail.send_email(to, subject, body)
+
+
+def _mail_triage(params: dict) -> dict:
+    """Apply one approved batch of inbox changes.
+
+    Refuses whole rather than partly: the user approved a card that named every
+    message on it, and applying some of them would mean they approved something
+    that did not happen.
+    """
+    from .connectors.google_auth import NEEDS_MODIFY_SCOPE, may_modify_mail
+    from .mail_triage import group, parse_items, summarise
+
+    items, problem = parse_items(params.get("items"))
+    if problem:
+        return {"ok": False, "error": problem}
+
+    gmail = _writer("gmail", "modify_messages")
+    if gmail is None:
+        return {"ok": False, "error": "Gmail is not connected."}
+    if not may_modify_mail():
+        return {"ok": False, "error": NEEDS_MODIFY_SCOPE, "reauth": True}
+
+    from .mail_triage import OPERATIONS
+
+    changed = 0
+    for (verb, label), ids in group(items).items():
+        operation = OPERATIONS[verb]
+        add, remove = list(operation.add), list(operation.remove)
+        if operation.names_a_label:
+            made = gmail.ensure_label(label)
+            if not made.get("ok"):
+                return {"ok": False, "error": made.get("error") or
+                        f"Could not find or create the label “{label}”.",
+                        "reauth": made.get("reauth", False)}
+            add.append(str(made.get("id")))
+        result = gmail.modify_messages(ids, add=add, remove=remove)
+        if not result.get("ok"):
+            # Say how far it got. "It failed" after eight of twelve moved is a
+            # worse answer than the truth.
+            return {"ok": False,
+                    "error": f"{result.get('error') or 'Gmail refused the change.'}"
+                             + (f" {changed} email(s) had already been changed."
+                                if changed else ""),
+                    "reauth": result.get("reauth", False)}
+        changed += result.get("count", len(ids))
+
+    return {"ok": True, "count": changed, "detail": summarise(items)}
 
 
 def _writer(source: str, capability: str):
@@ -202,6 +281,10 @@ REGISTRY: dict[str, dict[str, Any]] = {
     "mcp_action": {
         "handler": _mcp_action, "label": "Connector action",
         "fields": ["server_id", "tool", "arguments"],
+    },
+    "mail_triage": {
+        "handler": _mail_triage, "label": "Inbox changes",
+        "fields": ["items"],
     },
 }
 

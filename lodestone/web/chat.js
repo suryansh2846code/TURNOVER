@@ -131,6 +131,18 @@ function parseActions(text) {
         return "";
       }
     }
+    else if (a.type === "mail_triage") {
+      // A list of emails does not fit in flat attributes either, so the body is
+      // JSON — `{items: [...]}` or the bare list. Mirrors `actions._items`.
+      try {
+        let body = inner.trim();
+        if (body.startsWith("```")) body = body.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "").trim();
+        const parsed = body ? JSON.parse(body) : null;
+        const items = Array.isArray(parsed) ? parsed : (parsed && parsed.items);
+        if (!Array.isArray(items) || !items.length) return "";
+        a.params.items = items;
+      } catch { return ""; }
+    }
     if (a.type) actions.push(a);
     return "";   // strip the tag from the visible text
   });
@@ -248,6 +260,16 @@ function updateConnectorPicker() {
 // actually read is not a confirmation.
 
 /** "notion-update-page" + "Notion" → "Update page in Notion". */
+//: What each triage verb is called on screen. The server has the same table in
+//: `lodestone/mail_triage.py`; these are the words a person reads, and the ids
+//: that cross the wire are the keys — never the other way round.
+const MAIL_VERBS = {
+  archive: "Archive", mark_read: "Mark read", mark_unread: "Mark unread",
+  star: "Star", unstar: "Unstar", label: "Label",
+};
+//: Beyond this the card gives a count instead of a list nobody reads to the end.
+const MAIL_NAMED_MAX = 6;
+
 function humanAction(tool, connector) {
   // The tag may carry the connector's id rather than its label ("notion"), and
   // "Update page in notion" reads as a typo. Title-case a bare slug; leave a
@@ -343,6 +365,29 @@ function actionCard(a) {
       return `<div class="ac-row"><b>${esc(humanKey(k))}</b> ${esc(v.slice(0, 300))}</div>`;
     }).filter(Boolean).join("");
     rows = shown || `<div class="ac-row muted">No details to fill in.</div>`;
+  } else if (a.type === "mail_triage") {
+    // Plain verbs and real subjects. The user is approving a change to their
+    // own inbox, so the card has to read like one — never a message id, never
+    // a Gmail label name, and never twelve separate cards for twelve emails.
+    const items = Array.isArray(p.items) ? p.items : [];
+    const counts = new Map();
+    for (const it of items) {
+      const name = MAIL_VERBS[it && it.do] || "Change";
+      const key = it && it.label ? `${name} as “${it.label}”` : name;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    const parts = [...counts].map(([k, n]) => `${k} ${n} email${n === 1 ? "" : "s"}`);
+    title = parts.join(", ") || "Change your inbox";
+    verb = "apply";
+    const named = items.slice(0, MAIL_NAMED_MAX);
+    rows = named.map((it) => {
+      const what = MAIL_VERBS[it && it.do] || "Change";
+      const suffix = it && it.label ? ` as “${it.label}”` : "";
+      return `<div class="ac-row"><b>${esc(what + suffix)}</b> ${esc((it && it.subject) || "(no subject)")}</div>`;
+    }).join("");
+    const rest = items.length - named.length;
+    rows = rows + (rest > 0 ? `<div class="ac-row muted">and ${rest} more</div>` : "")
+      + `<div class="ac-row muted">Nothing is deleted — archiving takes an email out of your inbox and keeps it.</div>`;
   } else {
     title = "Create calendar event"; verb = "create";
     rows = `<div class="ac-row"><b>Title</b> ${esc(p.title || "")}</div>

@@ -67,10 +67,15 @@ _FILES = ["list_dir", "read_file", "write_file"]
 
 _TASKS = ["add_task", "list_tasks", "complete_task"]
 _LOOPS = ["create_open_loop", "list_open_loops", "complete_open_loop"]
-_MAIL = ["search_source", "sync_source", "gmail_search"]
+_MAIL = ["search_source", "sync_source", "gmail_search",
+         "list_mail", "read_thread"]
 _DIARY = ["calendar_lookup", "sync_source"]
 
 _ALL_ACTIONS = ["send_email", "create_event", "set_reminder", "create_routine"]
+#: Only for agents that can actually reach an inbox. An agent taught to
+#: propose a change it has no tool to address is an agent that will claim it
+#: archived something.
+_MAIL_ACTIONS = [*_ALL_ACTIONS, "mail_triage"]
 
 #: Stands for "every tool there is" in a template's list.
 #:
@@ -169,7 +174,7 @@ TEMPLATES: tuple[Template, ...] = (
         # The one agent that does not stop to ask. Asking on every turn for the
         # agent whose whole job is "whatever you need" is a prompt nobody reads.
         unrestricted_connectors=True,
-        actions=_ALL_ACTIONS,
+        actions=_MAIL_ACTIONS,
         recall_sources=["gmail", "gcal"],
         works_with=["gmail", "gcal"],
     ),
@@ -195,13 +200,21 @@ TEMPLATES: tuple[Template, ...] = (
             "Count with `run_python`, never in your head: how many are unread, "
             "how many days until a deadline, which of these is oldest. A number "
             "you estimated is a number you made up.\n"
+            "You can CHANGE the inbox, not only describe it. `list_mail` gives "
+            "you each message's id — `gmail_search` does not — and a "
+            "mail_triage action archives, labels or marks them read. Propose "
+            "the whole batch as ONE action; never one per email.\n"
+            "Before you judge or reply to anything that is part of a back and "
+            "forth, `read_thread` it. One matched message is the end of an "
+            "argument, and answering it as if it were the start is how you get "
+            "it wrong.\n"
             "Draft; never claim to have sent."
         ),
         # Open loops matter more here than anywhere: email is where people
         # commit to things. run_python because triage is counting and dates.
         tools=[*BASE_TOOLS, *_FILES, *_MAIL, *_DIARY, *_TASKS, *_LOOPS,
                "run_python"],
-        actions=_ALL_ACTIONS,
+        actions=_MAIL_ACTIONS,
         recall_sources=["gmail", "gcal"],
         works_with=["gmail", "gcal"],
         needs=["gmail"],

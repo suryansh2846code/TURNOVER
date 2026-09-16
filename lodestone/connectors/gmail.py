@@ -9,6 +9,10 @@ from typing import Any
 from .base import Connector, SyncResult
 from .google_auth import get_credentials, google_ready
 
+#: Gmail's own cap on one `batchModify`. Named so the limit is visible rather
+#: than discovered as a 400 from Google.
+BATCH_LIMIT = 1000
+
 
 def _decode(data: str) -> str:
     # Gmail returns base64url body data that MAY omit '=' padding, which
@@ -190,6 +194,145 @@ class GmailConnector(Connector):
                         "and approve the send permission, then try again.",
                         "reauth": True}
             return {"ok": False, "error": m[:200]}
+
+    # ── addressing, reading and changing existing mail ───────────────────
+    #
+    # The three below are what an agent needs to *act* on an inbox rather than
+    # only talk about it. `sync`/`search_and_ingest` pull text into the brain
+    # and return prose, which is right for recall and useless for triage: prose
+    # has no message id, so there is nothing to archive.
+
+    def list_inbox(self, query: str = "in:inbox", max_results: int = 20,
+                   interactive: bool = False) -> dict:
+        """Messages matching `query`, WITH their ids. Read-only.
+
+        The id is the whole point. Everything that changes a message addresses
+        it by id, and until this existed an agent had no way to name one.
+        """
+        service = self._service(None, interactive)
+        if service is None:
+            return {"ok": False, "error": "Gmail not connected", "messages": []}
+        try:
+            metas = self._list(service, query, max(1, min(100, max_results)))
+            rows = []
+            for meta in metas:
+                msg = (service.users().messages()
+                       .get(userId="me", id=meta["id"], format="metadata",
+                            metadataHeaders=["From", "Subject", "Date"]).execute())
+                headers = {h["name"].lower(): h.get("value", "")
+                           for h in msg.get("payload", {}).get("headers", [])
+                           if h.get("name")}
+                labels = msg.get("labelIds", []) or []
+                rows.append({
+                    "id": msg.get("id", ""),
+                    "thread_id": msg.get("threadId", ""),
+                    "from": headers.get("from", ""),
+                    "subject": headers.get("subject", "(no subject)"),
+                    "date": headers.get("date", ""),
+                    "snippet": msg.get("snippet", ""),
+                    "unread": "UNREAD" in labels,
+                    "starred": "STARRED" in labels,
+                    "in_inbox": "INBOX" in labels,
+                })
+            return {"ok": True, "messages": rows}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:200], "messages": []}
+
+    def read_thread(self, thread_id: str, max_messages: int = 20,
+                    interactive: bool = False) -> dict:
+        """A whole conversation, oldest first, with each message's body.
+
+        A search returns the messages that matched, scattered and out of order.
+        A reply is only answerable against what came before it, so an agent
+        reading one matched message is reading the end of an argument.
+        """
+        service = self._service(None, interactive)
+        if service is None:
+            return {"ok": False, "error": "Gmail not connected", "messages": []}
+        try:
+            thread = (service.users().threads()
+                      .get(userId="me", id=thread_id, format="full").execute())
+            out = []
+            for msg in (thread.get("messages") or [])[:max_messages]:
+                headers = {h["name"].lower(): h.get("value", "")
+                           for h in msg.get("payload", {}).get("headers", [])
+                           if h.get("name")}
+                body = _extract_body(msg.get("payload", {})).strip()
+                out.append({
+                    "id": msg.get("id", ""),
+                    "from": headers.get("from", ""),
+                    "to": headers.get("to", ""),
+                    "date": headers.get("date", ""),
+                    "subject": headers.get("subject", ""),
+                    "body": body or msg.get("snippet", ""),
+                })
+            # Gmail returns a thread in order already; sorting by the internal
+            # timestamp would re-derive it from a field we did not ask for.
+            return {"ok": True, "thread_id": thread_id, "messages": out,
+                    "count": len(thread.get("messages") or [])}
+        except Exception as exc:
+            return self._maybe_scope_error(exc, {"messages": []})
+
+    def modify_messages(self, ids: list[str], add: list[str] | None = None,
+                        remove: list[str] | None = None,
+                        interactive: bool = False) -> dict:
+        """Apply one label change to many messages at once (WRITE).
+
+        `batchModify` is one request for the whole set, which is what makes
+        "archive these twelve" a single approved act rather than twelve.
+        """
+        ids = [str(i).strip() for i in (ids or []) if str(i).strip()]
+        if not ids:
+            return {"ok": False, "error": "No messages to change."}
+        service = self._service(None, interactive)
+        if service is None:
+            return {"ok": False, "error": "Gmail not connected"}
+        try:
+            (service.users().messages().batchModify(
+                userId="me",
+                body={"ids": ids[:BATCH_LIMIT],
+                      "addLabelIds": list(add or []),
+                      "removeLabelIds": list(remove or [])}).execute())
+            return {"ok": True, "count": len(ids[:BATCH_LIMIT])}
+        except Exception as exc:
+            return self._maybe_scope_error(exc, {})
+
+    def ensure_label(self, name: str, interactive: bool = False) -> dict:
+        """The id of a user label, creating it if the user has none by that name."""
+        wanted = (name or "").strip()
+        if not wanted:
+            return {"ok": False, "error": "A label needs a name."}
+        service = self._service(None, interactive)
+        if service is None:
+            return {"ok": False, "error": "Gmail not connected"}
+        try:
+            existing = (service.users().labels().list(userId="me").execute()
+                        .get("labels", []))
+            for label in existing:
+                if str(label.get("name", "")).lower() == wanted.lower():
+                    return {"ok": True, "id": label.get("id"), "created": False}
+            made = (service.users().labels().create(
+                userId="me",
+                body={"name": wanted, "labelListVisibility": "labelShow",
+                      "messageListVisibility": "show"}).execute())
+            return {"ok": True, "id": made.get("id"), "created": True}
+        except Exception as exc:
+            return self._maybe_scope_error(exc, {})
+
+    @staticmethod
+    def _maybe_scope_error(exc: Exception, extra: dict) -> dict:
+        """Translate Google's permission refusal into the one thing to do about it.
+
+        A token issued before we asked for `gmail.modify` fails here and nowhere
+        else, so this is where the user learns they need to reconnect — with
+        `reauth` set, which the frontend already renders as a Reconnect button.
+        """
+        message = str(exc)
+        lowered = message.lower()
+        if "insufficient" in lowered or "scope" in lowered or "403" in message:
+            from .google_auth import NEEDS_MODIFY_SCOPE
+            return {"ok": False, "error": NEEDS_MODIFY_SCOPE, "reauth": True, **extra}
+        return {"ok": False, "error": message[:200], **extra}
 
     def _service(self, result, interactive):
         try:
