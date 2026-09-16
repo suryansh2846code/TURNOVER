@@ -63,3 +63,46 @@ def test_the_reason_travels_all_the_way_to_the_action_result(monkeypatch):
     assert out["ok"] is False
     assert "page_id is not a valid UUID" in out["error"], (
         "the user is still told only that it did not work")
+
+
+# ── a tool that is not there ─────────────────────────────────────────────
+def test_a_missing_tool_names_what_the_connector_can_do_instead(monkeypatch):
+    """"Notion has no `x` to run." reads as a glitch. It is a limit, and an
+    agent that learns the limit can tell the user instead of guessing at a
+    different spelling of the same wrong call."""
+    from lodestone.connectors import mcp_source
+
+    monkeypatch.setattr(
+        mcp_source, "probe",
+        lambda spec, **kw: (SimpleNamespace(
+            readable=["notion-search", "notion-fetch"],
+            write=["notion-update-page", "notion-move-pages", "notion-create-pages"],
+        ), ""))
+
+    out = mcp_source._no_such_tool(SimpleNamespace(id="notion"), "Notion",
+                                   "notion-delete-page")
+    assert "no `notion-delete-page`" in out
+    assert "not something this connector can do" in out
+    assert "notion-update-page" in out, "it did not say what IS there"
+
+
+def test_it_prefers_tools_that_look_related(monkeypatch):
+    from lodestone.connectors import mcp_source
+
+    monkeypatch.setattr(
+        mcp_source, "probe",
+        lambda spec, **kw: (SimpleNamespace(
+            readable=["notion-search"],
+            write=["notion-update-page", "notion-duplicate-page", "notion-create-database"],
+        ), ""))
+    out = mcp_source._no_such_tool(SimpleNamespace(id="notion"), "Notion",
+                                   "notion-archive-page")
+    assert "notion-update-page" in out and "notion-duplicate-page" in out
+
+
+def test_a_connector_that_answers_nothing_still_gets_a_sentence(monkeypatch):
+    from lodestone.connectors import mcp_source
+
+    monkeypatch.setattr(mcp_source, "probe", lambda spec, **kw: (None, "down"))
+    out = mcp_source._no_such_tool(SimpleNamespace(id="x"), "Thing", "t")
+    assert "does not offer anything like it" in out

@@ -794,6 +794,37 @@ def _remote_reason(spec: MCPServerSpec) -> str:
 MAX_REFUSAL_CHARS = 300
 
 
+#: Nearby tool names offered when the asked-for one does not exist. Enough to
+#: point at the real capability, few enough to stay a sentence.
+MAX_SUGGESTIONS = 5
+
+
+def _no_such_tool(spec: Any, label: str, tool: str) -> str:
+    """The tool is not there — so say what IS, rather than only that it is not.
+
+    This used to be "Notion has no `x` to run." and stop, which reads as a
+    glitch rather than as a limit. The honest version names the limit and the
+    nearest real capabilities, because an agent that learns the connector
+    simply cannot do this can tell the user so instead of guessing at a
+    different spelling of the same wrong call.
+    """
+    stem = re.split(r"[-_]", str(tool or ""))[-1].lower()
+    nearby: list[str] = []
+    with suppressed("listing what a connector can do instead"):
+        kinds, _why = probe(spec)
+        if kinds is not None:
+            every = sorted(set(list(kinds.readable or []) + list(kinds.write or [])))
+            nearby = [t for t in every if stem and stem in t.lower()][:MAX_SUGGESTIONS]
+            if not nearby:
+                nearby = every[:MAX_SUGGESTIONS]
+    if nearby:
+        return (f"{label} has no `{tool}`. It is not something this connector "
+                f"can do. The nearest things it does offer are: "
+                + ", ".join(f"`{t}`" for t in nearby) + ".")
+    return (f"{label} has no `{tool}`, and this connector does not offer "
+            "anything like it.")
+
+
 def _refusal(answer: Any, label: str) -> str:
     """Why the connector said no, in its own words where it gave any.
 
@@ -1049,8 +1080,7 @@ class MCPConnector(Connector):
         except Exception as exc:
             return {"ok": False, "error": explain(exc, self.label)}
         if outcome == "missing":
-            return {"ok": False,
-                    "error": f"{self.label} has no `{tool}` to run."}
+            return {"ok": False, "error": _no_such_tool(self.spec, self.label, tool)}
         if getattr(answer, "is_error", False):
             # The server said WHY, and this used to throw it away. So the user
             # was told only that it had not worked, the agent could not see the

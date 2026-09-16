@@ -263,8 +263,16 @@ function actionCard(a) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: a.type, params: { ...p, agent_id: current } }) });
       const rr = el.querySelector(".ac-result");
-      if (r.ok) { rr.innerHTML = `<span class="ac-ok">✓ ${esc(resultLine(r.detail))}</span>`; loadReminders(); loadRoutines(); return; }
-      rr.innerHTML = `<span class="ac-err">${esc(r.error || "Failed")}</span>`;
+      // The agent is told what its own proposal did, and when it failed it gets
+      // one turn to answer for it. That answer is the useful part of a failed
+      // card — it is where "Notion cannot delete pages, do it there" comes from.
+      const note = (r.agent_note || "").trim();
+      if (r.ok) {
+        rr.innerHTML = `<span class="ac-ok">✓ ${esc(resultLine(r.detail))}</span>`;
+        loadReminders(); loadRoutines(); return;
+      }
+      rr.innerHTML = `<span class="ac-err">${esc(r.error || "Failed")}</span>`
+        + (note ? `<div class="ac-note">${md(note)}</div>` : "");
       if (r.reauth) {
         const b = document.createElement("button");
         b.className = "tiny"; b.textContent = "Reconnect Google"; b.style.marginTop = "8px";

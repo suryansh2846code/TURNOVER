@@ -170,8 +170,19 @@ def approve(approval_id: str) -> dict:
     outcome = run_now(row["action_type"], row["params"])
     detail = outcome.get("detail") or outcome.get("error") or ""
     _decide(approval_id, "approved", detail)
-    return {"ok": bool(outcome.get("ok", True)), "detail": detail,
-            "summary": row["summary"]}
+
+    # The agent that proposed this is not in the room — a routine queued it
+    # hours ago. Telling it what happened is the only way it can carry on from
+    # a failure rather than silently never knowing.
+    from .outcomes import settle
+    outcome = settle(row.get("agent_id", ""), row["action_type"],
+                     row["params"], outcome)
+
+    answer = {"ok": bool(outcome.get("ok", True)), "detail": detail,
+              "summary": row["summary"]}
+    if outcome.get("agent_note"):
+        answer["agent_note"] = outcome["agent_note"]
+    return answer
 
 
 def reject(approval_id: str) -> dict:

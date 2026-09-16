@@ -24,6 +24,58 @@ from ..log import suppressed
 #: so a typo in a preset produces nothing rather than a silently dead block.
 KNOWN_ACTIONS = ("send_email", "create_event", "set_reminder", "create_routine")
 
+#: Argument names listed per connector tool. Enough for a model to fill a call
+#: in correctly; few enough that twenty tools do not become the system prompt.
+MAX_ARGS_SHOWN = 12
+
+#: One line of prose per tool, so a list of twenty stays readable.
+MAX_DESCRIPTION_CHARS = 150
+
+#: Lines that are structure rather than description. A vendor writes its tool
+#: docs in markdown, and the first line is very often a heading.
+_NOT_PROSE = ("#", "---", "===", "```", "|", "* ", "- ")
+
+
+def _first_sentence(text: str) -> str:
+    """The first line that actually says something.
+
+    This used to be `split("\n")[0]`, and every one of Notion's write tools
+    opens with `## Overview` — so each was described to the model as
+    "## Overview", which looks like a description and carries nothing. A model
+    given a tool's name and no working description has to invent how to call it,
+    and that is exactly what happened: it reached for `in_trash`, which is real
+    in Notion's web API and is not a parameter of this tool.
+    """
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line or line.startswith(_NOT_PROSE):
+            continue
+        sentence = line.split(". ")[0].strip().rstrip(".")
+        if len(sentence) > 4:
+            return sentence[:MAX_DESCRIPTION_CHARS].rstrip() + "."
+    return ""
+
+
+def _argument_names(ref: object) -> str:
+    """What this tool takes, required ones starred.
+
+    A model that is told a tool exists and not what it accepts fills the
+    arguments in from whatever it remembers of that vendor's public API. The
+    names are already in the schema we hold; they were simply never passed on.
+    """
+    schema = getattr(ref, "parameters", None)
+    if not isinstance(schema, dict):
+        return ""
+    props = schema.get("properties")
+    if not isinstance(props, dict) or not props:
+        return ""
+    required = set(schema.get("required") or [])
+    # Required first: they are what a call fails without.
+    names = sorted(props, key=lambda n: (n not in required, n))
+    shown = [f"{n}*" if n in required else n for n in names[:MAX_ARGS_SHOWN]]
+    more = len(names) - len(shown)
+    return ", ".join(shown) + (f", +{more} more" if more > 0 else "")
+
 
 def _identity(name: str, role: str, system_prompt: str) -> str:
     return (
@@ -202,10 +254,14 @@ def _connector_actions(tools: list[str] | None) -> str:
         from ..connectors.mcp_tools import write_tools
 
         for ref in write_tools()[:20]:
-            described = (ref.description or "").strip().split("\n")[0][:110]
-            rows.append(f'- server="{ref.server_id}" tool="{ref.tool}"'
-                        f' — {ref.server_label}'
-                        + (f": {described}" if described else ""))
+            described = _first_sentence(getattr(ref, "description", ""))
+            line = (f'- server="{ref.server_id}" tool="{ref.tool}"'
+                    f' — {ref.server_label}'
+                    + (f": {described}" if described else ""))
+            takes = _argument_names(ref)
+            if takes:
+                line += f"\n    takes: {takes}"
+            rows.append(line)
     if not rows:
         return ""
     return (
@@ -217,6 +273,9 @@ def _connector_actions(tools: list[str] | None) -> str:
         "The tag's inner text MUST be a single valid JSON object of that tool's "
         "arguments — no prose, no code fence. Use the connector's own argument "
         "names. Never claim you did it; say what you drafted, then the tag.\n"
+        "Use ONLY the arguments listed for a tool — a * marks a required one. "
+        "If what the user wants needs something that is not there, say the "
+        "connector cannot do it rather than inventing an argument.\n"
         "Available now:\n" + "\n".join(rows)
     )
 

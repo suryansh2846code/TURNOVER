@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from ...log import get_logger
 from ..assets import WEB
+from ..concurrency import calls_a_model
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -79,9 +80,27 @@ class ActionIn(BaseModel):
 
 
 @router.post("/api/actions/execute")
+@calls_a_model
 def execute_action(body: ActionIn):
+    """Run an action the user just approved, and tell the agent what happened.
+
+    The result used to go only to the card, so the agent that proposed it never
+    learned whether it worked — and could not fix its own call when it did not.
+    It is recorded into the conversation now, and a FAILURE gets the agent one
+    turn to answer for it. Nothing about the gate changes: this runs because a
+    person pressed Confirm.
+
+    On the model lane because that follow-up turn is a model call.
+    """
     from ...actions import execute
-    return execute(body.type, body.params)
+    from ...agents.outcomes import settle
+
+    params = body.params or {}
+    result = execute(body.type, params)
+    agent_id = str(params.get("agent_id") or "").strip()
+    if not agent_id:
+        return result
+    return settle(agent_id, body.type, params, result)
 
 
 class NewRoutine(BaseModel):

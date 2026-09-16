@@ -124,3 +124,23 @@ def test_the_escaper_survives_every_shape_a_connector_can_answer_with(card):
     does not lose one message — it blanks whatever was being drawn."""
     for shape, outcome in card["escaped"].items():
         assert outcome["ok"], f"esc() threw on a {shape}: {outcome['out']}"
+
+
+def test_a_failed_card_shows_what_the_agent_said_about_it():
+    """The useful half of a failure: the agent has now been told what happened
+    and gets one turn to answer, and that answer is where "this connector
+    cannot do that" reaches the user."""
+    out = _run(NOTION_DELETE, {
+        "ok": False,
+        "error": "Notion refused that: no such argument.",
+        "agent_note": "Notion's connector has no way to delete a page. "
+                      "Open it in Notion and use Move to Trash."})
+    assert "ac-note" in out["afterConfirm"], "the agent's answer was dropped"
+    assert "no way to delete a page" in out["afterConfirm"]
+    assert "Notion refused that" in out["afterConfirm"], "the reason went missing"
+
+
+def test_a_failure_with_nothing_from_the_agent_is_unchanged():
+    out = _run(NOTION_DELETE, {"ok": False, "error": "It did not work."})
+    assert "ac-note" not in out["afterConfirm"]
+    assert "It did not work." in out["afterConfirm"]
