@@ -12,7 +12,7 @@ Validates all 24 required operational and security invariants:
 9. Cursor detection does NOT expose accessToken
 10. Claude detection does NOT expose OAuth token
 11. OpenAI detection does NOT copy ~/.codex/auth.json
-12. Disconnect invalidates Lodestone connection
+12. Disconnect invalidates Chitragupta connection
 13. Runtime identity contains actual provider/model
 14. Model answers runtime identity correctly
 15. API-key provider remains functional
@@ -35,31 +35,31 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from lodestone.agents import Agent, get_agent_model, set_agent_model
-from lodestone.agents.runtime import build_runtime_identity, format_runtime_context_prompt
-from lodestone.api.app import app
-from lodestone.models.accounts import (
+from chitragupta.agents import Agent, get_agent_model, set_agent_model
+from chitragupta.agents.runtime import build_runtime_identity, format_runtime_context_prompt
+from chitragupta.api.app import app
+from chitragupta.models.accounts import (
     detect_claude_account,
     detect_cursor_account,
 )
-from lodestone.models.base import Message
-from lodestone.models.chatgpt_auth import (
+from chitragupta.models.base import Message
+from chitragupta.models.chatgpt_auth import (
     adopt_local_chatgpt_session,
     detect_chatgpt_local_session,
 )
-from lodestone.models.claude_code import ClaudeCodeProvider
-from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
-from lodestone.models.deepseek import DeepSeekProvider
-from lodestone.models.discovery import (
+from chitragupta.models.claude_code import ClaudeCodeProvider
+from chitragupta.models.connections import ConnectionStatus, get_connection, save_connection
+from chitragupta.models.deepseek import DeepSeekProvider
+from chitragupta.models.discovery import (
     discover_ollama_models,
     get_discovered_models,
 )
-from lodestone.models.entitlements import (
+from chitragupta.models.entitlements import (
     evaluate_model_entitlement,
     is_provider_connected,
 )
-from lodestone.models.xai import XAIProvider
-from lodestone.models.xai_auth import (
+from chitragupta.models.xai import XAIProvider
+from chitragupta.models.xai_auth import (
     _SECRET_KEY_XAI_TOKEN,
     _save_stored_xai_data,
     get_xai_access_token,
@@ -76,7 +76,7 @@ def test_01_provider_connection_gating():
         conn.connection_status = ConnectionStatus.NOT_CONNECTED
         save_connection(conn)
         with patch.dict(os.environ, {}, clear=True):
-            with patch("lodestone.config.Settings.get_secret", return_value=None):
+            with patch("chitragupta.config.Settings.get_secret", return_value=None):
                 connected, _plan, _ = is_provider_connected("openai", api_key=None)
                 assert connected is False
 
@@ -96,7 +96,7 @@ def test_02_disconnected_provider_cannot_bind_to_agent():
         conn.connection_status = ConnectionStatus.DISCONNECTED
         save_connection(conn)
         with patch.dict(os.environ, {}, clear=True):
-            with patch("lodestone.config.Settings.get_secret", return_value=None):
+            with patch("chitragupta.config.Settings.get_secret", return_value=None):
                 resp = client.post(
                     "/api/agents/inbox/model",
                     json={"provider": "anthropic", "model": "claude-3-7-sonnet-latest"},
@@ -142,8 +142,8 @@ def test_04_locked_model_cannot_bind():
         save_connection(conn)
         # Attempt to bind gpt-6-astra on a free tier
         with patch.dict(os.environ, {}, clear=True):
-            with patch("lodestone.config.Settings.get_secret", return_value=None):
-                with patch("lodestone.models.chatgpt_auth.detect_chatgpt_local_session", return_value={"plan": "ChatGPT Free", "email": "free-user@example.com"}):
+            with patch("chitragupta.config.Settings.get_secret", return_value=None):
+                with patch("chitragupta.models.chatgpt_auth.detect_chatgpt_local_session", return_value={"plan": "ChatGPT Free", "email": "free-user@example.com"}):
                     resp = client.post(
                         "/api/agents/inbox/model",
                         json={"provider": "openai", "model": "gpt-6-astra"},
@@ -164,8 +164,8 @@ def test_05_unlocked_model_can_bind():
         conn.email = "pro-user@example.com"
         save_connection(conn)
         with patch.dict(os.environ, {}, clear=True):
-            with patch("lodestone.config.Settings.get_secret", return_value=None):
-                with patch("lodestone.models.chatgpt_auth.detect_chatgpt_local_session", return_value={"plan": "ChatGPT Pro", "email": "pro-user@example.com"}):
+            with patch("chitragupta.config.Settings.get_secret", return_value=None):
+                with patch("chitragupta.models.chatgpt_auth.detect_chatgpt_local_session", return_value={"plan": "ChatGPT Pro", "email": "pro-user@example.com"}):
                     resp = client.post(
                         "/api/agents/inbox/model",
                         json={"provider": "openai", "model": "gpt-6-astra"},
@@ -189,7 +189,7 @@ def test_06_auto_locked_when_provider_disconnected():
         conn.connection_status = ConnectionStatus.NOT_CONNECTED
         save_connection(conn)
         with patch.dict(os.environ, {}, clear=True):
-            with patch("lodestone.config.Settings.get_secret", return_value=None):
+            with patch("chitragupta.config.Settings.get_secret", return_value=None):
                 resp = client.post(
                     "/api/agents/inbox/model",
                     json={"provider": "openai", "model": "auto"},
@@ -254,8 +254,8 @@ def test_09_cursor_detection_does_not_expose_access_token(tmp_path):
     conn.commit()
     conn.close()
 
-    with patch("lodestone.models.accounts.Path.home", return_value=tmp_path):
-        with patch("lodestone.models.cursor.get_cursor_cli_status", return_value=(False, "CLI not found", None)):
+    with patch("chitragupta.models.accounts.Path.home", return_value=tmp_path):
+        with patch("chitragupta.models.cursor.get_cursor_cli_status", return_value=(False, "CLI not found", None)):
             # Put state.vscdb in standard path
             std_dir = tmp_path / "Library/Application Support/Cursor/User/globalStorage"
             std_dir.mkdir(parents=True, exist_ok=True)
@@ -285,7 +285,7 @@ def test_10_claude_detection_does_not_expose_oauth_token(tmp_path):
     })
     fake_res = MagicMock(returncode=0, stdout=fake_cli_output)
 
-    with patch("lodestone.models.claude_code.find_claude", return_value="/opt/homebrew/bin/claude"):
+    with patch("chitragupta.models.claude_code.find_claude", return_value="/opt/homebrew/bin/claude"):
         with patch("subprocess.run", return_value=fake_res):
             info = detect_claude_account()
             assert info.get("found_on_computer") is True
@@ -313,19 +313,19 @@ def test_11_openai_detection_does_not_copy_codex_auth(tmp_path):
         },
     }))
 
-    lodestone_home = tmp_path / "lodestone_home"
-    lodestone_home.mkdir(parents=True, exist_ok=True)
+    chitragupta_home = tmp_path / "chitragupta_home"
+    chitragupta_home.mkdir(parents=True, exist_ok=True)
 
-    with patch("lodestone.models.chatgpt_auth.Path.home", return_value=fake_home):
-        with patch("lodestone.models.chatgpt_auth.get_settings") as mock_settings:
-            mock_settings.return_value.home = lodestone_home
+    with patch("chitragupta.models.chatgpt_auth.Path.home", return_value=fake_home):
+        with patch("chitragupta.models.chatgpt_auth.get_settings") as mock_settings:
+            mock_settings.return_value.home = chitragupta_home
             mock_settings.return_value.get_secret.return_value = None
 
             # Detect session: safe metadata only
             sess = detect_chatgpt_local_session(fetch_usage=False)
             assert sess is not None
             assert sess["email"] == "codex-user@openai.com"
-            assert sess["has_token"] is False  # Lodestone does NOT steal the token
+            assert sess["has_token"] is False  # Chitragupta does NOT steal the token
 
             # Adopt session: verifies account without copying ~/.codex/auth.json
             ok, msg, data = adopt_local_chatgpt_session()
@@ -334,11 +334,11 @@ def test_11_openai_detection_does_not_copy_codex_auth(tmp_path):
             assert "Connected via codex_cli" in data.get("status_message", "")
 
             # SECURITY GUARANTEE: No plaintext chatgpt_token.json created by stealing codex file
-            assert not (lodestone_home / "chatgpt_token.json").exists()
+            assert not (chitragupta_home / "chatgpt_token.json").exists()
 
 
-# ── 12. Disconnect invalidates Lodestone connection ───────────────────────────
-def test_12_disconnect_invalidates_lodestone_connection():
+# ── 12. Disconnect invalidates Chitragupta connection ───────────────────────────
+def test_12_disconnect_invalidates_chitragupta_connection():
     conn = get_connection("openai")
     conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
     conn.email = "active-user@example.com"
@@ -369,7 +369,7 @@ def test_13_runtime_identity_contains_actual_provider_model():
     mock_prov.api_key = "sk-mock"
 
     identity = build_runtime_identity(agent, mock_prov)
-    assert identity["application"] == "Lodestone"
+    assert identity["application"] == "Chitragupta"
     assert identity["agent_id"] == "test-agent"
     assert identity["agent_name"] == "Research Agent"
     assert identity["agent_role"] == "Data Analyst"
@@ -380,7 +380,7 @@ def test_13_runtime_identity_contains_actual_provider_model():
 # ── 14. Model answers runtime identity correctly ──────────────────────────────
 def test_14_model_answers_runtime_identity_correctly():
     identity = {
-        "application": "Lodestone",
+        "application": "Chitragupta",
         "agent_name": "Inbox Assistant",
         "agent_role": "Email Organizer",
         "provider": "Anthropic",
@@ -389,7 +389,7 @@ def test_14_model_answers_runtime_identity_correctly():
     }
     prompt = format_runtime_context_prompt(identity)
     assert "RUNTIME CONTEXT — AUTHORITATIVE" in prompt
-    assert "Application: Lodestone" in prompt
+    assert "Application: Chitragupta" in prompt
     assert "Selected Agent: Inbox Assistant" in prompt
     assert "Agent Role: Email Organizer" in prompt
     assert "Provider: Anthropic" in prompt
@@ -417,8 +417,8 @@ def test_16_oauth_provider_functional():
         "email": "developer@x.ai",
         "name": "xAI Developer",
     }
-    with patch("lodestone.config.Settings.set_secret") as mock_set:
-        with patch("lodestone.config.Settings.get_secret", return_value=json.dumps(fake_token_data)):
+    with patch("chitragupta.config.Settings.set_secret") as mock_set:
+        with patch("chitragupta.config.Settings.get_secret", return_value=json.dumps(fake_token_data)):
             _save_stored_xai_data(fake_token_data)
             mock_set.assert_called_with(_SECRET_KEY_XAI_TOKEN, json.dumps(fake_token_data))
 
@@ -432,7 +432,7 @@ def test_16_oauth_provider_functional():
 
 # ── 17. Existing CLI provider remains functional ──────────────────────────────
 def test_17_existing_cli_provider_functional():
-    with patch("lodestone.models.claude_code.find_claude", return_value="/usr/local/bin/claude"):
+    with patch("chitragupta.models.claude_code.find_claude", return_value="/usr/local/bin/claude"):
         prov = ClaudeCodeProvider(model="claude-sonnet-5")
         ready, _ = prov.is_ready()
         assert ready is True
@@ -496,7 +496,7 @@ def test_20_provider_reported_availability_overrides_fallback():
 
 # ── 21. Credentials never appear in logs/traces ───────────────────────────────
 def test_21_credentials_never_appear_in_traces():
-    from lodestone.brain.canonical.redact import redact
+    from chitragupta.brain.canonical.redact import redact
 
     text = "User secret: Bearer sk-live-SECRET_TOKEN_1234567890abcdef and key gsk_SECRET_1234567890abcdef"
     redacted = redact(text)
@@ -521,7 +521,7 @@ def test_22_user_selected_agent_architecture_intact():
 
 # ── 23. Brain does not perform agent routing ──────────────────────────────────
 def test_23_brain_does_not_perform_agent_routing():
-    from lodestone.brain.brain import Brain
+    from chitragupta.brain.brain import Brain
 
     # The USER chooses the Agent. Brain must not have agent routing or model selection methods.
     brain_methods = dir(Brain)
@@ -531,7 +531,7 @@ def test_23_brain_does_not_perform_agent_routing():
 
 # ── 24. Existing tool argument validation still passes ─────────────────────────
 def test_24_tool_argument_validation_passes():
-    from lodestone.agents.tools import validate_tool_arguments
+    from chitragupta.agents.tools import validate_tool_arguments
 
     valid, _err, clean_args = validate_tool_arguments("search_brain", {"query": "project turnover deadline"})
     assert valid is True

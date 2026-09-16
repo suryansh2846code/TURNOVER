@@ -12,8 +12,8 @@ import re
 import pytest
 from web_sources import app_source
 
-from lodestone.models import discovery, entitlements
-from lodestone.models.discovery import (
+from chitragupta.models import discovery, entitlements
+from chitragupta.models.discovery import (
     DiscoveredModel,
     clear_model_cache,
     get_discovered_models,
@@ -112,7 +112,7 @@ def test_account_meta_survives_a_cache_hit(monkeypatch):
 
 # ── cache invalidation plumbing ───────────────────────────────────────────
 def test_clear_provider_cache_also_drops_discovery(monkeypatch):
-    from lodestone.models.registry import clear_provider_cache
+    from chitragupta.models.registry import clear_provider_cache
 
     calls = _stub_discovery(monkeypatch, [DiscoveredModel("mock-1", "Mock", "")])
     _stub_connection(monkeypatch, {"connected": True, "plan": "Mock"})
@@ -148,7 +148,7 @@ def test_provider_alias_normalisation(alias, canonical):
 def test_oauth_providers_expose_a_working_disconnect():
     """app.py imported `_stop_xai_server_async`, which never existed — the
     ImportError was swallowed, so xAI tokens were never actually deleted."""
-    from lodestone.models import chatgpt_auth, xai_auth
+    from chitragupta.models import chatgpt_auth, xai_auth
 
     for mod in (chatgpt_auth, xai_auth):
         assert callable(getattr(mod, "disconnect", None)), f"{mod.__name__}.disconnect missing"
@@ -158,8 +158,8 @@ def test_oauth_providers_expose_a_working_disconnect():
 def test_disconnect_endpoint_clears_xai_credentials(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
-    from lodestone.models import xai_auth
+    from chitragupta.api.app import app
+    from chitragupta.models import xai_auth
 
     token_file = tmp_path / "xai_token.json"
     token_file.write_text(json.dumps({"tokens": {"access_token": "secret"}}))
@@ -176,7 +176,7 @@ def test_disconnect_endpoint_clears_xai_credentials(tmp_path, monkeypatch):
 def test_composer_picker_offers_every_selectable_provider():
     """The agent-tab picker silently omitted claude-code and subscription, so
     the one Claude path that actually works could not be chosen."""
-    from lodestone.models.registry import PRIMARY_PROVIDERS
+    from chitragupta.models.registry import PRIMARY_PROVIDERS
 
     app_js = app_source()
     block = re.search(r"const COMPOSER_PROVIDERS = \[(.*?)\];", app_js, re.S)
@@ -189,11 +189,11 @@ def test_composer_picker_offers_every_selectable_provider():
 
 def test_subscription_is_not_connected_without_a_gateway(monkeypatch):
     """It used to hardcode `return True` — advertising models every call failed on."""
-    monkeypatch.delenv("LODESTONE_SUBSCRIPTION_BASE_URL", raising=False)
+    monkeypatch.delenv("CHITRAGUPTA_SUBSCRIPTION_BASE_URL", raising=False)
     connected, plan, _ = entitlements.is_provider_connected("subscription")
     assert connected is False and plan is None
 
-    monkeypatch.setenv("LODESTONE_SUBSCRIPTION_BASE_URL", "http://localhost:8080/v1")
+    monkeypatch.setenv("CHITRAGUPTA_SUBSCRIPTION_BASE_URL", "http://localhost:8080/v1")
     connected, plan, meta = entitlements.is_provider_connected("subscription")
     assert connected is True
     assert meta["host"] == "http://localhost:8080/v1"

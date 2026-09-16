@@ -16,12 +16,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from lodestone import actions, mail_triage
-from lodestone.agents import connector_grants
-from lodestone.agents.approvals import describe
-from lodestone.agents.permissions import NEVER_UNATTENDED
-from lodestone.agents.tools import TOOL_DEFS
-from lodestone.connectors import google_auth
+from chitragupta import actions, mail_triage
+from chitragupta.agents import connector_grants
+from chitragupta.agents.approvals import describe
+from chitragupta.agents.permissions import NEVER_UNATTENDED
+from chitragupta.agents.tools import TOOL_DEFS
+from chitragupta.connectors import google_auth
 
 
 class FakeGmail:

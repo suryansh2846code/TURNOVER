@@ -31,7 +31,7 @@ jobs:
         # shared-auth failure would only look right by accident.
         #
         # NOT `.[all]`: it drags in sentence-transformers, and torch is 505 MB
-        # for a job that already forces LODESTONE_EMBEDDING_PROVIDER=hash. It is
+        # for a job that already forces CHITRAGUPTA_EMBEDDING_PROVIDER=hash. It is
         # also not "all" — it omits python-docx and python-pptx.
         #
         # `desktop` is here for the tests, not the app. Without pywebview there
@@ -46,16 +46,16 @@ jobs:
           uv pip install pytest pytest-cov ruff mypy
 
       - name: Lint
-        run: uv run ruff check lodestone tests
+        run: uv run ruff check chitragupta tests
 
       - name: Types
         # Strict on the modules that are contracts (the security boundary, the
         # concurrency lanes, the error taxonomy); the grandfathered list in
         # pyproject.toml only ever gets shorter. See [tool.mypy] there.
-        run: uv run mypy lodestone
+        run: uv run mypy chitragupta
 
       - name: Frontend syntax
-        run: node --check lodestone/web/app.js
+        run: node --check chitragupta/web/app.js
 
       - name: Tests
         # Coverage prints, it does not gate. No threshold — a percentage invites
@@ -64,5 +64,5 @@ jobs:
         run: uv run pytest -q --cov --cov-report=term-missing:skip-covered
         env:
           # Never touch a real credential store or a developer's home.
-          LODESTONE_MODEL_PROVIDER: mock
-          LODESTONE_EMBEDDING_PROVIDER: hash
+          CHITRAGUPTA_MODEL_PROVIDER: mock
+          CHITRAGUPTA_EMBEDDING_PROVIDER: hash

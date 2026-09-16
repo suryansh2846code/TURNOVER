@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parent.parent
-APP_JS = ROOT / "lodestone/web/app.js"
+APP_JS = ROOT / "chitragupta/web/app.js"
 HARNESS = ROOT / "tests/js/a11y_keyboard.mjs"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,

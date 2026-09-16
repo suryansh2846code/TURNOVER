@@ -13,7 +13,7 @@ import time
 import pytest
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import background, runtime
+from chitragupta.agents import background, runtime
 
 
 @pytest.fixture

@@ -22,7 +22,7 @@ IDS = [f.name for f in FAKES]
 
 @pytest.mark.parametrize("fake", FAKES, ids=IDS)
 def test_second_sync_adds_nothing_new(fake, monkeypatch, fake_module, tmp_path):
-    from lodestone.core.store import get_store
+    from chitragupta.core.store import get_store
 
     conn, kwargs = harness.build(fake, monkeypatch, fake_module, tmp_path, 3)
     harness.sync(conn, kwargs)
@@ -55,7 +55,7 @@ def test_new_records_still_land_after_a_full_sync(fake, monkeypatch, fake_module
     A content-hash guard that is too eager is indistinguishable from a broken
     connector: the first sync works, and the source then appears frozen forever.
     """
-    from lodestone.core.store import get_store
+    from chitragupta.core.store import get_store
 
     conn, kwargs = harness.build(fake, monkeypatch, fake_module, tmp_path, 2)
     harness.sync(conn, kwargs)

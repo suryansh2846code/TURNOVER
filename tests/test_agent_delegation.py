@@ -10,9 +10,9 @@ are the refusals.
 import pytest
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import delegation, runtime
-from lodestone.agents.effort import get_effort
-from lodestone.agents.tools import build_tools, run_tool
+from chitragupta.agents import delegation, runtime
+from chitragupta.agents.effort import get_effort
+from chitragupta.agents.tools import build_tools, run_tool
 
 
 @pytest.fixture(autouse=True)
@@ -26,9 +26,9 @@ def _clean_chain():
 def scripted(monkeypatch):
     def make(script, **kw):
         provider = ScriptedProvider(script=list(script), **kw)
-        monkeypatch.setattr("lodestone.agents.runtime.get_provider",
+        monkeypatch.setattr("chitragupta.agents.runtime.get_provider",
                             lambda p, m: provider)
-        monkeypatch.setattr("lodestone.agents.runtime.resolve_usable_model",
+        monkeypatch.setattr("chitragupta.agents.runtime.resolve_usable_model",
                             lambda p, m: (m or "scripted-1", None))
         return provider
     return make
@@ -41,7 +41,7 @@ def _a_team_to_delegate_to():
     """Delegation needs somebody to delegate TO, and nothing is pre-added any
     more — an empty roster means `ask_agent` is correctly never offered, which
     would make these tests pass for the wrong reason."""
-    from lodestone.agents.library import add_to_roster, remove_from_roster
+    from chitragupta.agents.library import add_to_roster, remove_from_roster
 
     team = ("inbox", "research", "personal", "writer")
     for tid in team:
@@ -142,7 +142,7 @@ def test_the_chain_survives_parallel_tool_calls(scripted):
         seen.append(delegation.current_chain().agents)
         return "ok"
 
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
     original = tools_mod.TOOL_IMPLS["ask_agent"]
     tools_mod.TOOL_IMPLS["ask_agent"] = _spy
     try:
@@ -166,7 +166,7 @@ def test_the_chain_is_left_even_when_the_model_fails(scripted):
         def chat(self, *a, **kw):
             raise RuntimeError("model down")
 
-    import lodestone.agents.runtime as rt
+    import chitragupta.agents.runtime as rt
     broken = Broken(script=[])
     rt_get = rt.get_provider
     rt.get_provider = lambda p, m: broken

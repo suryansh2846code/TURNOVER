@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import pytest
 
-from lodestone import metrics
-from lodestone.agents import health_tools, prompt
-from lodestone.agents.library import BY_ID
-from lodestone.agents.presets import get_agent
-from lodestone.agents.tools import TOOL_DEFS, TOOL_IMPLS
+from chitragupta import metrics
+from chitragupta.agents import health_tools, prompt
+from chitragupta.agents.library import BY_ID
+from chitragupta.agents.presets import get_agent
+from chitragupta.agents.tools import TOOL_DEFS, TOOL_IMPLS
 
 
 @pytest.fixture(autouse=True)

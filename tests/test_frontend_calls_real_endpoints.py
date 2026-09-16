@@ -18,7 +18,7 @@ import re
 
 from web_sources import app_source
 
-from lodestone.api.app import app
+from chitragupta.api.app import app
 
 #: `api("/api/x")`, `api(`/api/x/${y}`)`, and the bare `fetch("/api/…")` calls.
 _CALL = re.compile(r"""(?:\bapi|\bfetch)\(\s*(?:`([^`]+)`|"(/[^"]*)")""")
@@ -113,7 +113,7 @@ def test_a_call_with_no_route_is_actually_caught():
 def test_deleting_a_memory_removes_it_from_the_brain():
     from fastapi.testclient import TestClient
 
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
 
     client = TestClient(app)
     brain = get_brain()

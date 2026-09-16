@@ -1,4 +1,4 @@
-# Lodestone — Decision Log (ADRs)
+# Chitragupta — Decision Log (ADRs)
 
 > Every important architectural/product decision, with the reasoning. Newest at
 > the bottom of each section. This is the "why we did it this way" record.
@@ -63,7 +63,7 @@ never changes when you swap models. `mock` keeps everything testable offline.
 using the user's own Claude — at the cost of latency + usage.
 
 ### A6 — Local SQLite for everything; vectors as BLOBs searched in NumPy
-No external DB. `~/Library/Lodestone/*.db`.
+No external DB. `~/Library/Chitragupta/*.db`.
 **Why:** local-first, zero-config, portable, ships inside a desktop app. Fine to
 tens of thousands of memories. Deferred: sqlite-vec + FTS5 (Tier 2) at scale.
 
@@ -122,7 +122,7 @@ automatic — no user runs a dedup script.
 All connectors read-only; each shows readiness + a setup guide in the UI.
 
 ### C2 — Files connector guardrails (cap + junk filters)
-Refuse >LODESTONE_MAX_FILES (default 2000); skip build/vendor/lock/minified/
+Refuse >CHITRAGUPTA_MAX_FILES (default 2000); skip build/vendor/lock/minified/
 node_modules. **Why:** a folder sync once bloated the brain to 82k memories/433MB
 (unrelated project code). Guardrails + a configurable cap prevent recurrence.
 
@@ -132,7 +132,7 @@ lives outside the repo and is gitignored. **Why:** one consent, three sources;
 never commit secrets.
 
 ### C4 — Gmail: all mail (paginated) + HTML stripping + real dates
-Default query is all mail up to LODESTONE_GMAIL_MAX (1500), bodies converted to
+Default query is all mail up to CHITRAGUPTA_GMAIL_MAX (1500), bodies converted to
 clean text (drop CSS/tags), each email tagged with its date.
 **Why:** 30-day/50-msg default was too small; CSS leaked into summaries; dates
 enable date queries.
@@ -154,7 +154,7 @@ iMessage reads the local macOS chat.db (Full Disk Access, no cloud).
 - **claude-code blank error** — fake User:/Assistant: transcript tripped its
   stop-sequence; now uses --append-system-prompt + parses is_error.
 - **"claude.ai connector isn't authorized" hallucination** — claude-code (real
-  Claude) confused its own connectors with Lodestone; prompt now forbids it and
+  Claude) confused its own connectors with Chitragupta; prompt now forbids it and
   states data is already in the brain.
 - **Recall missed real emails** — MiniLM weakness → BGE (A8) + source preference.
 - **Email/Drive HTML in the graph** — graph now curated-prose only (A7).
@@ -245,13 +245,13 @@ self-heal, migrations, reminders, export/import, API validation, MCP). Backgroun
 loops `log.exception` instead of silent `pass`.
 
 ### H16 — MCP brain-as-a-service (the private memory layer for any AI)
-Lodestone exposes its brain to any MCP client (Claude Desktop/Code, Cursor) over
-stdio via `lodestone/mcp_server/server.py` — 8 tools: `search_brain`, `about`
+Chitragupta exposes its brain to any MCP client (Claude Desktop/Code, Cursor) over
+stdio via `chitragupta/mcp_server/server.py` — 8 tools: `search_brain`, `about`
 (knowledge-graph lookup), `remember`, `web_search`, `brain_stats`, `list_tasks`,
 `add_task`, `complete_task`. Correct for **mcp 2.x** (FastMCP→MCPServer). Local-only
-(stdio, spawned by the client — no network/auth needed). `lodestone mcp-install`
+(stdio, spawned by the client — no network/auth needed). `chitragupta mcp-install`
 prints the one-line registration. This makes the brain usable by *every* AI, not
-just Lodestone's own agents — the biggest differentiator (D2).
+just Chitragupta's own agents — the biggest differentiator (D2).
 - `about()` guard: BGE gives unrelated short phrases a high baseline cosine, so it
   requires the entity name to share a word with the query (or score ≥0.8), else a
   query returns near-random entities.
@@ -274,7 +274,7 @@ or prefer the heuristic for single short ingests.
 ### W1 — The floating card is raised by the page, never by the API
 `window.pywebview.api.open_signin_hud(...)` from the frontend; the backend never
 creates a window.
-**Why:** under `lodestone app --dev` the backend is a separate uvicorn process
+**Why:** under `chitragupta app --dev` the backend is a separate uvicorn process
 with no handle on the webview, so a backend-initiated window silently did
 nothing. The frontend always runs inside the webview.
 
@@ -297,7 +297,7 @@ behaving like a screen-saver overlay.
 **Why:** measured across levels 3/25/101, with and without `Stationary`, and with
 an accessory activation policy — none reach it. Apps that manage it are
 `LSUIElement` accessory apps using a non-activating `NSPanel`; pywebview creates
-a plain `NSWindow`, and making Lodestone dockless is not worth this. The in-app
+a plain `NSWindow`, and making Chitragupta dockless is not worth this. The in-app
 row in the Models panel is the fallback, which is why it stays on screen even
 when the floating card is up.
 
@@ -400,7 +400,7 @@ never about parallelism, and they are what is kept.
 
 | | |
 |---|---|
-| worktrees | `../lodestone-{agents,api,brain,connectors,frontend,models,qa}` |
+| worktrees | `../chitragupta-{agents,api,brain,connectors,frontend,models,qa}` |
 | branches | `agent/*` (all seven, all fully merged into `main` first) |
 | rules | `.claude/fleet/**` — 10 role files, the README, the template, `locks/` |
 | log | `.claude/fleet/HANDOFF.md` (558 lines; its load-bearing content is here) |
@@ -514,6 +514,56 @@ function and nothing was global.
 
 Parsing the concatenation is a different question from parsing each file. It is
 now the fifth check before any cut, and it refuses the bad one.
+
+---
+
+## The rename (R-series)
+
+### R1 — Lodestone became Chitragupta (2026-09-16)
+
+**Why.** *Lodestone* named a compass stone: something that points you somewhere.
+*Chitragupta* is, in Hindu tradition, the scribe who keeps the record of what
+each person has actually done — which is what this product is. It remembers your
+work and can always say where a fact came from. The second name describes the
+thing; the first described an aspiration about it.
+
+**What moved.** The package (`lodestone/` → `chitragupta/`), the CLI, the env
+prefix, the bundle id `ai.chitragupta.app`, the Keychain service, the data
+directory, the localStorage keys, and ~1,550 textual occurrences across 237
+files.
+
+**What did NOT move, deliberately:**
+
+* `data/google_client.json` still says `project_id: lodestone-507013`. That is a
+  real Google Cloud project, not a string — rewriting it breaks Google sign-in
+  for everyone. Renaming the Cloud project (or issuing a new client) is a
+  separate, console-side job. See A1 in [`AUDIT.md`](AUDIT.md), which already
+  wants that client rotated.
+* `LODESTONE_*` environment variables keep working, permanently. They live in
+  people's shell profiles and we do not edit those.
+* The visual identity. "Living Constellation" was designed for the *brain* —
+  night sky, memories as particles, the graph as lines between them — not for
+  the wordmark, so it survived the rename intact. Only the sentences claiming
+  the name *meant* "compass stone" had to be rewritten.
+
+**The migration is ours, because the rename was ours.** `migration.py` carries a
+pre-rename install across, in three mechanisms that fail differently:
+
+| store | when | why that way |
+|---|---|---|
+| data directory | eagerly, at startup | a same-volume `rename(2)`; 745 MB costs the same as 745 bytes |
+| Keychain secrets | lazily, on first read of each key | the key set is open-ended, and enumerating would mean walking the user's whole keychain |
+| `localStorage` | on page load, in `web/core.js` | only the page can reach it |
+
+It refuses every ambiguous case rather than guessing: two non-empty homes are
+never merged, a failed move never fails the launch, and a credential is never
+deleted from the old service unless the new write succeeded. `/CLAUDE.md`'s
+first product rule is *never lose the user's state to our mistakes* — and a
+rename is exactly such a mistake if it is done carelessly.
+
+**Delete `migration.py`** once no install predates the rename. `LEGACY_NAME`,
+`LEGACY_ENV_PREFIX` and `LEGACY_KEYCHAIN_SERVICE` exist so that sweep has
+something to grep for.
 
 ---
 

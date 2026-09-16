@@ -10,7 +10,7 @@ wrong entry is a wrong trend for months, noticed weeks later. And that the two
 derived numbers are arithmetic, not estimation: volume is exact, and the
 estimated max says out loud that it is an estimate from a named formula.
 
-Storage decisions: lodestone/training.py
+Storage decisions: chitragupta/training.py
 """
 from __future__ import annotations
 
@@ -18,9 +18,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from lodestone import actions, training
-from lodestone.agents import training_tools
-from lodestone.agents.approvals import describe
+from chitragupta import actions, training
+from chitragupta.agents import training_tools
+from chitragupta.agents.approvals import describe
 
 
 @pytest.fixture(autouse=True)

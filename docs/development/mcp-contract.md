@@ -32,7 +32,7 @@ and are hydrated at spawn time by `resolved_env()`. `as_dict()` therefore
 carries no secret, which is what lets `GET /api/connectors` keep returning it.
 
 Remote servers authenticate with OAuth 2.1 + Dynamic Client Registration, so
-**Lodestone still registers no OAuth client** — the property the stdio path was
+**Chitragupta still registers no OAuth client** — the property the stdio path was
 chosen for, kept, without running third-party code as the user. Tokens go
 through the same Keychain, behind `KeychainTokenStorage`.
 

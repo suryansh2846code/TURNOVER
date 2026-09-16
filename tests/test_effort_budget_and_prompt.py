@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import delegation, prompt, runtime
-from lodestone.agents.effort import HIGH, LOW, MEDIUM
-from lodestone.agents.presets import PRESETS, get_agent
+from chitragupta.agents import delegation, prompt, runtime
+from chitragupta.agents.effort import HIGH, LOW, MEDIUM
+from chitragupta.agents.presets import PRESETS, get_agent
 
 
 # ── the token ceiling ────────────────────────────────────────────────────
@@ -119,7 +119,7 @@ def test_a_typo_in_an_actions_list_produces_nothing_not_a_crash():
 
 def test_an_agent_the_user_built_keeps_the_proposals_it_had():
     """Narrowing one silently would take away something they already had."""
-    from lodestone.agents.custom import get_custom_store
+    from chitragupta.agents.custom import get_custom_store
 
     store = get_custom_store()
     made = store.create("Budget Helper", role="money", system_prompt="help")

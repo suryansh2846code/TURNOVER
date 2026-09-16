@@ -9,7 +9,7 @@ Most of what is pinned here is about being wrong in a way nobody notices —
 a pound stored as a kilo, a daily total silently refused, a raw two-reading
 "trend" presented as a result.
 
-Storage decisions: lodestone/metrics.py
+Storage decisions: chitragupta/metrics.py
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from lodestone import metrics
+from chitragupta import metrics
 
 
 @pytest.fixture(autouse=True)

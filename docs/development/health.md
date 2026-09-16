@@ -27,7 +27,7 @@ measure, compute or verify anything, which is the whole second half of its job.
 
 ## 2. Measurements are their own store, not the brain
 
-`lodestone/metrics.py`. Three reasons, and the first is decisive:
+`chitragupta/metrics.py`. Three reasons, and the first is decisive:
 
 * **Recall is linear in memory count.** `store.search()` runs on *every* agent
   turn at ~0.05 ms per memory (`docs/SCALING.md`). One Apple Health export is

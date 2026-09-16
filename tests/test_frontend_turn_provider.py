@@ -19,7 +19,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-WEB = ROOT / "lodestone/web"
+WEB = ROOT / "chitragupta/web"
 
 
 def _turn(saved, select_value="") -> dict:
@@ -59,8 +59,8 @@ def test_the_offline_model_says_it_is_the_offline_model():
     a real answer. Two of those in a row read as "the app is broken" rather
     than "nothing is connected yet" — a different problem with a different fix.
     """
-    from lodestone.models.base import Message
-    from lodestone.models.registry import get_provider
+    from chitragupta.models.base import Message
+    from chitragupta.models.registry import get_provider
 
     reply = get_provider("mock").chat(
         [Message(role="tool", content="some recalled context")]).text
@@ -83,7 +83,7 @@ def test_an_unknown_provider_is_named_rather_than_answered_for(caplog):
     """
     import logging
 
-    from lodestone.models.registry import MockProvider, UnknownProvider, get_provider
+    from chitragupta.models.registry import MockProvider, UnknownProvider, get_provider
 
     with caplog.at_level(logging.WARNING):
         provider = get_provider("not-a-provider")

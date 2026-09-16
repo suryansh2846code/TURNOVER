@@ -12,7 +12,7 @@
  * The window is the whole bug, so the harness reproduces it: localStorage
  * holds a chosen provider, the select is still empty, and a turn is sent.
  *
- * argv: <a path inside lodestone/web/>   stdin: {saved, selectValue}
+ * argv: <a path inside chitragupta/web/>   stdin: {saved, selectValue}
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -48,7 +48,7 @@ globalThis.document = {
 globalThis.window = { location: { pathname: "/", href: "/" }, addEventListener() {},
                       matchMedia: () => ({ matches: false, addEventListener() {} }), open() {} };
 const store = {};
-if (saved) store["lodestone_provider"] = saved;
+if (saved) store["chitragupta_provider"] = saved;
 globalThis.localStorage = {
   getItem: (k) => (k in store ? store[k] : null),
   setItem: (k, v) => { store[k] = String(v); },

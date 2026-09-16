@@ -14,8 +14,8 @@ import httpx
 import pytest
 from web_sources import app_source
 
-from lodestone.models.base import Message
-from lodestone.models.xai import XAIProvider
+from chitragupta.models.base import Message
+from chitragupta.models.xai import XAIProvider
 
 BLOCKED = ('{"code":"personal-team-blocked:spending-limit","error":"You have run '
            'out of credits or need a Grok subscription. Add credits at https://grok.com"}')
@@ -23,8 +23,8 @@ HELLO = [Message(role="user", content="hi")]
 
 
 def _oauth_only():
-    with patch("lodestone.models.xai_auth.get_xai_access_token", return_value="oauth-token"), \
-         patch("lodestone.models.base._saved_key", return_value=""), \
+    with patch("chitragupta.models.xai_auth.get_xai_access_token", return_value="oauth-token"), \
+         patch("chitragupta.models.base._saved_key", return_value=""), \
          patch.dict("os.environ", {}, clear=False):
         return XAIProvider(api_key=None)
 
@@ -75,7 +75,7 @@ def test_billing_rejections_are_caught_on_any_status(status):
 
 
 def test_other_providers_get_a_generic_billing_message():
-    from lodestone.models.deepseek import DeepSeekProvider
+    from chitragupta.models.deepseek import DeepSeekProvider
 
     resp = httpx.Response(402, request=httpx.Request("POST", "https://api.deepseek.com/v1/chat/completions"),
                           text='{"error":"insufficient balance"}')
@@ -88,7 +88,7 @@ def test_other_providers_get_a_generic_billing_message():
 def test_xai_offers_a_cli_sign_in_not_a_browser_one():
     """An OAuth/browser sign-in can never produce a usable api.x.ai credential.
     The subscription path is xAI's official Grok CLI instead."""
-    from lodestone.models.capabilities import get_capabilities
+    from chitragupta.models.capabilities import get_capabilities
 
     caps = get_capabilities("xai")
     assert caps.oauth_supported is False
@@ -104,7 +104,7 @@ def test_xai_offers_a_cli_sign_in_not_a_browser_one():
 def test_signin_endpoint_explains_key_only_providers(pid, key_env):
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
 
     body = TestClient(app).post(f"/api/providers/{pid}/signin").json()
     assert body["started"] is False
@@ -115,7 +115,7 @@ def test_signin_endpoint_explains_key_only_providers(pid, key_env):
 
 @pytest.mark.parametrize("pid", ["openai", "claude", "cursor"])
 def test_providers_with_a_real_sign_in_still_start_one(pid):
-    from lodestone.models.capabilities import get_capabilities
+    from chitragupta.models.capabilities import get_capabilities
 
     assert get_capabilities(pid).api_key_only is False
 

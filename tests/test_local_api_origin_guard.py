@@ -1,6 +1,6 @@
 """The local API must not be reachable by a website the user happens to visit.
 
-Lodestone serves on `127.0.0.1` with no authentication, which is normal for a
+Chitragupta serves on `127.0.0.1` with no authentication, which is normal for a
 local app and is exactly why these tests exist: the same server lists the user's
 home directory, stores provider credentials and can erase the brain, and every
 browser on the machine is also "on the machine".
@@ -11,8 +11,8 @@ server, from a page the user merely opened in another tab.
 import pytest
 from fastapi.testclient import TestClient
 
-from lodestone.api.app import app
-from lodestone.api.security import (
+from chitragupta.api.app import app
+from chitragupta.api.security import (
     is_local_origin,
     is_loopback_host,
     is_safe_external_url,
@@ -76,7 +76,7 @@ def test_our_own_page_still_works():
 
 
 # Ports that a developer very plausibly has open in another tab while using
-# Lodestone. Every one of them is loopback, and none of them is us.
+# Chitragupta. Every one of them is loopback, and none of them is us.
 OTHER_LOCAL_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:5173",
                        "http://localhost:8888", "http://127.0.0.1:8080"]
 

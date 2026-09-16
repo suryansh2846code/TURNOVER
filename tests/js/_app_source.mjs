@@ -64,5 +64,5 @@ export function appSource(webDir) {
  * being, they do not each re-derive it.
  */
 export function webDir(importMetaUrl) {
-  return path.resolve(new URL(".", importMetaUrl).pathname, "../../lodestone/web");
+  return path.resolve(new URL(".", importMetaUrl).pathname, "../../chitragupta/web");
 }

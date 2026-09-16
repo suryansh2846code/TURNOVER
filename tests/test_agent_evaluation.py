@@ -9,7 +9,7 @@ fail is decoration, so it is run again with a capability deliberately broken.
 """
 import pytest
 
-from lodestone.agents import evaluation
+from chitragupta.agents import evaluation
 
 #: Every check is binary — the capability works or it does not — so the floor is
 #: all of them. A softer floor was tried first and rejected on evidence: with 15
@@ -59,14 +59,14 @@ def test_the_scorecard_notices_when_a_capability_breaks(monkeypatch):
     The repeat memo is switched off — the guard that stops a deep loop
     re-issuing the same call forever — and the score must drop.
     """
-    from lodestone.agents import loop
+    from chitragupta.agents import loop
 
     class _Forgetful(loop.ToolRunner):
         def run(self, calls):
             self._memo.clear()           # never remember, so never dedupe
             return super().run(calls)
 
-    monkeypatch.setattr("lodestone.agents.runtime.ToolRunner", _Forgetful)
+    monkeypatch.setattr("chitragupta.agents.runtime.ToolRunner", _Forgetful)
     broken = evaluation.run(include_slow=False)
 
     assert broken.score < MINIMUM_SCORE, (

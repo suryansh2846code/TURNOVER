@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from lodestone.models import entitlements
+from chitragupta.models import entitlements
 
 #: The reported account: the strong models present and marked locked, because a
 #: user must still see what a plan would buy them.
@@ -38,7 +38,7 @@ LOCKED = {m["id"] for m in FREE_ACCOUNT if m["locked"]}
 @pytest.fixture
 def account(monkeypatch):
     def install(models):
-        monkeypatch.setattr("lodestone.models.discovery.get_discovered_models",
+        monkeypatch.setattr("chitragupta.models.discovery.get_discovered_models",
                             lambda *a, **k: (models, {}))
     return install
 
@@ -115,7 +115,7 @@ def test_a_discovery_failure_leaves_the_default_alone(monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("offline")
 
-    monkeypatch.setattr("lodestone.models.discovery.get_discovered_models", boom)
+    monkeypatch.setattr("chitragupta.models.discovery.get_discovered_models", boom)
 
     usable, _ = entitlements.resolve_usable_model("openai", None)
 

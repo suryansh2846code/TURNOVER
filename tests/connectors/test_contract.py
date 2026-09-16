@@ -13,7 +13,7 @@ import inspect
 
 import pytest
 
-from lodestone.connectors import REGISTRY, Connector, SyncResult, get_connector
+from chitragupta.connectors import REGISTRY, Connector, SyncResult, get_connector
 
 CLASSES = sorted(REGISTRY.items())
 IDS = [name for name, _ in CLASSES]

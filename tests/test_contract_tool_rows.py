@@ -25,10 +25,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from lodestone.agents import mcp_tools
-from lodestone.agents.tools import describe_tools
+from chitragupta.agents import mcp_tools
+from chitragupta.agents.tools import describe_tools
 
-APP_JS = Path(__file__).resolve().parents[1] / "lodestone" / "web" / "app.js"
+APP_JS = Path(__file__).resolve().parents[1] / "chitragupta" / "web" / "app.js"
 HARNESS = Path(__file__).parent / "js" / "tool_provenance.mjs"
 
 #: The acronym, spelled so this file's own prose cannot be what a grep finds.
@@ -161,7 +161,7 @@ def test_the_agents_cap_is_a_backstop_not_the_ceiling():
     supplier that bounds nothing at all — set below the supplier's, it silently
     deletes that sentence and substitutes a vaguer one.
     """
-    from lodestone.connectors import mcp_tools as supplier
+    from chitragupta.connectors import mcp_tools as supplier
 
     assert mcp_tools.MAX_RESULT_CHARS > supplier.MAX_RESULT_CHARS, (
         f"the agents backstop ({mcp_tools.MAX_RESULT_CHARS}) cuts below the "

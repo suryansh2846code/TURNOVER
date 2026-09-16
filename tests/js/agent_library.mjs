@@ -10,7 +10,7 @@
  * two things a person needs BEFORE they add an agent: what it cannot work
  * without, and what it can do to their machine.
  *
- * argv: <a path inside lodestone/web/>   stdin: {library}
+ * argv: <a path inside chitragupta/web/>   stdin: {library}
  */
 import fs from "node:fs";
 import path from "node:path";

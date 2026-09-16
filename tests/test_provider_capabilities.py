@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from lodestone.api.app import app
-from lodestone.models.capabilities import (
+from chitragupta.api.app import app
+from chitragupta.models.capabilities import (
     CAPABILITIES_REGISTRY,
     get_capabilities,
 )
@@ -88,7 +88,7 @@ def test_capabilities_api_endpoint():
 def test_advertised_sign_ins_are_actually_implemented():
     """`has_interactive_signin` promises a control the user can press. Every
     provider claiming one must resolve to a flow that really starts something."""
-    from lodestone.models.auth_flows import ApiKeyOnlyFlow, get_flow
+    from chitragupta.models.auth_flows import ApiKeyOnlyFlow, get_flow
 
     for pid, caps in CAPABILITIES_REGISTRY.items():
         flow = get_flow(pid)

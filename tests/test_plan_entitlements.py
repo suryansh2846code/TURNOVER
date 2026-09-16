@@ -1,7 +1,7 @@
 """Unit tests for the Universal Provider Plan & Model Entitlement Engine."""
 from __future__ import annotations
 
-from lodestone.models.entitlements import (
+from chitragupta.models.entitlements import (
     evaluate_model_entitlement,
     get_best_unlocked_model,
 )

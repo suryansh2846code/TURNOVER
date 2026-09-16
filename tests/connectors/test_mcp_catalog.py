@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from lodestone.connectors import mcp_catalog
-from lodestone.connectors.mcp_source import MCPConnector, MCPServerSpec, list_servers
+from chitragupta.connectors import mcp_catalog
+from chitragupta.connectors.mcp_source import MCPConnector, MCPServerSpec, list_servers
 
 SERVER = str(Path(__file__).parent / "fake_mcp_server.py")
 
@@ -55,7 +55,7 @@ def test_a_server_that_will_not_start_is_never_saved():
     cannot boot must never appear in the user's list."""
     spec = MCPServerSpec(id="broken", name="Broken",
                          command="/nonexistent/nope", args=[])
-    from lodestone.connectors.mcp_source import probe
+    from chitragupta.connectors.mcp_source import probe
 
     kinds, reason = probe(spec)
 
@@ -131,7 +131,7 @@ def spec_for(mode: str, **over) -> MCPServerSpec:
 def test_describe_shows_reads_and_writes_before_connecting():
     """An install button that says only "Connect" asks for consent to something
     nobody has been shown."""
-    import lodestone.connectors.mcp_catalog as cat
+    import chitragupta.connectors.mcp_catalog as cat
 
     entry = cat.CatalogEntry(id="writes", name="Writes Source",
                              command=sys.executable, args=(SERVER, "writes"))
@@ -174,7 +174,7 @@ def test_an_empty_allow_list_permits_the_readable_tools():
 
 
 def test_the_allow_list_survives_a_round_trip_to_disk():
-    from lodestone.connectors.mcp_source import get_server, upsert_server
+    from chitragupta.connectors.mcp_source import get_server, upsert_server
 
     upsert_server(spec_for("listing", id="narrow", allowed_tools=["list_records"]))
 

@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from lodestone import metrics
-from lodestone.connectors import get_connector
+from chitragupta import metrics
+from chitragupta.connectors import get_connector
 
 #: A Daily Summaries.csv in Takeout's real shape, including the columns we
 #: refuse and a zero-filled day.
@@ -167,7 +167,7 @@ def _zip_of(text: str) -> Path:
 # ── it shares the bookkeeping rather than repeating it ───────────────────
 def test_both_exports_use_the_same_base():
     """The part that drifts when copied is the part that is shared."""
-    from lodestone.connectors.export_file import ExportConnector
+    from chitragupta.connectors.export_file import ExportConnector
 
     for name in ("apple_health", "google_fit"):
         assert isinstance(get_connector(name), ExportConnector), name

@@ -15,7 +15,7 @@ import pathlib
 
 import pytest
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "lodestone"
+SRC = pathlib.Path(__file__).resolve().parent.parent / "chitragupta"
 
 # `log.py` defines the seam, so it cannot use it to guard its own file handler.
 ALLOWED = {"log.py"}
@@ -37,15 +37,15 @@ def test_no_failure_is_thrown_away_in_silence():
                  for line in _silent_handlers(p)]
     assert not offenders, (
         "`except Exception: pass` discards the only record of what went wrong. "
-        "Use `with suppressed('what you were attempting'):` from lodestone.log "
+        "Use `with suppressed('what you were attempting'):` from chitragupta.log "
         f"instead — {len(offenders)} site(s): {offenders[:6]}")
 
 
 def test_suppressed_does_not_raise_and_does_record():
     """Captured with our own handler rather than pytest's `caplog`: the
-    `lodestone` logger does not propagate to the root, so the packaged app can
+    `chitragupta` logger does not propagate to the root, so the packaged app can
     never double-print through a host's logging config."""
-    from lodestone.log import get_logger, suppressed
+    from chitragupta.log import get_logger, suppressed
 
     log = get_logger("tests.suppressed")
     records = []
@@ -73,7 +73,7 @@ def test_suppressed_lets_a_cancellation_through():
     """KeyboardInterrupt and SystemExit are not survivable failures. Swallowing
     them would make the app impossible to quit — `except BaseException: pass`
     in a loop is exactly that bug."""
-    from lodestone.log import suppressed
+    from chitragupta.log import suppressed
 
     with pytest.raises(KeyboardInterrupt), suppressed("a block the user interrupted"):
         raise KeyboardInterrupt
@@ -102,14 +102,14 @@ def test_every_suppression_says_what_it_was_attempting():
 
 def test_logs_land_somewhere_a_bug_report_can_reach():
     """A user who hits a problem is not sitting in a terminal. Debug output goes
-    to a rotating file under the Lodestone home so there is something to read.
+    to a rotating file under the Chitragupta home so there is something to read.
 
     Forced, because the directory can vanish under a running app — `/api/brain/
-    reset` clears the Lodestone home — and re-configuring has to put it back
+    reset` clears the Chitragupta home — and re-configuring has to put it back
     rather than quietly logging into nowhere for the rest of the session.
     """
-    from lodestone.config import get_settings
-    from lodestone.log import configure
+    from chitragupta.config import get_settings
+    from chitragupta.log import configure
 
     configure(force=True)
     assert (get_settings().home / "logs").is_dir()
@@ -117,7 +117,7 @@ def test_logs_land_somewhere_a_bug_report_can_reach():
 
 def test_logging_survives_a_home_it_cannot_write(monkeypatch):
     """A log that cannot be written must never stop the app from starting."""
-    from lodestone import log as logmod
+    from chitragupta import log as logmod
 
     monkeypatch.setattr(logmod, "_log_dir", lambda: None)
     logmod.configure(force=True)

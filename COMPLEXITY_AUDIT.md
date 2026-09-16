@@ -1,11 +1,11 @@
-# Complexity Audit — Lodestone
+# Complexity Audit — Chitragupta
 
 > **MODE: AUDIT.** Read-only. No source file was modified to produce this report.
 > Measured against `4ba07fa` (main, clean tree) on 2026-09-13.
 >
 > **Baseline reproduced before writing anything:**
-> `pytest` → **1425 passed, 18 skipped in 62.1s** · `ruff check lodestone tests` → clean ·
-> `mypy lodestone` → clean over 113 files · `node --check lodestone/web/app.js` → clean.
+> `pytest` → **1425 passed, 18 skipped in 62.1s** · `ruff check chitragupta tests` → clean ·
+> `mypy chitragupta` → clean over 113 files · `node --check chitragupta/web/app.js` → clean.
 >
 > Every number below came from a command run against this tree, not from the docs.
 
@@ -271,7 +271,7 @@ This is why the import graph shows `root <-> connectors`, `root <-> agents`,
 inverts the intended direction. It is currently *masked* by being a lazy import.
 
 `desktop.py` and `hud.py` also sit loose at the package root — there is no
-`lodestone/desktop/` package, despite that being the natural boundary.
+`chitragupta/desktop/` package, despite that being the natural boundary.
 
 ## C.5 — `core/` imports `brain/`
 
@@ -557,14 +557,14 @@ Sequenced so each step is independently verifiable and each one makes the next c
 | **8** | Extract `brain.recall`'s context-string assembly into `brain/recall_context.py` (B.3) | 2 | 1 (`brain`) | GREEN |
 | **9** | **`app.js` split, step 1**: teach the harnesses to read N ordered sources (`tests/js/_app_source.mjs`, order derived from `index.html`), then carve out `web/core.js` (~115 lines: `$`, `api`, `esc`, `md`, `toast`, orbs, icons) | ~12 | 2 (`web`, `tests`) | **YELLOW — ask first** |
 | **10** | **`app.js` split, step 2+**: `web/providers.js` (863) then `web/models.js` (792) — one module per commit, harness green between each | 3–4 each | 1 | YELLOW |
-| **11** | Create `lodestone/desktop/` (`desktop.py` + `hud.py`); invert `api → hud` behind a small bridge so the HTTP layer stops importing the window layer (C.4) | ~8 | 2 (`api`, `desktop`) | **YELLOW — ask first** |
+| **11** | Create `chitragupta/desktop/` (`desktop.py` + `hud.py`); invert `api → hud` behind a small bridge so the HTTP layer stops importing the window layer (C.4) | ~8 | 2 (`api`, `desktop`) | **YELLOW — ask first** |
 
 ### P2 — architectural, high risk
 
 | # | change | why it is P2 |
 |---|---|---|
 | **12** | Break the 14-module `models/` cycle — most likely by extracting a leaf `models/provider_ids.py` + `models/plan_tiers.py` that `entitlements`/`discovery`/`errors` can all import without back-edges (C.1) | Touches the provider/auth architecture. Every promoted import can fail at startup. |
-| **13** | Give the 8 ownerless root modules a home — e.g. `lodestone/workspace/` for actions/routines/tasks/reminders/scheduled (C.3) | Wide import churn; breaks the `actions ↔ routines ↔ approvals` cycle, which is a design change |
+| **13** | Give the 8 ownerless root modules a home — e.g. `chitragupta/workspace/` for actions/routines/tasks/reminders/scheduled (C.3) | Wide import churn; breaks the `actions ↔ routines ↔ approvals` cycle, which is a design change |
 | **14** | Split `api/routes/workspace.py` by concern (C.6) | Route registration order (R3); `api_surface.json` must stay byte-identical |
 | **15** | Separate auth from inference in `models/chatgpt_auth.py` (B.5) | **RED** — provider authentication redesign. Would require explicit approval. |
 | **16** | `core/store.py` N+1 `self.get()` in the search loop (B.2) | A **performance** change, not complexity. Needs a benchmark before/after. Out of this task's scope. |

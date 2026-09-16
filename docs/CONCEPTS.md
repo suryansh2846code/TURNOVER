@@ -1,4 +1,4 @@
-# Lodestone — Concepts & Learning Guide
+# Chitragupta — Concepts & Learning Guide
 
 > The companion to [`PROJECT.md`](PROJECT.md). That doc explains *what we built
 > and why*. This doc explains the *ideas underneath it* — embeddings, vector
@@ -10,7 +10,7 @@
 ## 1. The mental model of the whole app
 
 The LLM (Claude, GPT, a local model…) is a **stateless reasoning engine**. It
-knows nothing about you. Lodestone's entire job is to **retrieve the right slice
+knows nothing about you. Chitragupta's entire job is to **retrieve the right slice
 of your local knowledge and put it into the prompt** at the right moment, so the
 model *acts like* it already knows you.
 
@@ -105,7 +105,7 @@ words into number-slots (fast, offline, zero-setup). Proof from our own test:
 The `hash` embedder sees "mat ≈ hat" (similar letters) and misses "cat ≈ feline"
 (same meaning, different letters). A **trained** model (`local` / OpenAI) is the
 thing that actually captures meaning. Switch with one env var:
-`LODESTONE_EMBEDDING_PROVIDER=local`. Code: `core/embeddings.py` (pluggable:
+`CHITRAGUPTA_EMBEDDING_PROVIDER=local`. Code: `core/embeddings.py` (pluggable:
 hash | local | openai | gemini).
 
 ---
@@ -221,8 +221,8 @@ down to ~436 clean ones. See the extraction filter in `brain/extract.py`.
 
 ## 9. Where the data lives (database choice)
 
-- **SQLite** — one local file, embedded, no server. `~/Library/Lodestone/`.
-  - `lodestone.db` → `memories` (text + vector BLOB), `entities`, `relations`.
+- **SQLite** — one local file, embedded, no server. `~/Library/Chitragupta/`.
+  - `chitragupta.db` → `memories` (text + vector BLOB), `entities`, `relations`.
   - `agents.db` → each agent's chat history.
 - **Why SQLite:** local-first (the product thesis), zero-config, portable (copy
   one file to back up), fast enough for tens of thousands of memories, and it
@@ -234,7 +234,7 @@ down to ~436 clean ones. See the extraction filter in `brain/extract.py`.
 
 ---
 
-## 10. How Turnstone (and therefore Lodestone) runs — no servers
+## 10. How Turnstone (and therefore Chitragupta) runs — no servers
 
 - A **downloadable local app**; the brain, indexing and storage all happen on the
   user's machine.
@@ -244,7 +244,7 @@ down to ~436 clean ones. See the extraction filter in `brain/extract.py`.
   · free local models.
 - **The one place data leaves your machine:** *inference*. If you pick a cloud
   model, the prompt (including injected brain context) goes to that provider at
-  query time. A **local model keeps everything on-device.** Lodestone defaults to
+  query time. A **local model keeps everything on-device.** Chitragupta defaults to
   a local model, so out-of-the-box nothing leaves your machine.
 
 Cost to run: ~nothing. The user's machine and the user's chosen model do the work.

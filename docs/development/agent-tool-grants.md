@@ -71,7 +71,7 @@ instead reports what is genuinely useful under this design:
 
 | field | meaning |
 |---|---|
-| `custom` | did the user build it, or does it ship with Lodestone — which is about whether *deleting* it makes sense, not whether it can be changed |
+| `custom` | did the user build it, or does it ship with Chitragupta — which is about whether *deleting* it makes sense, not whether it can be changed |
 | `overridden` | has the user changed this agent's tools from its default |
 | `default_tools` | what it would have if they never had, so "reset" and "what did I change" are both answerable |
 
@@ -112,7 +112,7 @@ What this agent has, what it could have, and for anything it cannot have, why.
 {
   "agent_id": "chotu",            // id
   "agent_name": "chotu",          // display
-  "custom": true,                 // user-built, vs ships with Lodestone
+  "custom": true,                 // user-built, vs ships with Chitragupta
   "overridden": false,            // has the user changed its tools
   "default_tools": ["…"],         // ids — what it has if they never had
   "reaches_connectors": false,    // does it have the sentinel, or any connector tool

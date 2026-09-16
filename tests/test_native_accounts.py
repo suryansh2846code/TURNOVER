@@ -6,14 +6,14 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from lodestone.api.app import app
-from lodestone.models.accounts import (
+from chitragupta.api.app import app
+from chitragupta.models.accounts import (
     detect_all_accounts,
     detect_claude_account,
     detect_cursor_account,
 )
-from lodestone.models.connections import ConnectionStatus, get_connection
-from lodestone.models.gemini import GeminiProvider
+from chitragupta.models.connections import ConnectionStatus, get_connection
+from chitragupta.models.gemini import GeminiProvider
 
 client = TestClient(app)
 
@@ -37,7 +37,7 @@ def test_gemini_oauth_reflection(monkeypatch):
     """Verify that Google Workspace OAuth does NOT reflect into Gemini model provider (Gemini is pure API key)."""
     import json
 
-    from lodestone.config import get_settings
+    from chitragupta.config import get_settings
 
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
@@ -147,7 +147,7 @@ def _no_real_oauth_server(request):
 
 def test_signin_endpoints():
     """Providers with an interactive sign-in start one; key-only ones say so."""
-    from lodestone.models.capabilities import get_capabilities
+    from chitragupta.models.capabilities import get_capabilities
 
     for p in ["openai", "xai", "claude", "cursor"]:
         resp = client.post(f"/api/providers/{p}/signin")
@@ -170,7 +170,7 @@ def test_signin_endpoints():
 
 def test_openai_chatgpt_oauth_flow():
     """Verify OpenAI signin starts ChatGPT OAuth PKCE flow with official client."""
-    from lodestone.models.chatgpt_auth import (
+    from chitragupta.models.chatgpt_auth import (
         CLIENT_ID,
         adopt_local_chatgpt_session,
         detect_chatgpt_local_session,
@@ -198,15 +198,15 @@ def test_openai_chatgpt_oauth_flow():
 
 def test_disconnect_provider():
     """Verify disconnecting a provider clears account email, tokens and sets status to DISCONNECTED."""
-    from lodestone.models.accounts import detect_openai_account
-    from lodestone.models.connections import ConnectionStatus, get_connection
+    from chitragupta.models.accounts import detect_openai_account
+    from chitragupta.models.connections import ConnectionStatus, get_connection
 
     # 1. Connect or simulate connected account
     conn = get_connection("openai")
     conn.connection_status = ConnectionStatus.ACCOUNT_CONNECTED
     conn.email = "test@example.com"
     conn.auth_method = "account"
-    from lodestone.models.connections import save_connection
+    from chitragupta.models.connections import save_connection
     save_connection(conn)
 
     # 2. Call disconnect endpoint
@@ -248,8 +248,8 @@ def test_openai_oauth_callback_handler(monkeypatch):
     import json
     import urllib.request
 
-    from lodestone.models.chatgpt_auth import _GLOBAL_AUTH_STATE, start_chatgpt_oauth_flow
-    from lodestone.models.connections import ConnectionStatus, get_connection
+    from chitragupta.models.chatgpt_auth import _GLOBAL_AUTH_STATE, start_chatgpt_oauth_flow
+    from chitragupta.models.connections import ConnectionStatus, get_connection
 
     # Mock httpx.post for token exchange
     dummy_payload = base64.urlsafe_b64encode(json.dumps({
@@ -272,9 +272,9 @@ def test_openai_oauth_callback_handler(monkeypatch):
     monkeypatch.setattr(httpx, "post", lambda *args, **kwargs: DummyResp())
 
     # Bind an ephemeral port rather than the registered 1455: the fixed port is
-    # regularly held by a running Lodestone mid-sign-in, and a test that fails
+    # regularly held by a running Chitragupta mid-sign-in, and a test that fails
     # for that reason teaches nothing.
-    monkeypatch.setattr("lodestone.models.chatgpt_auth.REDIRECT_PORT", 0)
+    monkeypatch.setattr("chitragupta.models.chatgpt_auth.REDIRECT_PORT", 0)
 
     ok, _auth_url, msg = start_chatgpt_oauth_flow()
     assert ok is True, msg
@@ -300,8 +300,8 @@ def test_openai_local_session_token_retrieval(tmp_path, monkeypatch):
     """Verify that OpenAICompatProvider and get_chatgpt_access_token resolve tokens from local sessions."""
     import json
 
-    from lodestone.models.chatgpt_auth import get_chatgpt_access_token
-    from lodestone.models.openai_compat import OpenAICompatProvider
+    from chitragupta.models.chatgpt_auth import get_chatgpt_access_token
+    from chitragupta.models.openai_compat import OpenAICompatProvider
 
     codex_dir = tmp_path / ".codex"
     codex_dir.mkdir(parents=True, exist_ok=True)
@@ -313,8 +313,8 @@ def test_openai_local_session_token_retrieval(tmp_path, monkeypatch):
         }
     }))
 
-    monkeypatch.setattr("lodestone.models.chatgpt_auth._codex_auth_path", lambda: auth_file)
-    monkeypatch.setattr("lodestone.models.chatgpt_auth._load_stored_chatgpt_data", lambda: None)
+    monkeypatch.setattr("chitragupta.models.chatgpt_auth._codex_auth_path", lambda: auth_file)
+    monkeypatch.setattr("chitragupta.models.chatgpt_auth._load_stored_chatgpt_data", lambda: None)
 
     token = get_chatgpt_access_token()
     assert token == "valid_mock_access_token_123"

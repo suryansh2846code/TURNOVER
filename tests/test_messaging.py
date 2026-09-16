@@ -17,10 +17,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from lodestone import actions, messaging
-from lodestone.agents import connector_grants, message_tools
-from lodestone.agents.approvals import describe
-from lodestone.agents.permissions import (
+from chitragupta import actions, messaging
+from chitragupta.agents import connector_grants, message_tools
+from chitragupta.agents.approvals import describe
+from chitragupta.agents.permissions import (
     CHAT_RECIPIENT,
     EMAIL_RECIPIENT,
     OUTBOUND_ACTIONS,
@@ -29,8 +29,8 @@ from lodestone.agents.permissions import (
     recipients_of,
     revoke,
 )
-from lodestone.agents.tools import TOOL_DEFS, TOOL_IMPLS
-from lodestone.messaging import Chat, Message
+from chitragupta.agents.tools import TOOL_DEFS, TOOL_IMPLS
+from chitragupta.messaging import Chat, Message
 
 
 class FakeApp:
@@ -81,13 +81,13 @@ def test_an_app_is_just_a_class_with_three_methods():
 
 
 def test_a_connector_that_only_ingests_is_not_a_messaging_app():
-    from lodestone.connectors import get_connector
+    from chitragupta.connectors import get_connector
 
     assert not messaging._carries_conversations(get_connector("files"))
 
 
 def test_both_shipped_apps_implement_it():
-    from lodestone.connectors import get_connector
+    from chitragupta.connectors import get_connector
 
     for name in ("telegram", "slack"):
         assert messaging._carries_conversations(get_connector(name)), name
@@ -207,7 +207,7 @@ def test_a_chat_permission_is_not_an_email_permission():
     """Two lists, because a chat id is not an address."""
     grant("telegram:@dana", kind=CHAT_RECIPIENT)
     try:
-        from lodestone.agents.permissions import is_permitted
+        from chitragupta.agents.permissions import is_permitted
 
         assert is_permitted("telegram:@dana", kind=CHAT_RECIPIENT)
         assert not is_permitted("telegram:@dana", kind=EMAIL_RECIPIENT)
@@ -248,7 +248,7 @@ def test_telegram_is_the_client_api_not_the_bot_api():
     """A bot only sees chats it was added to — which is not the user's life."""
     source = (SimpleNamespace(),)  # keep ruff quiet about the unused import
     del source
-    from lodestone.connectors import telegram_auth
+    from chitragupta.connectors import telegram_auth
 
     assert telegram_auth.API_ID == "TELEGRAM_API_ID"
     assert "my.telegram.org" in telegram_auth.NEEDS_CREDENTIALS

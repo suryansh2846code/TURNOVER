@@ -22,9 +22,9 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def isolated_home(tmp_path, monkeypatch):
-    """A brand-new Lodestone home, and therefore a brand-new brain, per test.
+    """A brand-new Chitragupta home, and therefore a brand-new brain, per test.
 
-    The session-wide `LODESTONE_HOME` in the root conftest keeps tests off the
+    The session-wide `CHITRAGUPTA_HOME` in the root conftest keeps tests off the
     developer's machine; it does not keep them off *each other*. Memory counts
     are the assertion in most of these tests, so a brain carried between them
     would make every count depend on collection order.
@@ -37,20 +37,20 @@ def isolated_home(tmp_path, monkeypatch):
     every record as an already-stored duplicate and reports zero added, which
     reads as "this connector is broken".
     """
-    from lodestone.brain.brain import get_brain
-    from lodestone.config import get_settings
-    from lodestone.core.store import get_store
+    from chitragupta.brain.brain import get_brain
+    from chitragupta.config import get_settings
+    from chitragupta.core.store import get_store
 
     caches = (get_settings, get_store, get_brain)
 
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("LODESTONE_HOME", str(home))
+    monkeypatch.setenv("CHITRAGUPTA_HOME", str(home))
     for cache in caches:
         cache.cache_clear()
     # Assert rather than assume: this is the check that would have caught the
     # two caches missing above, instead of eleven connectors looking broken.
-    assert get_settings().home == home, "LODESTONE_HOME did not take"
+    assert get_settings().home == home, "CHITRAGUPTA_HOME did not take"
     assert get_store().db_path.parent == home, "the store is on the wrong brain"
     yield home
     for cache in caches:
@@ -114,8 +114,8 @@ class FailOnNth:
 def poison(monkeypatch):
     """Break exactly one ingested item, whichever seam the connector uses."""
     def install(nth: int = 2) -> FailOnNth:
-        from lodestone.brain.brain import Brain
-        from lodestone.core.store import MemoryStore
+        from chitragupta.brain.brain import Brain
+        from chitragupta.core.store import MemoryStore
 
         breaker = FailOnNth(nth)
         monkeypatch.setattr(Brain, "ingest", breaker.wrap(Brain.ingest))

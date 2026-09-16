@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parent.parent
-WEB = ROOT / "lodestone/web"
+WEB = ROOT / "chitragupta/web"
 CSS = (WEB / "styles.css").read_text()
 
 
@@ -84,7 +84,7 @@ def test_the_app_installs_an_edit_menu():
     callback and no key equivalent, so it cannot bind ⌘C at all."""
     import AppKit
 
-    from lodestone.desktop import _install_edit_menu_now
+    from chitragupta.desktop import _install_edit_menu_now
 
     app = AppKit.NSApplication.sharedApplication()
     app.setMainMenu_(AppKit.NSMenu.alloc().initWithTitle_("MainMenu"))
@@ -111,7 +111,7 @@ def test_installing_it_twice_does_not_make_two_menus():
     is the kind of thing nobody notices until a user screenshots it."""
     import AppKit
 
-    from lodestone.desktop import _install_edit_menu_now
+    from chitragupta.desktop import _install_edit_menu_now
 
     app = AppKit.NSApplication.sharedApplication()
     app.setMainMenu_(AppKit.NSMenu.alloc().initWithTitle_("MainMenu"))

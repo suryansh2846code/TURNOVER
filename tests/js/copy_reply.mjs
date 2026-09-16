@@ -6,7 +6,7 @@
  * are a string being handed to a clipboard call — so the button is clicked and
  * the clipboard is recorded.
  *
- * argv: <a path inside lodestone/web/>   stdin: {text}
+ * argv: <a path inside chitragupta/web/>   stdin: {text}
  */
 import fs from "node:fs";
 import path from "node:path";

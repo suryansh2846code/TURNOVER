@@ -19,7 +19,7 @@ import subprocess
 import pytest
 
 ROOT = pathlib.Path(__file__).parent.parent
-WEB = ROOT / "lodestone/web"
+WEB = ROOT / "chitragupta/web"
 LOADER = ROOT / "tests/js/_app_source.mjs"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,
@@ -51,7 +51,7 @@ def test_it_returns_the_scripts_index_html_actually_loads():
 def test_a_script_on_disk_that_the_page_never_loads_is_not_included():
     """The harness must load what the browser loads — including nothing.
 
-    A module added to `lodestone/web/` but never wired into `index.html` is dead
+    A module added to `chitragupta/web/` but never wired into `index.html` is dead
     in the browser. A loader that globbed the directory would hide that; this
     one cannot.
     """

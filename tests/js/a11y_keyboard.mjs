@@ -21,7 +21,7 @@ import path from "node:path";
 
 import { appSource } from "./_app_source.mjs";
 
-const APP_JS = process.argv[2];   // a path inside lodestone/web/
+const APP_JS = process.argv[2];   // a path inside chitragupta/web/
 
 const focusLog = [];
 const clickLog = [];

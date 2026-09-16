@@ -5,13 +5,13 @@ chdirs to `Path.home()` before starting — a bundle's cwd is `/`, so that chdir
 is itself correct. Together they meant the shipped `.app` read **`~/.env`**.
 
 Plenty of developers have one there for something else entirely. Theirs would
-silently set `LODESTONE_MODEL_PROVIDER`, `LODESTONE_PORT` or the embedding
+silently set `CHITRAGUPTA_MODEL_PROVIDER`, `CHITRAGUPTA_PORT` or the embedding
 backend for an app that has nothing to do with it, and the only symptom is an
 app that behaves oddly for reasons nothing in the UI can explain.
 """
 from __future__ import annotations
 
-from lodestone import config
+from chitragupta import config
 
 
 def test_a_frozen_app_ignores_dotenv(monkeypatch):

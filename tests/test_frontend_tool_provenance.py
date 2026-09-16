@@ -13,7 +13,7 @@ Two rules make this more than a cosmetic grouping, and both are executed here:
   sign-in card. The user added Linear; the user sees Linear.
 * **A connector the user configured that cannot answer must say so**, in the
   panel they are looking at, instead of quietly contributing nothing — which
-  renders as "Lodestone lost my connector".
+  renders as "Chitragupta lost my connector".
 
 `node --check` passes on a temporal dead-zone `ReferenceError`, and one of
 those blanked the whole Models drawer. Source-order assertions miss a button
@@ -31,7 +31,7 @@ import subprocess
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-APP_JS = ROOT / "lodestone" / "web" / "app.js"
+APP_JS = ROOT / "chitragupta" / "web" / "app.js"
 HARNESS = ROOT / "tests" / "js" / "tool_provenance.mjs"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,
@@ -75,7 +75,7 @@ SCENARIO = {
         {"name": "mcp:figma", "label": "Figma", "ready": False, "mcp": True,
          "custom": False,
          "reason": "Figma isn't signed in. Open it in Connectors and sign in "
-                   "again — the sign-in happens with Figma, not with Lodestone."},
+                   "again — the sign-in happens with Figma, not with Chitragupta."},
     ],
 }
 

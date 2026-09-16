@@ -1,5 +1,5 @@
 [project]
-name = "lodestone"
+name = "chitragupta"
 version = "0.1.0"
 description = "Local-first personal context layer for AI. Your knowledge lives on your machine; any model can recall it. A privacy-first alternative to Turnstone."
 readme = "README.md"
@@ -43,14 +43,14 @@ all = [
 ]
 
 [project.scripts]
-lodestone = "lodestone.cli:app"
+chitragupta = "chitragupta.cli:app"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["lodestone"]
+packages = ["chitragupta"]
 
 [tool.ruff]
 target-version = "py311"
@@ -144,7 +144,7 @@ filterwarnings = ["ignore::DeprecationWarning"]
 # window, and that is worth seeing rather than hiding — a file excluded to keep
 # the number tidy is the number lying.
 [tool.coverage.run]
-source = ["lodestone"]
+source = ["chitragupta"]
 
 [tool.coverage.report]
 # `pass`-only bodies and `if TYPE_CHECKING` are noise in the missing-lines list.
@@ -178,16 +178,16 @@ exclude = ["^\\.venv/", "^brain-export/"]
 
 [[tool.mypy.overrides]]
 module = [
-    "lodestone.api.app",
-    "lodestone.api.assets",
-    "lodestone.api.concurrency",
-    "lodestone.api.schemas",
-    "lodestone.api.security",
-    "lodestone.core.models",
-    "lodestone.log",
-    "lodestone.models.capabilities",
-    "lodestone.models.connections",
-    "lodestone.models.errors",
+    "chitragupta.api.app",
+    "chitragupta.api.assets",
+    "chitragupta.api.concurrency",
+    "chitragupta.api.schemas",
+    "chitragupta.api.security",
+    "chitragupta.core.models",
+    "chitragupta.log",
+    "chitragupta.models.capabilities",
+    "chitragupta.models.connections",
+    "chitragupta.models.errors",
 ]
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
@@ -206,22 +206,22 @@ no_implicit_optional = true
 # be None, a regex searched twice with the second search unguarded.
 [[tool.mypy.overrides]]
 module = [
-    "lodestone.agents.custom",
-    "lodestone.agents.tools",
-    "lodestone.api.routes.agents",
-    "lodestone.api.routes.providers",
-    "lodestone.brain.brain",
-    "lodestone.brain.graph",
-    "lodestone.connectors.apple_mail",
-    "lodestone.connectors.gcal",
-    "lodestone.core.embeddings",
-    "lodestone.core.store",
-    "lodestone.models.cursor",
-    "lodestone.models.gemini",
-    "lodestone.models.openai_compat",
-    "lodestone.models.registry",
-    "lodestone.reminders",
-    "lodestone.routines",
-    "lodestone.tasks",
+    "chitragupta.agents.custom",
+    "chitragupta.agents.tools",
+    "chitragupta.api.routes.agents",
+    "chitragupta.api.routes.providers",
+    "chitragupta.brain.brain",
+    "chitragupta.brain.graph",
+    "chitragupta.connectors.apple_mail",
+    "chitragupta.connectors.gcal",
+    "chitragupta.core.embeddings",
+    "chitragupta.core.store",
+    "chitragupta.models.cursor",
+    "chitragupta.models.gemini",
+    "chitragupta.models.openai_compat",
+    "chitragupta.models.registry",
+    "chitragupta.reminders",
+    "chitragupta.routines",
+    "chitragupta.tasks",
 ]
 ignore_errors = true

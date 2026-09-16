@@ -71,7 +71,7 @@ do not ask for a code that will never arrive.
   expiry, and on disconnect.
 * The API id and hash go through `settings.set_secret`, like every other
   credential.
-* The session file is `~/Library/Lodestone/telegram.session`. It is the
+* The session file is `~/Library/Chitragupta/telegram.session`. It is the
   credential; treat it as one.
 
 ## 5. Disconnecting signs out on Telegram's side too
@@ -83,7 +83,7 @@ did, so `disconnect()` calls `log_out()` first and removes the file after.
 ## 6. What the agent gets
 
 Nothing Telegram-shaped. The connector implements the three methods in
-`lodestone/messaging.py` — `chats`, `history`, `send` — and the agent layer sees
+`chitragupta/messaging.py` — `chats`, `history`, `send` — and the agent layer sees
 `list_chats` / `read_chat` / a `message_send` action that work the same way for
 Slack. Adding a third app is one class and no change above it.
 

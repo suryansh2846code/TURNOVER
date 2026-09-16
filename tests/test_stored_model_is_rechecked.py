@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from lodestone.models import registry
+from chitragupta.models import registry
 
 #: What a ChatGPT Free account reports it can run.
 FREE_ACCOUNT = [
@@ -40,7 +40,7 @@ def account(monkeypatch):
     across cases — `get_provider` is lru_cached on (name, model)."""
     def install(models):
         registry.get_provider.cache_clear()
-        monkeypatch.setattr("lodestone.models.discovery.get_discovered_models",
+        monkeypatch.setattr("chitragupta.models.discovery.get_discovered_models",
                             lambda *a, **k: (models, {}))
     yield install
     registry.get_provider.cache_clear()
@@ -78,7 +78,7 @@ def test_a_discovery_failure_honours_the_request(account, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("offline")
 
-    monkeypatch.setattr("lodestone.models.discovery.get_discovered_models", boom)
+    monkeypatch.setattr("chitragupta.models.discovery.get_discovered_models", boom)
 
     assert registry.get_provider("openai", "gpt-5.5").model == "gpt-5.5"
 
@@ -102,14 +102,14 @@ def test_routes_reach_a_provider_only_through_the_seam():
     import pathlib
     import re
 
-    import lodestone
-    from lodestone.models.registry import _REGISTRY
+    import chitragupta
+    from chitragupta.models.registry import _REGISTRY
 
     classes = {cls.__name__ for cls in _REGISTRY.values()}
     direct = re.compile(rf"\b({'|'.join(sorted(classes))})\s*\(")
 
     offenders = []
-    for path in (pathlib.Path(lodestone.__file__).parent / "api" / "routes").glob("*.py"):
+    for path in (pathlib.Path(chitragupta.__file__).parent / "api" / "routes").glob("*.py"):
         for lineno, line in enumerate(path.read_text().splitlines(), 1):
             if direct.search(line) and "import" not in line:
                 offenders.append(f"{path.name}:{lineno}: {line.strip()}")

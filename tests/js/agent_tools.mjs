@@ -9,7 +9,7 @@
  * temporal-dead-zone ReferenceError, which is how a whole panel once rendered
  * blank while every test passed.
  *
- * argv: <a path inside lodestone/web/>
+ * argv: <a path inside chitragupta/web/>
  * stdin: {agent, tools, connectors, toggle?, failSave?}
  */
 import fs from "node:fs";

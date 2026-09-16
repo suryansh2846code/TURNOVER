@@ -9,10 +9,10 @@ import time
 import pytest
 from agent_harness import RecordingTool, ScriptedProvider
 
-from lodestone.agents import runtime
-from lodestone.agents.effort import get_effort
-from lodestone.agents.loop import ToolRunner, call_key
-from lodestone.models.base import ToolCall
+from chitragupta.agents import runtime
+from chitragupta.agents.effort import get_effort
+from chitragupta.agents.loop import ToolRunner, call_key
+from chitragupta.models.base import ToolCall
 
 
 @pytest.fixture
@@ -20,9 +20,9 @@ def scripted(monkeypatch):
     """Install a scripted provider and return a factory for it."""
     def make(script, **kw):
         provider = ScriptedProvider(script=list(script), **kw)
-        monkeypatch.setattr("lodestone.agents.runtime.get_provider",
+        monkeypatch.setattr("chitragupta.agents.runtime.get_provider",
                             lambda p, m: provider)
-        monkeypatch.setattr("lodestone.agents.runtime.resolve_usable_model",
+        monkeypatch.setattr("chitragupta.agents.runtime.resolve_usable_model",
                             lambda p, m: (m or "scripted-1", None))
         return provider
     return make
@@ -34,7 +34,7 @@ def tool(monkeypatch):
     def install(name="list_entities", **kw):
         rec = RecordingTool(**kw)
         monkeypatch.setitem(runtime.__dict__.setdefault("_unused", {}), "x", None)
-        from lodestone.agents import tools as tools_mod
+        from chitragupta.agents import tools as tools_mod
         monkeypatch.setitem(tools_mod.TOOL_IMPLS, name, rec)
         return rec
     return install
@@ -131,7 +131,7 @@ def test_independent_tool_calls_overlap(scripted, tool):
 def test_low_effort_limits_how_many_run_at_once():
     """Parallelism is part of the budget, not a free win."""
     rec = RecordingTool(delay=0.15)
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
     original = tools_mod.TOOL_IMPLS["list_entities"]
     tools_mod.TOOL_IMPLS["list_entities"] = rec
     try:
@@ -148,7 +148,7 @@ def test_duplicate_calls_in_one_round_execute_once():
     """A model asking for the same thing three times in one breath is wasteful,
     not circling — run it once, answer all three."""
     rec = RecordingTool()
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
     original = tools_mod.TOOL_IMPLS["list_entities"]
     tools_mod.TOOL_IMPLS["list_entities"] = rec
     try:

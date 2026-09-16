@@ -11,10 +11,10 @@ from __future__ import annotations
 import pytest
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import runtime
-from lodestone.agents.agent import AgentMemory
-from lodestone.agents.context import MAX_DIGEST_CALLS, MAX_DIGEST_CHARS, digest_of
-from lodestone.agents.runtime import TraceStep
+from chitragupta.agents import runtime
+from chitragupta.agents.agent import AgentMemory
+from chitragupta.agents.context import MAX_DIGEST_CALLS, MAX_DIGEST_CHARS, digest_of
+from chitragupta.agents.runtime import TraceStep
 
 
 @pytest.fixture
@@ -57,7 +57,7 @@ def test_a_turn_that_made_twenty_calls_does_not_remember_twenty():
 
 
 def test_the_next_turn_is_told_what_the_last_one_found(scripted):
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
 
     saved = tools_mod.TOOL_IMPLS["list_entities"]
     tools_mod.TOOL_IMPLS["list_entities"] = lambda **kw: "Sokrates, Bellweather, Crane"
@@ -77,7 +77,7 @@ def test_the_next_turn_is_told_what_the_last_one_found(scripted):
 
 
 def test_the_stored_row_carries_the_result_not_only_the_name(scripted):
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
 
     saved = tools_mod.TOOL_IMPLS["list_entities"]
     tools_mod.TOOL_IMPLS["list_entities"] = lambda **kw: "a distinctive finding"
@@ -95,7 +95,7 @@ def test_the_stored_row_carries_the_result_not_only_the_name(scripted):
 
 def test_rows_written_before_results_were_kept_do_not_break_anything():
     """Old rows hold a bare list of names. They must simply contribute nothing."""
-    from lodestone.agents.context import _tool_note
+    from chitragupta.agents.context import _tool_note
 
     assert _tool_note([{"tool_json": '["web_search", "search_brain"]'}]) == ""
     assert _tool_note([{"tool_json": "not json at all"}]) == ""

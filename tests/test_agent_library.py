@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from lodestone.agents import library
-from lodestone.agents.agent import AgentMemory
-from lodestone.agents.library import (
+from chitragupta.agents import library
+from chitragupta.agents.agent import AgentMemory
+from chitragupta.agents.library import (
     BY_ID,
     CATEGORIES,
     DEFAULT_ROSTER,
@@ -20,14 +20,14 @@ from lodestone.agents.library import (
     remove_from_roster,
     roster,
 )
-from lodestone.agents.presets import get_agent, list_agents
-from lodestone.agents.prompt import KNOWN_ACTIONS
-from lodestone.agents.tools import TOOL_DEFS, build_tools
+from chitragupta.agents.presets import get_agent, list_agents
+from chitragupta.agents.prompt import KNOWN_ACTIONS
+from chitragupta.agents.tools import TOOL_DEFS, build_tools
 
 
 @pytest.fixture(autouse=True)
 def clean_roster():
-    from lodestone.core.store import get_store
+    from chitragupta.core.store import get_store
     before = get_store().get_meta(library.ROSTER_KEY)
     yield
     get_store().set_meta(library.ROSTER_KEY, before or "")
@@ -51,7 +51,7 @@ def test_every_template_is_coherent():
 
 def test_every_declared_tool_actually_exists():
     """A typo in a template would silently give an agent one fewer hand."""
-    from lodestone.agents.mcp_tools import SENTINEL
+    from chitragupta.agents.mcp_tools import SENTINEL
 
     for t in TEMPLATES:
         # Against what it GRANTS, not what it declares: the generalist holds a
@@ -122,7 +122,7 @@ def test_a_removed_agent_still_resolves():
 
 
 def test_a_roster_naming_a_retired_template_does_not_break_the_sidebar():
-    from lodestone.core.store import get_store
+    from chitragupta.core.store import get_store
 
     get_store().set_meta(library.ROSTER_KEY, '["inbox", "a-template-we-retired"]')
     assert roster() == ["inbox"]
@@ -160,7 +160,7 @@ def test_the_cards_report_who_is_already_in_the_roster():
 # ── delegation follows the roster ────────────────────────────────────────
 def test_agents_can_only_ask_the_agents_the_user_actually_has():
     """Otherwise ask_agent offers a catalogue rather than this person's team."""
-    from lodestone.agents.delegation import roster as agent_roster
+    from chitragupta.agents.delegation import roster as agent_roster
 
     remove_from_roster("engineer")
     assert "engineer" not in agent_roster()
@@ -180,7 +180,7 @@ def test_there_is_no_lead_agent_any_more():
     """It was a second definition of Chief of Staff, built from a hardcoded
     tool list with no connector access and a prompt naming three specialists a
     new user does not have. Two definitions of one role is how one goes stale."""
-    from lodestone.api.routes import agents as routes
+    from chitragupta.api.routes import agents as routes
 
     assert not hasattr(routes, "create_lead_agent")
     assert not hasattr(routes, "_fallback_welcome")

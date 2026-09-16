@@ -14,12 +14,12 @@ from pathlib import Path
 import pytest
 from web_sources import app_source
 
-from lodestone.models.auth_flows import ApiKeyOnlyFlow, AuthStart, AuthStatus, get_flow
-from lodestone.models.capabilities import CAPABILITIES_REGISTRY, get_capabilities
-from lodestone.models.discovery import normalize_provider_id
-from lodestone.models.registry import _LOCALITY, _REGISTRY, MODEL_CATALOG, PRIMARY_PROVIDERS
+from chitragupta.models.auth_flows import ApiKeyOnlyFlow, AuthStart, AuthStatus, get_flow
+from chitragupta.models.capabilities import CAPABILITIES_REGISTRY, get_capabilities
+from chitragupta.models.discovery import normalize_provider_id
+from chitragupta.models.registry import _LOCALITY, _REGISTRY, MODEL_CATALOG, PRIMARY_PROVIDERS
 
-MODELS_DIR = Path(__file__).parent.parent / "lodestone/models"
+MODELS_DIR = Path(__file__).parent.parent / "chitragupta/models"
 
 # Verified dead against the live providers on 2026-09-12. Re-verify before
 # removing anything from this list; a retired id renders as selectable and then
@@ -130,7 +130,7 @@ def test_key_only_providers_get_the_key_only_flow(pid):
 def test_no_provider_falls_back_to_a_generic_browser_flow_by_accident():
     """BrowserFlow just opens a URL — acceptable only where there is genuinely
     nothing to sign into."""
-    from lodestone.models.auth_flows import BrowserFlow
+    from chitragupta.models.auth_flows import BrowserFlow
 
     generic = [p for p in PRIMARY_PROVIDERS if isinstance(get_flow(p), BrowserFlow)]
     assert set(generic) <= {"ollama", "mock"}, \
@@ -190,8 +190,8 @@ def test_key_only_providers_report_no_account_credential(pid):
     """xAI is the case that matters: its OAuth token authenticates but grants no
     api.x.ai credits, so counting it as a connected account would unlock models
     that fail on the first message. Credential stores (the Keychain) are not
-    scoped by LODESTONE_HOME, so this must hold regardless of local state."""
-    from lodestone.models.entitlements import provider_credentials
+    scoped by CHITRAGUPTA_HOME, so this must hold regardless of local state."""
+    from chitragupta.models.entitlements import provider_credentials
 
     caps = get_capabilities(pid)
     if caps and caps.api_key_only:
@@ -203,7 +203,7 @@ def test_key_only_providers_report_no_account_credential(pid):
 def test_a_fresh_install_connects_nothing_remote():
     """Detection is not consent — on first launch every cloud provider must be
     disconnected with all models locked."""
-    from lodestone.models.registry import get_model_catalog
+    from chitragupta.models.registry import get_model_catalog
 
     for entry in get_model_catalog():
         if entry["locality"] == "local" or entry["id"] == "mock":
@@ -214,7 +214,7 @@ def test_a_fresh_install_connects_nothing_remote():
             f"{entry['id']} is disconnected but has unlocked models"
 
 
-MODELS_DIR = Path(__file__).resolve().parents[1] / "lodestone/models"
+MODELS_DIR = Path(__file__).resolve().parents[1] / "chitragupta/models"
 
 
 def _login_spawns():
@@ -260,7 +260,7 @@ def test_every_cli_login_we_spawn_is_tracked():
 
 def test_the_tracker_only_signals_what_it_recorded():
     """PIDs are reused. Killing whatever inherited one is worse than the leak."""
-    from lodestone.models import login_processes
+    from chitragupta.models import login_processes
 
     source = (MODELS_DIR / "login_processes.py").read_text()
     assert "_command_of" in source, "no check that the PID is still our process"

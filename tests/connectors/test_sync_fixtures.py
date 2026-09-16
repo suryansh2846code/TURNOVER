@@ -31,7 +31,7 @@ def test_sync_writes_memories_that_can_be_recalled(fake, monkeypatch, fake_modul
                                                    tmp_path):
     """Added != stored. A connector that reports success while writing nothing
     is the failure mode the header pill would show as a healthy brain."""
-    from lodestone.core.store import get_store
+    from chitragupta.core.store import get_store
 
     conn, kwargs = harness.build(fake, monkeypatch, fake_module, tmp_path, 3)
     harness.sync(conn, kwargs)
@@ -44,7 +44,7 @@ def test_sync_writes_memories_that_can_be_recalled(fake, monkeypatch, fake_modul
 def test_sync_records_its_state(fake, monkeypatch, fake_module, tmp_path):
     """`_finish()` must stamp connector_state — it is what the UI reads to show
     "last synced", and a connector that forgets it looks permanently stale."""
-    from lodestone.core.store import get_store
+    from chitragupta.core.store import get_store
 
     conn, kwargs = harness.build(fake, monkeypatch, fake_module, tmp_path, 2)
     harness.sync(conn, kwargs)

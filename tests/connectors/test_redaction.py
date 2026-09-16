@@ -35,8 +35,8 @@ IDS = [f.name for f in FAKES]
 @pytest.mark.parametrize("secret", SECRETS.values(), ids=list(SECRETS))
 def test_a_secret_ingested_as_a_note_is_masked(secret):
     """The shortest path in: a connector writing free text straight to the brain."""
-    from lodestone.brain import get_brain
-    from lodestone.core.store import get_store
+    from chitragupta.brain import get_brain
+    from chitragupta.core.store import get_store
 
     get_brain().ingest(f"The staging key is {secret} — do not share it.",
                        source="notes", kind="note", fast=True)
@@ -53,8 +53,8 @@ def test_redaction_survives_the_connector_path(monkeypatch, fake_module, tmp_pat
     goes through `Brain.ingest`, which is the path every connector but Gmail and
     Apple Mail uses.
     """
-    from lodestone.connectors.github import GitHubConnector
-    from lodestone.core.store import get_store
+    from chitragupta.connectors.github import GitHubConnector
+    from chitragupta.core.store import get_store
 
     secret = SECRETS["openai"]
     items = [{"number": 1, "title": "CI is failing", "state": "open",
@@ -80,8 +80,8 @@ def test_the_rest_of_the_record_is_kept(monkeypatch, fake_module, tmp_path):
     Dropping the whole record would be a quieter bug than storing it: the user
     loses content and is never told which, or why.
     """
-    from lodestone.brain import get_brain
-    from lodestone.core.store import get_store
+    from chitragupta.brain import get_brain
+    from chitragupta.core.store import get_store
 
     get_brain().ingest(
         f"Deploy notes for the launch: the key is {SECRETS['xai']}. "

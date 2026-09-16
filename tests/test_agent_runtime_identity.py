@@ -3,15 +3,15 @@ from unittest.mock import MagicMock, patch
 
 from starlette.testclient import TestClient
 
-from lodestone.agents import (
+from chitragupta.agents import (
     Agent,
     TurnResult,
     build_runtime_identity,
     format_runtime_context_prompt,
     run_turn,
 )
-from lodestone.api.app import app
-from lodestone.models.base import LLMProvider
+from chitragupta.api.app import app
+from chitragupta.models.base import LLMProvider
 
 
 class DummyProvider(LLMProvider):
@@ -32,7 +32,7 @@ def test_build_runtime_identity_basic():
     provider = DummyProvider()
     identity = build_runtime_identity(agent, provider)
 
-    assert identity["application"] == "Lodestone"
+    assert identity["application"] == "Chitragupta"
     assert identity["agent_id"] == "inbox"
     assert identity["agent_name"] == "Inbox"
     assert identity["agent_role"] == "email & communications"
@@ -46,13 +46,13 @@ def test_build_runtime_identity_codex_harness(monkeypatch):
     provider = DummyProvider()
 
     # When get_chatgpt_access_token returns a token and provider has no explicit api_key:
-    with patch("lodestone.models.chatgpt_auth.get_chatgpt_access_token", return_value="test-token"):
+    with patch("chitragupta.models.chatgpt_auth.get_chatgpt_access_token", return_value="test-token"):
         identity = build_runtime_identity(agent, provider)
         assert identity["harness"] == "Codex harness"
 
     prompt = format_runtime_context_prompt(identity)
     assert "RUNTIME CONTEXT — AUTHORITATIVE" in prompt
-    assert "Application: Lodestone" in prompt
+    assert "Application: Chitragupta" in prompt
     assert "Selected Agent: Social Manager" in prompt
     assert "Agent Role: social media manager" in prompt
     assert "Provider: OpenAI" in prompt
@@ -63,7 +63,7 @@ def test_build_runtime_identity_codex_harness(monkeypatch):
 
 def test_format_runtime_context_prompt():
     identity = {
-        "application": "Lodestone",
+        "application": "Chitragupta",
         "agent_id": "inbox",
         "agent_name": "Inbox",
         "agent_role": "email & communications",
@@ -73,7 +73,7 @@ def test_format_runtime_context_prompt():
     }
     prompt = format_runtime_context_prompt(identity)
     assert "RUNTIME CONTEXT — AUTHORITATIVE" in prompt
-    assert "Application: Lodestone" in prompt
+    assert "Application: Chitragupta" in prompt
     assert "Selected Agent: Inbox" in prompt
     assert "Provider: Anthropic" in prompt
     assert "Model: claude-3-7-sonnet" in prompt
@@ -82,11 +82,11 @@ def test_format_runtime_context_prompt():
 
 def test_run_turn_injects_authoritative_runtime_context(monkeypatch):
     dummy = DummyProvider()
-    monkeypatch.setattr("lodestone.agents.runtime.get_provider", lambda p, m: dummy)
+    monkeypatch.setattr("chitragupta.agents.runtime.get_provider", lambda p, m: dummy)
 
     res = run_turn("inbox", "which model are you using")
     assert isinstance(res, TurnResult)
-    assert res.runtime_identity["application"] == "Lodestone"
+    assert res.runtime_identity["application"] == "Chitragupta"
     assert res.runtime_identity["agent_id"] == "inbox"
     assert res.runtime_identity["agent_name"] == "Inbox"
     assert res.runtime_identity["provider"] == "OpenAI"
@@ -116,7 +116,7 @@ def test_api_chat_includes_runtime_identity(monkeypatch):
     data = resp.json()
     assert "runtime_identity" in data
     assert data["runtime_identity"]["agent_id"] == "personal"
-    assert data["runtime_identity"]["application"] == "Lodestone"
+    assert data["runtime_identity"]["application"] == "Chitragupta"
     assert data["runtime_identity"]["model"] == "mock-test-model"
 
     # The welcome endpoint used to be checked here too. It existed to deliver

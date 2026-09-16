@@ -1,4 +1,4 @@
-# Lodestone — Design Brief ("Living Constellation")
+# Chitragupta — Design Brief ("Living Constellation")
 
 > The visual identity for the app + onboarding. Chosen 3 Sep 2026 from a
 > reference the user picked: the **dark generative particle / point-cloud**
@@ -6,10 +6,17 @@
 > monospace/HUD type, constellation/node graphs).
 
 ## Brand hook
-**Lodestone** = the original compass stone; it points you *true north*. The
-product orients you around your own work. So the brain is a **living
-constellation** — memories as drifting star-particles, the knowledge graph as
-the lines between them — on a night sky, guided by one warm **pole-star**.
+**Chitragupta** is the keeper of the record — in Hindu tradition the scribe who
+holds the account of what each person has actually done. That is the product:
+it remembers your work, and it can always say where a thing came from. So the
+brain is a **living constellation** — memories as drifting star-particles, the
+knowledge graph as the lines between them — on a night sky, with one warm gold
+star for the point currently being written down.
+
+(The identity predates the name and survived it: the night sky, the particle
+field and the single gold accent were chosen for the *brain*, not for the
+wordmark, which is why renaming cost nothing here. The `--north` token keeps its
+name as a colour, not as a claim about compasses.)
 
 ## Aesthetic: "Living Constellation"
 Near-black cool ground · cool-white drifting particles that wire into a

@@ -1,7 +1,7 @@
 # Model availability, in full
 
 > The short version is in [`/CLAUDE.md`](../../CLAUDE.md) and
-> [`lodestone/models/CLAUDE.md`](../../lodestone/models/CLAUDE.md). This is the
+> [`chitragupta/models/CLAUDE.md`](../../chitragupta/models/CLAUDE.md). This is the
 > whole rule, with the per-provider detail behind it.
 >
 > One sentence governs everything below: **what a user can run is resolved from
@@ -48,7 +48,7 @@ is present, live discovery replaces them.
 ## 3. A stored model id is a request, not a guarantee
 
 Model choices persist (an agent binding in `agent_model_configs`,
-`lodestone_model` in localStorage) while provider catalogs move underneath them.
+`chitragupta_model` in localStorage) while provider catalogs move underneath them.
 `entitlements.resolve_usable_model()` re-checks every request against what the
 account offers *now* and substitutes the best model the user can run.
 `run_turn` calls it on the way to `get_provider`, and repairs the agent's saved

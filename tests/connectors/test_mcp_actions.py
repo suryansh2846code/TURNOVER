@@ -12,8 +12,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from lodestone.api.app import app
-from lodestone.connectors.mcp_source import MCPConnector, MCPServerSpec, upsert_server
+from chitragupta.api.app import app
+from chitragupta.connectors.mcp_source import MCPConnector, MCPServerSpec, upsert_server
 
 SERVER = str(Path(__file__).parent / "fake_mcp_server.py")
 client = TestClient(app)
@@ -139,7 +139,7 @@ def test_the_endpoint_queues_an_unconfirmed_action():
     to act while nobody was watching simply failed and forgot. Queuing puts it
     in the same list, with the same notification, as every other pending action.
     """
-    from lodestone.agents import approvals
+    from chitragupta.agents import approvals
 
     upsert_server(spec_for("writes", id="http"))
 
@@ -156,7 +156,7 @@ def test_the_endpoint_queues_an_unconfirmed_action():
 def test_a_queued_connector_action_is_described_in_the_users_terms():
     """The summary is what the approval list shows, so it must not be an
     internal — and it must not borrow another action's explanation."""
-    from lodestone.agents import approvals
+    from chitragupta.agents import approvals
 
     upsert_server(spec_for("writes", id="http"))
     client.post("/api/connectors/mcp/http/action",
@@ -173,7 +173,7 @@ def test_a_queued_connector_action_is_described_in_the_users_terms():
 def test_approving_later_runs_what_was_proposed():
     """The whole reason to queue rather than refuse: the action survives until
     the user gets back, and runs with the parameters it was proposed with."""
-    from lodestone.agents import approvals
+    from chitragupta.agents import approvals
 
     upsert_server(spec_for("writes", id="http"))
     queued = client.post("/api/connectors/mcp/http/action",
@@ -187,7 +187,7 @@ def test_approving_later_runs_what_was_proposed():
 
 
 def test_rejecting_never_runs_it():
-    from lodestone.agents import approvals
+    from chitragupta.agents import approvals
 
     upsert_server(spec_for("writes", id="http"))
     queued = client.post("/api/connectors/mcp/http/action",
@@ -204,8 +204,8 @@ def test_there_is_one_approval_system_not_two():
     """`mcp_action` is a registered action like any other, so it inherits the
     queue, the notification, the history and the approval list rather than
     carrying a private confirmation flag of its own."""
-    from lodestone.actions import REGISTRY
-    from lodestone.agents.permissions import NEVER_UNATTENDED
+    from chitragupta.actions import REGISTRY
+    from chitragupta.agents.permissions import NEVER_UNATTENDED
 
     assert "mcp_action" in REGISTRY
     assert "mcp_action" in NEVER_UNATTENDED

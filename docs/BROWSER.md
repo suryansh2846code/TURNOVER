@@ -1,4 +1,4 @@
-# A browser inside Lodestone
+# A browser inside Chitragupta
 
 > **Status: a plan, not a build.** Nothing in this document is implemented. It
 > exists so the first commit starts from a decision rather than a prototype.
@@ -7,7 +7,7 @@
 
 ## 1. Why this, and not more connectors
 
-Lodestone reaches a source three ways today: a first-party connector, an MCP
+Chitragupta reaches a source three ways today: a first-party connector, an MCP
 server, or an API key. Between them they cover Gmail, Calendar, Drive, Notion,
 GitHub, Linear, Notes, Messages and anything the user's own MCP servers expose.
 
@@ -36,7 +36,7 @@ rest of this document is about.
 
 ## 2. What to embed
 
-Three candidates, judged against what Lodestone already is: a macOS-only,
+Three candidates, judged against what Chitragupta already is: a macOS-only,
 local-first app that ships as a signed and notarised `.dmg`.
 
 ### WKWebView, via the pywebview window we already have
@@ -83,7 +83,7 @@ it is, and the browser arrives the same way a vendor CLI does — one button, wi
 progress, managed by us, never a terminal instruction. That path already exists
 in `models/cli_manager.py` and should be reused rather than reinvented.
 
-The profile is **ours**, not the user's. They log in once, inside Lodestone,
+The profile is **ours**, not the user's. They log in once, inside Chitragupta,
 to the sites they want an agent to reach. That is slower on day one and it is
 the entire safety story: the blast radius of a mistake is the set of sites the
 user deliberately signed into *here*, not everything they have ever logged into.
@@ -92,7 +92,7 @@ user deliberately signed into *here*, not everything they have ever logged into.
 
 ## 3. Where the session lives
 
-One persistent Chromium profile under `~/Library/Lodestone/browser/`.
+One persistent Chromium profile under `~/Library/Chitragupta/browser/`.
 
 * **It never leaves the machine.** Same promise as the brain. No sync, no
   backup to anything of ours, and it must be excluded from any future export —
@@ -104,7 +104,7 @@ One persistent Chromium profile under `~/Library/Lodestone/browser/`.
 * **Sign-out is a real control.** "Forget this site" clears that origin's
   cookies and storage; "Forget everything" deletes the profile directory. Both
   live next to the connector list, because that is where a user looks for "what
-  does Lodestone have access to".
+  does Chitragupta have access to".
 * **A logged-in site is a connection, and the Connectors panel must say so.**
   Anything else and the user has no single place that answers "what can this app
   reach on my behalf".
@@ -260,7 +260,7 @@ to build first.
 1. Managed Chromium download, reusing `models/cli_manager.py`'s one-button,
    progress-bearing pattern. No agent tools yet.
 2. The profile, the window, and manual sign-in. The user can log into a site
-   inside Lodestone and see it listed in Connectors. Still no agent.
+   inside Chitragupta and see it listed in Connectors. Still no agent.
 3. **Reading only** — `browse_open`, `browse_read`, `browse_find`, the origin
    allow-list, quarantined page text. Ship the Statements agent on this alone.
 4. Acting, behind `approvals.run_or_queue`, with the screenshot card. Add the

@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from lodestone import metrics
-from lodestone.connectors import get_connector
+from chitragupta import metrics
+from chitragupta.connectors import get_connector
 
 EXPORT = """<?xml version="1.0" encoding="UTF-8"?>
 <HealthData locale="en_GB">

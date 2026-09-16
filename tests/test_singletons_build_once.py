@@ -22,7 +22,7 @@ from __future__ import annotations
 import threading
 import time
 
-from lodestone.core.once import once
+from chitragupta.core.once import once
 
 
 def build_concurrently(factory, threads: int = 8):
@@ -136,9 +136,9 @@ def test_clearing_mid_flight_does_not_wedge_it():
 def test_the_app_singletons_use_it():
     """Named individually rather than scanned, because these three are the ones
     that are expensive: each holds a database handle or a loaded model."""
-    from lodestone.brain.brain import get_brain
-    from lodestone.core.embeddings import get_embedder
-    from lodestone.core.store import get_store
+    from chitragupta.brain.brain import get_brain
+    from chitragupta.core.embeddings import get_embedder
+    from chitragupta.core.store import get_store
 
     for fn in (get_embedder, get_store, get_brain):
         assert hasattr(fn, "cache_clear"), f"{fn.__name__} lost cache_clear()"
@@ -148,7 +148,7 @@ def test_the_app_singletons_use_it():
 def test_the_store_is_built_once_under_concurrent_callers():
     """The end-to-end version: threads racing for the store the way the
     scheduler and the request handlers actually do."""
-    from lodestone.core.store import get_store
+    from chitragupta.core.store import get_store
 
     get_store.cache_clear()
     results = build_concurrently(get_store, threads=6)

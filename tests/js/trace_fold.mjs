@@ -7,7 +7,7 @@
  * and a refactor that rebuilds the markup can quietly reopen it while every
  * other assertion still passes. So this asks what was actually appended.
  *
- * argv: <a path inside lodestone/web/>   stdin: the trace steps
+ * argv: <a path inside chitragupta/web/>   stdin: the trace steps
  */
 import fs from "node:fs";
 import path from "node:path";

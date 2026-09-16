@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from lodestone.api.app import app
-from lodestone.models.discovery import (
+from chitragupta.api.app import app
+from chitragupta.models.discovery import (
     _detect_capabilities,
     discover_openai_models,
     discover_xai_models,
@@ -99,15 +99,15 @@ def test_chatgpt_subscription_locks_unsupported_models(tmp_path, monkeypatch):
     """Only the slugs the account's own Codex cache lists may be unlocked."""
     import json
 
-    from lodestone.models.discovery import _chatgpt_subscription_models
+    from chitragupta.models.discovery import _chatgpt_subscription_models
 
     cache = tmp_path / "models_cache.json"
     cache.write_text(json.dumps({"models": [
         {"slug": "gpt-5.6-terra", "display_name": "GPT-5.6-Terra"},
         {"slug": "gpt-5.6-luna", "display_name": "GPT-5.6-Luna"},
     ]}))
-    monkeypatch.setattr("lodestone.models.chatgpt_auth._codex_models_cache_path", lambda: cache)
-    monkeypatch.setattr("lodestone.models.chatgpt_auth.detect_chatgpt_local_session",
+    monkeypatch.setattr("chitragupta.models.chatgpt_auth._codex_models_cache_path", lambda: cache)
+    monkeypatch.setattr("chitragupta.models.chatgpt_auth.detect_chatgpt_local_session",
                         lambda fetch_usage=True: {"plan": "ChatGPT Free"})
 
     model_map = {m.id: m for m in _chatgpt_subscription_models()}
@@ -125,11 +125,11 @@ def test_chatgpt_subscription_locks_unsupported_models(tmp_path, monkeypatch):
 
 def test_chatgpt_subscription_falls_back_to_plan_when_no_cache(tmp_path, monkeypatch):
     """With no Codex cache, the plan tables decide — conservatively."""
-    from lodestone.models.discovery import _chatgpt_subscription_models
+    from chitragupta.models.discovery import _chatgpt_subscription_models
 
-    monkeypatch.setattr("lodestone.models.chatgpt_auth._codex_models_cache_path",
+    monkeypatch.setattr("chitragupta.models.chatgpt_auth._codex_models_cache_path",
                         lambda: tmp_path / "absent.json")
-    monkeypatch.setattr("lodestone.models.chatgpt_auth.detect_chatgpt_local_session",
+    monkeypatch.setattr("chitragupta.models.chatgpt_auth.detect_chatgpt_local_session",
                         lambda fetch_usage=True: {"plan": "ChatGPT Free"})
 
     model_map = {m.id: m for m in _chatgpt_subscription_models()}
@@ -139,10 +139,10 @@ def test_chatgpt_subscription_falls_back_to_plan_when_no_cache(tmp_path, monkeyp
 
 def test_chatgpt_subscription_rejects_unsupported_model():
     """Verify chat_with_chatgpt_subscription informs user of unsupported model instead of silent fallback."""
-    from lodestone.models.base import Message
-    from lodestone.models.chatgpt_auth import chat_with_chatgpt_subscription
+    from chitragupta.models.base import Message
+    from chitragupta.models.chatgpt_auth import chat_with_chatgpt_subscription
 
-    with patch("lodestone.models.chatgpt_auth.get_chatgpt_access_token", return_value="mock_token"):
+    with patch("chitragupta.models.chatgpt_auth.get_chatgpt_access_token", return_value="mock_token"):
         res = chat_with_chatgpt_subscription(
             [Message(role="user", content="hello")],
             model="gpt-6-astra",
@@ -162,7 +162,7 @@ def test_set_agent_model_api_rejects_locked_model():
 
 def test_claude_opus_and_fable_discovery():
     """Verify Claude Opus 5, Sonnet 5 and Fable 5 are discovered for a paid plan."""
-    from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
+    from chitragupta.models.connections import ConnectionStatus, get_connection, save_connection
     conn = get_connection("claude")
     prev_status = conn.connection_status
     prev_email = conn.email
@@ -198,11 +198,11 @@ def test_claude_code_reports_a_locked_model_cleanly():
     """A model the plan cannot run is refused before shelling out to the CLI."""
     from unittest.mock import patch
 
-    from lodestone.models.base import Message
-    from lodestone.models.claude_code import ClaudeCodeProvider
+    from chitragupta.models.base import Message
+    from chitragupta.models.claude_code import ClaudeCodeProvider
 
-    with patch("lodestone.models.claude_code.find_claude", return_value="/usr/bin/claude"), \
-         patch("lodestone.models.accounts.detect_claude_account",
+    with patch("chitragupta.models.claude_code.find_claude", return_value="/usr/bin/claude"), \
+         patch("chitragupta.models.accounts.detect_claude_account",
                return_value={"plan": "Claude Free", "disabled_models": {}}), \
          patch("subprocess.run", side_effect=AssertionError("must not invoke the CLI")):
         res = ClaudeCodeProvider(model="claude-opus-5").chat(
@@ -214,11 +214,11 @@ def test_claude_code_respects_a_cli_reported_disablement():
     """~/.claude.json can mark a model unavailable for this CLI version."""
     from unittest.mock import patch
 
-    from lodestone.models.base import Message
-    from lodestone.models.claude_code import ClaudeCodeProvider
+    from chitragupta.models.base import Message
+    from chitragupta.models.claude_code import ClaudeCodeProvider
 
-    with patch("lodestone.models.claude_code.find_claude", return_value="/usr/bin/claude"), \
-         patch("lodestone.models.accounts.detect_claude_account",
+    with patch("chitragupta.models.claude_code.find_claude", return_value="/usr/bin/claude"), \
+         patch("chitragupta.models.accounts.detect_claude_account",
                return_value={"plan": "Claude Max",
                              "disabled_models": {"opus": "Update to 2.1.255+"}}), \
          patch("subprocess.run", side_effect=AssertionError("must not invoke the CLI")):
@@ -229,18 +229,18 @@ def test_claude_code_respects_a_cli_reported_disablement():
 
 def test_cursor_locking_matches_plan(monkeypatch):
     """A free Cursor plan can run only `auto` — the CLI refuses named models."""
-    from lodestone.models import discovery
+    from chitragupta.models import discovery
 
-    monkeypatch.setattr("lodestone.models.cursor.cursor_cli_models",
+    monkeypatch.setattr("chitragupta.models.cursor.cursor_cli_models",
                         lambda: [("auto", "Auto"), ("claude-opus-5-high", "Claude Opus 5")])
-    monkeypatch.setattr("lodestone.models.accounts.detect_cursor_account",
+    monkeypatch.setattr("chitragupta.models.accounts.detect_cursor_account",
                         lambda: {"plan": "Cursor Free"})
     models = {m.id: m for m in discovery._discover_raw("cursor", None)[0]}
     assert models["auto"].locked is False
     assert models["claude-opus-5-high"].locked is True
     assert models["claude-opus-5-high"].plan_required == "Cursor Pro"
 
-    monkeypatch.setattr("lodestone.models.accounts.detect_cursor_account",
+    monkeypatch.setattr("chitragupta.models.accounts.detect_cursor_account",
                         lambda: {"plan": "Cursor Pro"})
     models = {m.id: m for m in discovery._discover_raw("cursor", None)[0]}
     assert models["claude-opus-5-high"].locked is False

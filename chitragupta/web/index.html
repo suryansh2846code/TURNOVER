@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chitragupta — your AI that knows you</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='25' x='3' font-size='24' fill='%23f5c877'%3E%E2%97%86%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- ── Left: agents ─────────────────────────────────────────────── -->
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark"></span><span class="brand-word">Chitragupta</span><button id="collapseBtn" class="collapse-btn" title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true">‹</button></div>
+
+      <div class="side-label">Agents</div>
+      <nav id="agentList" class="agents"></nav>
+      <button id="newAgentRow" class="new-agent"><span class="na-plus">+</span><span class="na-tx">New Agent</span></button>
+      <button id="newAgentBtn" hidden></button>
+
+      <div class="side-nav">
+        <button class="snav" data-nav="inbox"><span class="snav-ic"></span><span class="snav-tx">Inbox</span></button>
+        <button class="snav" data-nav="brain"><span class="snav-ic"></span><span class="snav-tx">Brain</span></button>
+        <button class="snav" data-nav="library"><span class="snav-ic"></span><span class="snav-tx">Agent Library</span></button>
+        <button class="snav" data-nav="sources"><span class="snav-ic"></span><span class="snav-tx">Connectors</span></button>
+        <button class="snav" data-nav="tasks"><span class="snav-ic"></span><span class="snav-tx">Tasks</span></button>
+        <button class="snav" data-nav="tools"><span class="snav-ic"></span><span class="snav-tx">Tools</span></button>
+        <button class="snav" data-nav="model"><span class="snav-ic"></span><span class="snav-tx">Model</span></button>
+        <button class="snav" id="helpBtn" title="Re-experience the onboarding (won't wipe your brain)"><span class="snav-ic"></span><span class="snav-tx">Replay onboarding</span></button>
+      </div>
+
+      <div class="side-foot">
+        <button class="user-chip" id="userChip"><span class="user-av" id="userAv">S</span><span class="user-nm">You</span></button>
+      </div>
+    </aside>
+
+    <!-- ── Center: chat ─────────────────────────────────────────────── -->
+    <main class="chat">
+      <header class="chat-head">
+        <div class="ch-agent">
+          <span class="orb" id="chOrb"></span>
+          <div class="ch-meta">
+            <div class="ch-name" id="agentName">—</div>
+            <div class="ch-role" id="agentRole"></div>
+          </div>
+          <button id="agentModelChip" class="agent-model-chip" title="Choose the model powering this agent">
+            <span class="chip-dot" id="agentModelDot"></span>
+            <span class="chip-label" id="agentModelLabel">Model</span>
+            <span class="chip-arrow">▾</span>
+          </button>
+        </div>
+        <div class="ch-right">
+          <span class="tb-trust">On-device · Private · Yours</span>
+          <button id="brainStatus" class="brain-status" title="Your brain — click to open" aria-label="Your brain — open"></button>
+          <button id="clearBtn" class="ghost tiny">Clear chat</button>
+        </div>
+      </header>
+
+      <div id="messages" class="messages" role="log" aria-label="Conversation"></div>
+
+      <form id="composer" class="composer">
+        <input type="file" id="cmpFile" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden />
+        <div class="cmp-stack">
+        <div class="cmp-attachments" id="cmpAttachments" hidden></div>
+        <!-- Connectors attached to THIS message with @. Visible before it is
+             sent, because a grant you cannot see before sending is not one you
+             made. -->
+        <div class="cmp-connectors" id="cmpConnectors" hidden></div>
+        <div class="cmp-picker" id="cmpPicker" hidden role="listbox"
+             aria-label="Connectors you can add to this message"></div>
+        <div class="cmp-main-row">
+          <button type="button" class="cmp-ic" id="attachBtn" title="Attach an image" aria-label="Attach an image"></button>
+          <textarea id="input" rows="1" autocomplete="off" aria-label="Message your agent"
+                 placeholder="Message your agent… it already knows you."></textarea>
+        </div>
+        </div>
+
+        <div class="cmp-bottom-bar">
+          <div class="cmp-bar-left">
+            <button type="button" class="cmp-pill" id="cmpWorkspacePill" title="Workspace: Chitragupta">
+              <span class="cmp-pill-ic">📁</span>
+              <span class="cmp-pill-label" id="cmpWorkspaceLabel">workspace</span>
+              <span class="cmp-pill-arrow">⌵</span>
+            </button>
+
+            <!-- Model & Provider Picker Pill -->
+            <div class="cmp-model-picker-wrap">
+              <button type="button" class="cmp-pill cmp-pill-model" id="cmpModelPill" title="Choose model & provider">
+                <span class="cmp-pill-label" id="cmpModelLabel">Auto</span>
+                <span class="cmp-pill-arrow">⌵</span>
+              </button>
+
+              <!-- Floating Popover Menu -->
+              <div id="cmpModelMenu" class="cmp-model-menu" hidden>
+                <!-- Row 1: Provider selector with flyout -->
+                <div class="cmp-menu-row cmp-clickable cmp-has-flyout" id="cmpProvRow">
+                  <span class="cmp-row-title">Provider</span>
+                  <div class="cmp-row-val">
+                    <span id="cmpSelectedProvLabel">Cursor</span>
+                    <span class="cmp-chevron">›</span>
+                  </div>
+
+                  <!-- Flyout submenu for Provider -->
+                  <div class="cmp-flyout" id="cmpProvFlyout" hidden>
+                    <div class="cmp-flyout-header">Provider</div>
+                    <div class="cmp-flyout-list" id="cmpProvFlyoutList"></div>
+                  </div>
+                </div>
+
+                <!-- Row 3: Model selector with flyout -->
+                <div class="cmp-menu-row cmp-clickable cmp-has-flyout" id="cmpModelRow">
+                  <span class="cmp-row-title">Model</span>
+                  <div class="cmp-row-val">
+                    <span id="cmpSelectedModelLabel">Auto</span>
+                    <span class="cmp-chevron">›</span>
+                  </div>
+
+                  <!-- Flyout submenu for Model -->
+                  <div class="cmp-flyout" id="cmpModelFlyout" hidden>
+                    <div class="cmp-flyout-header">Model</div>
+                    <div class="cmp-flyout-list" id="cmpModelFlyoutList"></div>
+                  </div>
+                </div>
+
+                <!-- Status & Plan Usage rows -->
+                <div class="cmp-menu-divider"></div>
+                <div class="cmp-menu-status" id="cmpMenuStatus">
+                  <div class="cmp-status-row" id="cmpClaudeStatusItem">
+                    <span class="cmp-status-sub" id="cmpClaudeStatusText">Sign in with Claude to see plan usage</span>
+                    <span class="cmp-chevron">›</span>
+                  </div>
+                  <div class="cmp-status-row" id="cmpChatGptStatusItem">
+                    <span class="cmp-status-label">ChatGPT plan</span>
+                    <span class="cmp-status-sub" id="cmpChatGptStatusSub">limit reached · resets in 27d 3h</span>
+                    <span class="cmp-chevron">›</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <span class="cmp-privacy-ic" id="cmpPrivacyLock" title="On-device · Private" role="img" aria-label="On-device and private">
+              <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3">
+                <rect x="3.5" y="7" width="9" height="6" rx="1.5"/>
+                <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>
+              </svg>
+            </span>
+          </div>
+
+          <div class="cmp-bar-right">
+            <button type="button" class="cmp-bar-btn" id="micBtn" title="Voice (coming soon)" aria-label="Voice input (coming soon)" aria-disabled="true" tabindex="-1"></button>
+            <button type="button" class="cmp-bar-btn" id="waveformBtn" title="Voice waveform" aria-label="Voice waveform" tabindex="-1">
+              <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+                <path d="M2 8h1M4 5.5v5M6 3.5v9M8 2v12M10 4.5v7M12 6v4M14 8h1"/>
+              </svg>
+            </button>
+            <button id="send" type="submit" class="cmp-send" title="Send" aria-label="Send message"></button>
+          </div>
+        </div>
+      </form>
+    </main>
+
+  </div>
+
+  <!-- ── slide-over drawers (opened from the left nav) ─────────────────── -->
+  <div id="drawerBg" class="drawer-bg" hidden>
+    <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+      <div class="drawer-head"><b id="drawerTitle">Brain</b><button id="drawerClose" class="ghost tiny" aria-label="Close panel">✕</button></div>
+      <div class="drawer-body">
+
+        <!-- Connectors -->
+        <!-- Tools / skills -->
+        <div class="dpanel" data-d="tools" hidden>
+          <p class="tool-intro">The skills your agents use to get things done.</p>
+          <div id="toolList" class="tools"></div>
+        </div>
+
+        <!-- Tasks -->
+        <div class="dpanel" data-d="tasks" hidden>
+          <div class="ctx-label">Tasks <span id="taskCount" class="muted"></span></div>
+          <div class="addtask">
+            <input id="taskInput" autocomplete="off" placeholder="Add a task…" />
+            <button id="taskAdd" class="tiny">Add</button>
+          </div>
+          <div id="taskList" class="tasks"></div>
+          <p class="tool-intro" style="margin-top:12px">Automations and reminders live in <b>Inbox</b>.</p>
+        </div>
+
+      </div>
+    </aside>
+  </div>
+
+  <!-- ── Modal: reminder ─────────────────────────────────────────────── -->
+  <div id="reminderModal" class="modal-bg" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="remTitle">
+      <div class="modal-head"><b id="remTitle">New reminder</b>
+        <button id="remClose" class="ghost tiny" aria-label="Close">✕</button></div>
+      <div class="modal-body" style="padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+        <label class="ctx-label" style="margin:0">What should it say?</label>
+        <input id="remMessage" class="ctx-input" autocomplete="off" placeholder="Call Dev about the launch" />
+        <label class="ctx-label" style="margin:0">When?</label>
+        <input id="remWhen" class="ctx-input" type="datetime-local" />
+      </div>
+      <div class="modal-foot">
+        <span id="remHint" class="model-hint" style="margin:0"></span>
+        <button id="remSave" class="tiny">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: Agent Model Binding Popover/Dialog ──────────────────────── -->
+  <div id="agentModelModal" class="modal-bg" hidden>
+    <div class="modal agent-model-card" role="dialog" aria-modal="true" aria-labelledby="ammTitle">
+      <div class="modal-head">
+        <div>
+          <h3 id="ammTitle" style="margin:0;font-size:15px;font-weight:600">Model for Agent</h3>
+          <p class="modal-sub" style="margin:2px 0 0;font-size:12px;color:var(--text-muted)">Choose which model powers this agent's thoughts, recall, and tools.</p>
+        </div>
+        <button id="ammClose" class="ghost tiny" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
+        <div>
+          <label class="ctx-label" style="margin-bottom:4px">Provider</label>
+          <select id="ammProvider" class="ctx-input"></select>
+        </div>
+        <div id="ammConnectBox" class="provider-connect-box" hidden></div>
+        <div>
+          <label class="ctx-label" style="margin-bottom:4px">Model</label>
+          <select id="ammModelSelect" class="ctx-input"></select>
+          <input id="ammCustomModel" class="ctx-input" placeholder="Or type a custom model name…" style="margin-top:6px" />
+        </div>
+        <div id="ammHint" class="model-hint" style="margin:0;font-size:11.5px"></div>
+        <div id="ammStatusBadge" class="privacy-badge" style="margin:0" hidden></div>
+      </div>
+      <div class="modal-foot" style="display:flex;align-items:center;margin-top:16px;gap:8px">
+        <button id="ammReset" class="ghost tiny" title="Clear override and use default model">Reset to Default</button>
+        <div style="flex:1"></div>
+        <button id="ammCancel" class="ghost tiny">Cancel</button>
+        <button id="ammSave" class="primary tiny">Save for this Agent</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- hidden context hooks kept so app.js stays wired (right panel removed) -->
+  <span id="ctxOrb" hidden></span><span id="ctxAgentName" hidden></span><span id="ctxAgentRole" hidden></span>
+  <span id="ctxAgentDesc" hidden></span><span id="ctxMem" hidden></span><span id="ctxSources" hidden></span><span id="ctxEntities" hidden></span>
+
+  <!-- new automation / routine -->
+  <div id="routineModal" class="modal-bg" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rmTitle">
+      <div class="modal-head"><b id="rmTitle">Create an automation</b><button id="rmClose" class="ghost tiny" aria-label="Close">✕</button></div>
+      <div class="am-body">
+        <label>Name</label>
+        <input id="rmName" placeholder="e.g. Forward new emails" />
+        <label>Agent</label>
+        <select id="rmAgent"></select>
+        <label>Trigger</label>
+        <select id="rmTrigger">
+          <option value="new_email">When a new email arrives</option>
+          <option value="schedule">On a schedule (every N minutes)</option>
+        </select>
+        <div id="rmIntervalWrap" hidden>
+          <label>Every (minutes)</label>
+          <input id="rmInterval" type="number" value="60" />
+        </div>
+        <label>Instruction (what the agent should do)</label>
+        <textarea id="rmInstruction" rows="3" placeholder="e.g. Summarize the new email and send the summary to me@gmail.com"></textarea>
+        <p class="t" style="font-size:11px;margin-top:6px">Automations run without a per-time confirm — actions fire automatically. Disable or delete anytime.</p>
+      </div>
+      <div class="modal-foot"><span></span><button id="rmCreate">Create automation</button></div>
+    </div>
+  </div>
+
+  <!-- new custom agent -->
+  <div id="agentModal" class="modal-bg" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="amTitle">
+      <div class="modal-head"><b id="amTitle">Create an agent</b><button id="amClose" class="ghost tiny" aria-label="Close">✕</button></div>
+      <div class="am-body">
+        <label>Name</label>
+        <input id="amName" placeholder="e.g. Sales" />
+        <label>Focus (short)</label>
+        <input id="amRole" placeholder="e.g. outreach & CRM" />
+        <label>Instructions (system prompt)</label>
+        <textarea id="amPrompt" rows="3" placeholder="What this agent does and how it should behave…"></textarea>
+        <label>Tools</label>
+        <div id="amTools" class="am-tools"></div>
+      </div>
+      <div class="modal-foot"><span></span><button id="amCreate">Create agent</button></div>
+    </div>
+  </div>
+
+  <!-- brain detail (entity facts / memory search) -->
+  <div id="brainModal" class="modal-bg" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="bmTitle">
+      <div class="modal-head"><b id="bmTitle">Details</b><button id="bmClose" class="ghost tiny" aria-label="Close">✕</button></div>
+      <div id="bmBody" class="bm-body"></div>
+    </div>
+  </div>
+
+  <!-- lead-agent welcome -->
+  <!-- full-screen brain screen -->
+  <!-- ── Full-screen: AI model ─────────────────────────────────────────
+       Model was a slide-over drawer 380px wide, which is the wrong shape for
+       a screen whose main content is a grid of provider cards, each with an
+       account, a plan, usage limits and a model list. It is now a screen of
+       its own, opened the same way Brain is. -->
+  <div id="modelScreen" class="modelscreen" hidden>
+    <!-- One shell, several panels. Connectors and Model are both settings
+         pages, so they share the rail rather than each raising a screen with
+         its own copy of it — a duplicated rail is a rail that drifts. Brain is
+         a different kind of screen (a canvas) and is linked out to. -->
+    <aside class="ms-nav">
+      <button id="msClose" class="ms-back"><span class="ms-back-ic" aria-hidden="true">←</span>Back</button>
+      <div class="ms-nav-label">Workspace</div>
+      <nav class="ms-nav-list">
+        <button class="ms-nav-item" data-msnav="inbox"><span class="ms-nav-ic" aria-hidden="true"></span><span>Inbox</span></button>
+        <button class="ms-nav-item" data-msnav="brain"><span class="ms-nav-ic" aria-hidden="true"></span><span>Brain</span></button>
+        <button class="ms-nav-item" data-msnav="tools"><span class="ms-nav-ic" aria-hidden="true"></span><span>Agents &amp; tools</span></button>
+      </nav>
+      <div class="ms-nav-label">Settings</div>
+      <nav class="ms-nav-list">
+        <button class="ms-nav-item" data-msnav="connectors"><span class="ms-nav-ic" aria-hidden="true"></span><span>Connectors</span></button>
+        <button class="ms-nav-item is-active" data-msnav="model" aria-current="page"><span class="ms-nav-ic" aria-hidden="true"></span><span>Model</span></button>
+      </nav>
+    </aside>
+
+    <div class="ms-main">
+
+    <!-- ── panel: inbox ────────────────────────────────────────────────
+         What the agents are doing on their own: work that runs unattended,
+         things due, and anything an agent stopped to ask about. The ids are
+         the ones the existing loaders already write into — the markup moved,
+         the renderers did not have to. -->
+    <div class="ms-body sp" data-sp="inbox" hidden>
+      <h1 class="ms-h1">Inbox</h1>
+      <p class="ms-sub" style="margin-bottom:26px">What your agents are running on their own, what is coming up, and anything waiting on you.</p>
+
+      <section class="ib-sec">
+        <div class="ib-head">
+          <div><h2 class="ib-title">Waiting on you</h2>
+            <p class="ib-sub">An agent stopped here and asked before doing something outward-facing.</p></div>
+        </div>
+        <div id="approvals" class="approvals" hidden></div>
+        <div id="ibApprovalsEmpty" class="ib-empty">Nothing is waiting on you.</div>
+      </section>
+
+      <section class="ib-sec">
+        <div class="ib-head">
+          <div><h2 class="ib-title">Automations</h2>
+            <p class="ib-sub">Work that runs without you asking. Each one runs as an agent, with that agent's tools.</p></div>
+          <button id="newRoutineBtn" class="tiny">+ New automation</button>
+        </div>
+        <div id="routineList" class="tasks"></div>
+      </section>
+
+      <section class="ib-sec">
+        <div class="ib-head">
+          <div><h2 class="ib-title">Upcoming</h2>
+            <p class="ib-sub">Reminders you set, and actions an agent has queued but not sent yet.</p></div>
+          <button id="newReminderBtn" class="tiny">+ New reminder</button>
+        </div>
+        <div id="reminderWrap">
+          <div id="reminderList" class="tasks"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ── panel: agents & tools ───────────────────────────────────────
+         What one agent may use, what it could be given, and what it cannot
+         have with the reason. The screen that did not exist when an agent
+         silently had no connector access and said the connector was still
+         syncing. -->
+    <div class="ms-body sp" data-sp="tools" hidden>
+      <div class="at-head">
+        <div>
+          <h1 class="ms-h1" style="margin-bottom:6px">Agents &amp; tools</h1>
+          <p class="ms-sub">What each agent may use. Changes apply from its next question — nothing to restart.</p>
+        </div>
+        <label class="at-pick">
+          <span class="at-pick-lb">Agent</span>
+          <select id="agentToolPicker" class="set-select" aria-label="Which agent"></select>
+        </label>
+      </div>
+      <div id="agentToolList" class="at-list"></div>
+    </div>
+
+    <!-- ── panel: connectors ───────────────────────────────────────────── -->
+    <div class="ms-body sp" data-sp="connectors" hidden>
+      <h1 class="ms-h1">Connectors</h1>
+      <p class="ms-sub" style="margin-bottom:18px">Everything your agents can read. Nothing leaves this machine.</p>
+
+      <div class="cn-toolbar">
+        <div class="cn-search">
+          <span class="cn-search-ic" aria-hidden="true"></span>
+          <input id="cnSearch" type="search" autocomplete="off" placeholder="Search sources…" aria-label="Search sources" />
+        </div>
+        <button id="syncAll" class="tiny ghost">Sync all</button>
+      </div>
+      <div class="cn-filters" id="cnFilters" role="tablist" aria-label="Filter sources"></div>
+
+      <div id="syncStatus" class="sync-status"></div>
+      <div id="googleCard" class="google-card" hidden></div>
+      <div id="connectors" class="connectors"></div>
+      <div id="cnEmpty" class="cn-empty" hidden>No source matches that.</div>
+
+      <div class="cn-add">
+        <button id="addConnector" class="tiny">+ Add a connector</button>
+        <button id="addCustomApp" class="tiny ghost">+ Connect a custom app</button>
+      </div>
+    </div>
+
+    <!-- ── panel: model ────────────────────────────────────────────────── -->
+    <div class="ms-body sp" data-sp="model">
+      <h1 class="ms-h1">Models</h1>
+
+      <!-- What a new agent opens on. Provider and model already persist in
+           localStorage and effort already persists server-side via
+           /api/agents/effort — every turn reads all three. Until now none of
+           them had a control, so effort in particular could never be changed
+           from the app at all. -->
+      <section class="ms-sec">
+        <h2 class="ms-h2">Default AI for new agents</h2>
+        <p class="ms-sub">What every new agent opens on. You can still switch any time from the composer.</p>
+        <div class="set-group">
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Provider</div>
+              <div class="set-desc">The AI powering new agents.</div>
+            </div>
+            <div class="set-ctl"><select id="defProvider" class="set-select"></select></div>
+          </div>
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Model</div>
+              <div class="set-desc">The exact model new agents use.</div>
+            </div>
+            <div class="set-ctl"><select id="defModel" class="set-select"></select></div>
+          </div>
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Effort</div>
+              <div class="set-desc" id="defEffortDesc">How hard the model works before answering.</div>
+            </div>
+            <div class="set-ctl"><select id="defEffort" class="set-select"></select></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- No wrapper heading: each provider group renders its own h3, and a
+           heading above them put "OpenAI" and "Providers & accounts" at the
+           same apparent level. -->
+      <section class="ms-sec">
+        <div id="providerCards" class="provider-cards"></div>
+
+        <!-- Hidden fallbacks kept so legacy scripts run without errors -->
+        <div id="agentModelMatrix" hidden></div>
+        <select id="provider" hidden></select>
+        <div id="defaultProviderConnectBox" hidden></div>
+        <input id="modelName" type="hidden" />
+        <div id="modelHint" hidden></div>
+        <div id="privacyBadge" hidden></div>
+      </section>
+
+      <section class="ms-sec">
+        <h2 class="ms-h2">Brain enrichment</h2>
+        <p class="ms-sub">Building your brain's knowledge graph is separate from your agents, and can run on a cheaper model.</p>
+        <div class="set-group">
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Enrichment model</div>
+              <div class="set-desc">Point it at a cheap or local model to keep enrichment cost low while agents run a stronger one.</div>
+            </div>
+            <div class="set-ctl set-ctl-stack">
+              <select id="enrichProvider" class="set-select"></select>
+              <input id="enrichModelName" class="set-input" autocomplete="off" placeholder="same as agent model" />
+            </div>
+          </div>
+          <div class="set-row">
+            <div class="set-main">
+              <div class="set-label">Recent items per bulk source</div>
+              <div class="set-desc">Bulk sources (Gmail, Drive…) enrich only their most-recent N items. 0 = all of them. Calendar &amp; notes always enrich in full.</div>
+            </div>
+            <div class="set-ctl">
+              <input id="enrichCap" type="number" min="0" class="set-input set-input-num" />
+              <button id="enrichCapSave" class="tiny">Save</button>
+              <span id="enrichCapNote" class="set-note"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="ms-sec">
+        <h2 class="ms-h2">Usage this brain</h2>
+        <p class="ms-sub">Every model call — enrichment, chat and digests. Cloud models show exact tokens; local ones are free. Account and plan quotas aren't available via the API.</p>
+        <div class="set-group">
+          <div class="set-row">
+            <div class="set-main"><div class="set-label">Tokens used</div></div>
+            <div class="set-ctl"><button id="usageReset" class="tiny ghost">Reset</button></div>
+          </div>
+          <div class="set-row set-row-block">
+            <div id="usageBox" class="usage-box"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    </div>
+  </div>
+
+  <!-- ── Agent Library: what Chitragupta offers, and who you have ────────── -->
+  <div id="libraryScreen" class="libscreen" hidden>
+    <div class="lib-top">
+      <div class="lib-top-title">Agent Library</div>
+      <button id="libClose" class="ghost tiny">Close ✕</button>
+    </div>
+    <div class="lib-body">
+      <header class="lib-head">
+        <h1 class="lib-h1">Ready-made agents for the work you do.</h1>
+        <p class="lib-sub">Start with a specialist, then make it yours.</p>
+        <div class="lib-controls">
+          <input id="libSearch" class="lib-search" type="search"
+                 autocomplete="off" placeholder="Search agents…" />
+          <span id="libCount" class="lib-count"></span>
+        </div>
+        <nav id="libCats" class="lib-cats"></nav>
+      </header>
+      <div id="libGrid" class="lib-grid"></div>
+      <p id="libEmpty" class="lib-empty" hidden>No agent matches that.</p>
+    </div>
+  </div>
+
+  <div id="brainScreen" class="brainscreen" hidden>
+    <canvas id="bsCanvas" aria-hidden="true"></canvas>
+    <div class="bs-top">
+      <div class="bs-title">Your brain</div>
+      <button id="bsClose" class="ghost tiny">Close ✕</button>
+    </div>
+
+    <!-- brain tools side panel -->
+    <aside class="bs-side">
+      <div class="bs-side-label">Search</div>
+      <input id="brainSearch" class="ctx-input" autocomplete="off" placeholder="Search your brain…" />
+      <div id="brainStats" hidden></div>
+      <div class="bs-side-label">Knowledge graph
+        <span style="display:flex;gap:5px">
+          <button id="enrichBtn" class="tiny" title="Use your connected AI model to re-read your memories and pull out clean, precise people / orgs / projects and real facts. Runs in batches with progress; uses model tokens.">Enrich with AI</button>
+          <button id="rebuildBtn" class="tiny ghost" title="Sweep out junk entities (common words, noise) while keeping all your good graph — no AI tokens. Hold Option/Alt and click to fully rebuild the graph from scratch instead.">Clean up</button>
+        </span></div>
+      <div id="enrichPanel" class="enrich-panel" hidden>
+        <div class="ep-bar"><div class="ep-fill" id="epFill"></div></div>
+        <div class="ep-line"><span id="epState">Analyzing your memories…</span><b id="epPct">0%</b></div>
+        <div class="ep-meta" id="epMeta"></div>
+        <div class="ep-found" id="epFound"></div>
+        <div class="ep-tip" id="epTip"></div>
+      </div>
+      <div id="entities" class="entities"></div>
+      <div class="bs-side-label">Teach the brain</div>
+      <div class="addbox">
+        <textarea id="ingestText" rows="2" placeholder="Tell it a fact…"></textarea>
+        <button id="ingestBtn" class="tiny">Add to brain</button>
+      </div>
+      <div class="bs-side-label">Backup
+        <span class="brain-io">
+          <button id="brainExport" class="tiny ghost" title="Backup your brain">Export</button>
+          <button id="brainImport" class="tiny ghost" title="Restore a backup">Import</button>
+          <input id="brainImportFile" type="file" accept="application/json,.json" hidden />
+        </span></div>
+    </aside>
+
+    <div class="bs-hud">
+      <div class="bs-state" id="bsState">Building your brain…</div>
+      <div class="bs-metrics">
+        <div class="bs-m" title="Every item synced or added — emails, docs, notes, events — stored as searchable text.">
+          <b id="bsMem">0</b><span>Memories</span></div>
+        <div class="bs-m" title="People, projects, tools and orgs pulled out of your notes & prose. Emails/files stay searchable but don't clutter the graph.">
+          <b id="bsEnt">0</b><span>Entities</span></div>
+        <div class="bs-m" title="Connections between things — the sentences and relationships that link your entities.">
+          <b id="bsRel">0</b><span>Facts</span></div>
+      </div>
+      <button id="bsSync" class="tiny">Sync now</button>
+      <p class="bs-note">Your brain keeps learning in the background — everything stays on your device.</p>
+    </div>
+  </div>
+  <button id="viewBrainBtn" hidden></button>
+
+  <!-- hidden legacy hooks kept so app.js stays wired -->
+  <div id="brainBuild" hidden></div><span id="bbState" hidden></span><span id="bbFill" hidden></span>
+  <span id="bbMem" hidden></span><span id="bbEnt" hidden></span><span id="bbRel" hidden></span>
+  <button id="bbClose" hidden></button><button id="bbSync" hidden></button>
+  <div id="onboard" hidden></div><button id="obGoogle" hidden></button><button id="obLocal" hidden></button>
+  <button id="obApps" hidden></button><button id="obFact" hidden></button><button id="obSkip" hidden></button><button id="obDone" hidden></button>
+  <div id="picker" class="modal-bg" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pickTitle">
+      <div class="modal-head"><b id="pickTitle">Pick a folder to ingest</b><button id="pickClose" class="ghost tiny" aria-label="Close">✕</button></div>
+      <div id="pickPath" class="pick-path"></div>
+      <div id="pickList" class="pick-list"></div>
+      <div class="modal-foot"><span id="pickInfo" class="muted"></span><button id="pickIngest">Ingest this folder</button></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <!-- Order is the dependency graph: core.js defines $, api, esc, md, toast and
+       the icon set, which app.js uses from its first lines. Plain scripts in one
+       shared scope — not modules; see docs/development/frontend-testing.md. -->
+  <script src="/static/core.js"></script>
+  <script src="/static/providers.js"></script>
+  <script src="/static/models.js"></script>
+  <script src="/static/chat.js"></script>
+  <script src="/static/brain.js"></script>
+  <script src="/static/connectors.js"></script>
+  <script src="/static/workspace.js"></script>
+  <script src="/static/library.js"></script>
+  <script src="/static/brain-screen.js"></script>
+  <script src="/static/usage.js"></script>
+  <script src="/static/tools.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

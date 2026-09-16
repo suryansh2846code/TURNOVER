@@ -9,7 +9,7 @@ import threading
 
 import pytest
 
-from lodestone.connectors import REGISTRY
+from chitragupta.connectors import REGISTRY
 
 from . import harness
 from .harness import FAKES
@@ -31,7 +31,7 @@ def test_every_connector_states_whether_it_auto_syncs(name, cls):
 
 
 def test_the_scheduler_derives_its_list_from_the_classes():
-    from lodestone.scheduler import _auto_connectors
+    from chitragupta.scheduler import _auto_connectors
 
     derived = set(_auto_connectors())
     declared = {name for name, cls in REGISTRY.items()
@@ -42,7 +42,7 @@ def test_the_scheduler_derives_its_list_from_the_classes():
 def test_manual_sources_are_not_polled():
     """Notes is written by hand and Files is driven by remembered folders, so
     neither has anything for a timer to check."""
-    from lodestone.scheduler import _auto_connectors
+    from chitragupta.scheduler import _auto_connectors
 
     assert "notes" not in _auto_connectors()
     assert "files" not in _auto_connectors()
@@ -73,7 +73,7 @@ def test_a_failed_sync_does_not_move_the_watermark(fake, monkeypatch, fake_modul
     if not conn.incremental:
         pytest.skip(f"{fake.name} does not claim to be incremental")
 
-    from lodestone.connectors.base import SyncResult
+    from chitragupta.connectors.base import SyncResult
 
     broken = SyncResult(connector=conn.name, cursor="2026-09-13T00:00:00+00:00",
                         errors=["something went wrong"])
@@ -90,7 +90,7 @@ def test_a_cancelled_sync_does_not_move_the_watermark(fake, monkeypatch,
     if not conn.incremental:
         pytest.skip(f"{fake.name} does not claim to be incremental")
 
-    from lodestone.connectors.base import SyncResult
+    from chitragupta.connectors.base import SyncResult
 
     conn._finish(SyncResult(connector=conn.name, cursor="2026-09-13T00:00:00+00:00",
                             cancelled=True))
@@ -104,7 +104,7 @@ def test_since_applies_an_overlap():
     overlap is deliberately generous."""
     from datetime import UTC, datetime, timedelta
 
-    from lodestone.connectors.gmail import GmailConnector
+    from chitragupta.connectors.gmail import GmailConnector
 
     conn = GmailConnector()
     stamp = datetime.now(UTC)
@@ -122,7 +122,7 @@ def test_an_unreadable_cursor_falls_back_to_a_full_window():
     Returning a broken value here would make the connector sync nothing, for
     ever, with no error — the worst available outcome.
     """
-    from lodestone.connectors.gmail import GmailConnector
+    from chitragupta.connectors.gmail import GmailConnector
 
     conn = GmailConnector()
     conn.store.set_connector_state(conn.name, cursor="not-a-timestamp")
@@ -131,7 +131,7 @@ def test_an_unreadable_cursor_falls_back_to_a_full_window():
 
 
 def test_full_history_ignores_the_watermark():
-    from lodestone.connectors.gmail import GmailConnector
+    from chitragupta.connectors.gmail import GmailConnector
 
     conn = GmailConnector()
     conn.store.set_connector_state(conn.name, cursor="2026-01-01T00:00:00+00:00")
