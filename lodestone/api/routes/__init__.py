@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from . import agents, brain, connectors, providers, sync, workspace
+from . import agents, brain, connectors, diagnostics, providers, sync, workspace
 
 #: Every router, in the order they are mounted.
 ALL_ROUTERS: tuple[APIRouter, ...] = (
@@ -25,6 +25,7 @@ ALL_ROUTERS: tuple[APIRouter, ...] = (
     providers.router,
     connectors.router,
     workspace.router,
+    diagnostics.router,
 )
 
 __all__ = ["ALL_ROUTERS"]

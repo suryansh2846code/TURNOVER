@@ -49,6 +49,7 @@
  "GET /api/connectors/mcp/{server_id}/auth",
  "GET /api/connectors/mcp/{server_id}/tools",
  "GET /api/custom-apps",
+ "GET /api/diagnostics/log",
  "GET /api/fs/browse",
  "GET /api/google/status",
  "GET /api/hud/diagnostics",
