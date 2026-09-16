@@ -114,6 +114,37 @@ remembered in `connector_state` the way the Files connector remembers folders.
 An unzipped `export.xml` is accepted too — somebody will unzip it first, and
 refusing that would be refusing the same data for the shape of its wrapper.
 
+### Google Fit is the same shape, because its API is gone too
+
+There is no live API and no way to get one: the **Fit REST API** was deprecated
+on 1 May 2024 and closed to new signups the same day; **Health Connect**, its
+replacement for device data, is Android-only and **on-device**; and the
+**Google Health API**, the other migration target, is the former Fitbit Web API
+and reaches Fitbit accounts, not Fit. So the path is Google Takeout —
+*Fit → Daily activity metrics* — which is one row per day and suits a daily
+aggregate store exactly.
+
+Everything around the parse is shared: `connectors/export_file.py` holds
+remembering which file was chosen, the wording when it has moved, the refusal
+accounting, and not doubling a year of data on the second import. That was
+written twice before it was extracted, which is the part that drifts. **A third
+source is one `_read`.**
+
+Two columns are deliberately not imported, and both would have been wrong
+rather than imprecise:
+
+* **"Calories (kcal)"** is total expenditure *including* basal metabolism, while
+  Apple's `ActiveEnergyBurned` excludes it. Google's goes to `energy_total` — a
+  separate, real quantity — so the two never share a series. A combined one
+  would be meaningless for anyone who changed device, and nothing on screen
+  would say so.
+* **"Average / Min heart rate"** are not resting heart rate. Min is close and is
+  not the same, and filing it as resting HR is exactly the quiet wrongness this
+  store exists to remove.
+
+A zero in Takeout means "no data that day", not a real zero, and is skipped —
+stored it would drag every average down.
+
 ## 4. What the agent got
 
 | tool | for |
@@ -218,7 +249,15 @@ they confirm.
   assertion. The harness now reports the visible text of the whole tree, which
   closes the same blind spot for any future card built this way.
 
-## 7. Deliberately still open
+## 7. Still open
+
+Ranked, with the reasoning:
+**[`health-roadmap.md`](health-roadmap.md)**. In short — a structured plan to
+review adherence against is the biggest gap; nutrition input is the second;
+HRV/carbs/fat are about ten lines; proactivity is blocked on `scheduler.py`
+(A12) and owned elsewhere.
+
+## 7b. Deliberately still open
 
 * **No food database.** "I ate two eggs" does not become 140 kcal; the user or
   another app supplies the number. A calorie table is a data problem, not an

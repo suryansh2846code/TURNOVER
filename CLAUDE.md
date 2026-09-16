@@ -313,6 +313,7 @@ The boundaries and what each must name:
 | connectors | [`docs/CONNECTORS.md`](docs/CONNECTORS.md) |
 | connecting Telegram | [`docs/development/telegram.md`](docs/development/telegram.md) |
 | measurements, and the health boundary | [`docs/development/health.md`](docs/development/health.md) |
+| what the Health agent still needs | [`docs/development/health-roadmap.md`](docs/development/health-roadmap.md) |
 | changing the user's inbox, and why it could not | [`docs/development/mail-triage.md`](docs/development/mail-triage.md) |
 | which messaging apps are actually reachable | [`docs/MESSAGING.md`](docs/MESSAGING.md) |
 | driving a real browser (planned) | [`docs/BROWSER.md`](docs/BROWSER.md) |

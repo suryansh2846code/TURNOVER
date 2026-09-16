@@ -119,6 +119,13 @@ METRICS: dict[str, Metric] = {
                         cumulative=True),
     "energy_out": Metric("energy_out", "kcal", _ENERGY,
                          "active calories burned", cumulative=True),
+    # Separate from `energy_out` on purpose. Apple reports active energy only;
+    # Google Fit reports the total including basal metabolism. Both are real
+    # and they are not the same number, so mixing them into one series would
+    # make it meaningless for anyone who changed device.
+    "energy_total": Metric("energy_total", "kcal", _ENERGY,
+                           "total calories burned, including at rest",
+                           cumulative=True),
     "protein": Metric("protein", "g", _GRAMS, "protein eaten", cumulative=True),
     "workout_minutes": Metric("workout_minutes", "min", _DURATION_MIN,
                               "time training", cumulative=True),
@@ -140,6 +147,8 @@ ALIASES = {
     "calories": "energy_in", "calories_in": "energy_in", "kcal": "energy_in",
     "intake": "energy_in", "calories_out": "energy_out",
     "active_energy": "energy_out", "burned": "energy_out",
+    "tdee": "energy_total", "total_energy": "energy_total",
+    "energy_expenditure": "energy_total",
     "protein_g": "protein", "training_minutes": "workout_minutes",
     "exercise_minutes": "workout_minutes", "exercise": "workout_minutes",
     "run": "distance", "ran": "distance", "effort": "rpe",

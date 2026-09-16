@@ -35,8 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from ..log import get_logger, suppressed
-from ..metrics import log_many
-from .base import Connector, SyncResult
+from .export_file import ExportConnector
 
 log = get_logger(__name__)
 
@@ -78,85 +77,15 @@ ASLEEP_VALUES = {
 CHECK_EVERY = 5000
 
 
-class AppleHealthConnector(Connector):
+class AppleHealthConnector(ExportConnector):
     name = "apple_health"
     label = "Apple Health"
-    #: Not on a timer: the file only changes when the user exports a new one,
-    #: and re-parsing a gigabyte every thirty minutes to find nothing new is
-    #: the opposite of what the background loop is for.
-    auto_sync = False
-    incremental = False
     platforms = ("darwin",)
 
-    def is_configured(self) -> tuple[bool, str]:
-        if self._remembered():
-            return True, ""
-        return False, ("choose your Apple Health export — on your iPhone, "
-                       "Health → your picture → Export All Health Data")
-
-    # ── where the export is ──────────────────────────────────────────────
-    def _remembered(self) -> str:
-        state = self.store.get_connector_state(self.name) or {}
-        path = str(state.get("cursor") or "")
-        return path if path and Path(path).exists() else ""
-
-    def _remember(self, path: str) -> None:
-        self.store.set_connector_state(self.name, cursor=str(path))
-
-    # ── ingest ───────────────────────────────────────────────────────────
-    def sync(self, *, path: str | None = None, since: str | None = None,
-             limit: int | None = None, full_history: bool = False,
-             cancel=None, progress=None, **_: Any) -> SyncResult:
-        result = SyncResult(connector=self.name)
-
-        chosen = str(path or "").strip() or self._remembered()
-        if not chosen:
-            result.errors.append(self.is_configured()[1])
-            return self._finish(result)
-
-        source = Path(chosen).expanduser()
-        if not source.exists():
-            result.errors.append(
-                "That Apple Health export is no longer where it was. Choose it "
-                "again, or export a fresh one.")
-            return self._finish(result)
-
-        try:
-            readings, stopped = self._read(source, cancel=cancel, progress=progress)
-        except zipfile.BadZipFile:
-            result.errors.append(
-                "That file is not an Apple Health export. It should be the zip "
+    SETUP_HINT = ("choose your Apple Health export — on your iPhone, "
+                  "Health → your picture → Export All Health Data")
+    NOT_OURS = ("That file is not an Apple Health export. It should be the zip "
                 "the Health app gives you, usually called export.zip.")
-            return self._finish(result)
-        except Exception as exc:
-            result.errors.append(f"The export could not be read: {str(exc)[:160]}")
-            return self._finish(result)
-
-        if stopped:
-            result.cancelled = True
-            result.detail = "stopped"
-            return self._finish(result)
-
-        if not readings:
-            result.detail = "nothing recognised"
-            result.errors.append(
-                "No measurements we track were in that export. It may be from a "
-                "device that records nothing yet.")
-            return self._finish(result)
-
-        outcome = log_many(readings, source=self.name)
-        added = outcome["stored"]
-        result.added = added
-        result.skipped = max(0, len(readings) - added)
-        result.detail = (f"{added} new reading(s) from {len(readings)} in the "
-                         f"export")
-        # A reading we could not read is named, not dropped in silence. An
-        # import that quietly stored two thirds of the file would look exactly
-        # like one that worked.
-        for why, count in outcome["refused"].items():
-            result.errors.append(f"{count} reading(s) skipped - {why}")
-        self._remember(str(source))
-        return self._finish(result)
 
     # ── the parse ────────────────────────────────────────────────────────
     def _read(self, source: Path, *, cancel=None,
@@ -169,7 +98,12 @@ class AppleHealthConnector(Connector):
         seen = 0
         stopped = False
 
-        with _open_export(source) as stream:
+        try:
+            stream = _open_export(source)
+        except zipfile.BadZipFile as exc:
+            raise ValueError(self.NOT_OURS) from exc
+
+        with stream:
             # `iterparse` on "end" so each element is complete when seen, and
             # cleared immediately after — without the clear the parser keeps
             # every record it has read and the peak memory is the file size.
@@ -262,7 +196,8 @@ def _open_export(source: Path):
         if name.endswith("export.xml") and "cda" not in name.lower():
             return archive.open(name)
     archive.close()
-    raise ValueError("no export.xml inside that zip")
+    raise ValueError(
+        "That zip has no export.xml in it, so it is not an Apple Health export.")
 
 
 def _to_canonical(metric: str, value: float, unit: str) -> float:

@@ -10,6 +10,7 @@ from .gcal import GoogleCalendarConnector
 from .gdrive import GoogleDriveConnector
 from .github import GitHubConnector
 from .gmail import GmailConnector
+from .google_fit import GoogleFitConnector
 from .imessage import IMessageConnector
 from .linear import LinearConnector
 from .notes import NotesConnector
@@ -32,6 +33,7 @@ REGISTRY: dict[str, type[Connector]] = {
     SlackConnector.name: SlackConnector,
     TelegramConnector.name: TelegramConnector,
     AppleHealthConnector.name: AppleHealthConnector,
+    GoogleFitConnector.name: GoogleFitConnector,
 }
 
 
