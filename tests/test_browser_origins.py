@@ -138,6 +138,67 @@ def test_a_hostname_that_merely_looks_numeric_still_works():
     assert origins.normalise("https://v2.api.example.com") == "https://v2.api.example.com"
 
 
+@pytest.mark.parametrize("encoded", [
+    "https://0x7f.0.0.1",      # hex — 127.0.0.1 to a great many resolvers
+    "https://0177.0.0.1",      # octal
+    "https://0x7f000001",
+    "https://127.1",
+    "https://10.0.0x1",
+])
+def test_an_address_written_in_another_base_is_still_an_address(encoded):
+    """The bypass of the IP defence, found by probing the API with junk.
+
+    `ipaddress.ip_address` rejects hex and octal octets, so *Python* does not
+    think `0x7f.0.0.1` is an address — while resolvers and browsers very much
+    do. The whole numeric-address refusal was one encoding away from useless.
+
+    Closed by requiring a real suffix rather than by enumerating bases, because
+    the next encoding is the one nobody listed.
+    """
+    with pytest.raises(BadOriginError):
+        origins.normalise(encoded)
+
+
+@pytest.mark.parametrize("junk", [
+    "\\\\evil.com",            # accepted verbatim before there was a host rule
+    "https://ev il.com",
+    "https://evil_.com",
+    "https://-evil.com",
+    "https://evil-.com",
+    "https://.com",
+    "https://evil..com",
+    "https://evil.c",          # a one-character suffix is not a suffix
+])
+def test_a_host_that_is_not_a_hostname_is_refused(junk):
+    with pytest.raises(BadOriginError):
+        origins.normalise(junk)
+
+
+def test_an_impossible_port_is_refused_rather_than_raising():
+    """`urlsplit(...).port` *raises* for `:99999` instead of returning None.
+
+    This is called with whatever a page contained, so an exception escaping here
+    is a crashed turn rather than a refused navigation — and it reached the API
+    as a 500 with no explanation.
+    """
+    with pytest.raises(BadOriginError):
+        origins.normalise("https://a.com:99999")
+
+
+@pytest.mark.parametrize("real", [
+    "https://linkedin.com",
+    "https://www.payroll.example.co.uk",
+    "https://3m.com",
+    "https://sub-domain.example.com",
+    "https://a.xn--p1ai",           # a punycode suffix is a real suffix
+    "https://xn--80ak6aa92e.com",
+])
+def test_the_host_rule_does_not_refuse_real_websites(real):
+    """The other way for this fix to be wrong. A rule strict enough to catch
+    every encoding and also catch `example.co.uk` would be worse than the hole."""
+    assert origins.normalise(real) == real
+
+
 @pytest.mark.parametrize("bad", ["https://example.com:8443", "https://example.com:80"])
 def test_a_non_standard_port_is_a_different_service(bad):
     with pytest.raises(BadOriginError):

@@ -36,6 +36,10 @@ async function loadBrain() {
   renderConnectors(connectors, staleAfterMin);
   loadSyncStatus();
   loadApprovals();
+  // The sites agents may read are part of the same answer as the connectors:
+  // what this app can reach on the user's behalf. Guarded because the list must
+  // never stop the rest of the panel rendering.
+  try { loadBrowserSites(); } catch (_) {}
   try { renderGoogleCard(await api("/api/google/status")); } catch (_) {}
 }
 

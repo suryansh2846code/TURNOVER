@@ -406,6 +406,29 @@
         <button id="addConnector" class="tiny">+ Add a connector</button>
         <button id="addCustomApp" class="tiny ghost">+ Connect a custom app</button>
       </div>
+
+      <!-- A site an agent can read is something this app can reach on the
+           user's behalf, so it belongs on the same screen as the connectors.
+           Anywhere else and there is no single place that answers "what does
+           this have access to". -->
+      <section class="cn-web" id="cnWeb">
+        <div class="cn-web-head">
+          <div>
+            <div class="cn-web-title">Websites agents can read</div>
+            <div class="cn-web-sub" id="webSub">Agents can only open sites you list here. They can read and report; they cannot click, type or buy anything.</div>
+          </div>
+          <button id="webSetup" class="tiny" hidden>Set up browsing</button>
+        </div>
+        <div id="webSetupState" class="cn-web-setup" hidden></div>
+        <div id="webSites" class="cn-web-list"></div>
+        <div class="cn-web-add">
+          <input id="webInput" class="set-input" type="text" autocomplete="off"
+                 placeholder="example.com" aria-label="Website to allow" />
+          <button id="webAdd" class="tiny">Allow site</button>
+        </div>
+        <div id="webErr" class="cn-web-err" hidden></div>
+        <button id="webForget" class="tiny ghost" hidden>Forget every sign-in</button>
+      </section>
     </div>
 
     <!-- ── panel: model ────────────────────────────────────────────────── -->
@@ -657,6 +680,7 @@
   <script src="/static/usage.js"></script>
   <script src="/static/tools.js"></script>
   <script src="/static/diagnostics.js"></script>
+  <script src="/static/browser.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

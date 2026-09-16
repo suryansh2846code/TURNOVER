@@ -33,6 +33,7 @@ so it is tested as the security boundary it is rather than through a driver.
 from __future__ import annotations
 
 import ipaddress
+import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -56,6 +57,17 @@ CREATE TABLE IF NOT EXISTS browser_origins (
 
 #: The only scheme a grant can be made for. See the module docstring.
 SCHEME = "https"
+
+#: What a hostname may look like, after IDNA encoding: dot-separated LDH labels
+#: ending in a suffix that starts with a letter and is not all digits.
+#:
+#: The final-label rule is doing the security work. `0x7f.0.0.1` is 127.0.0.1 to
+#: a great many resolvers and is not an IP literal to Python's parser, so the
+#: numeric-address check cannot see it — but its last label is `1`, and no
+#: website has ever had a numeric TLD. Punycode suffixes (`xn--p1ai`) start with
+#: letters and pass.
+_HOSTNAME = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}")
 
 
 def _conn() -> sqlite3.Connection:
@@ -134,7 +146,30 @@ def normalise(raw: str) -> str:
     except UnicodeError as exc:
         raise BadOriginError("that site name cannot be read") from exc
 
-    if parts.port is not None and parts.port != 443:
+    # **A real hostname, not merely a string with a dot in it.** Two things got
+    # through before this existed, and the second is the serious one:
+    #
+    # * `\\evil.com` was accepted verbatim, because nothing checked which
+    #   characters a host may contain.
+    # * `0x7f.0.0.1` was accepted — and that is 127.0.0.1 to a great many
+    #   resolvers. The `ipaddress` check above cannot see it, because Python's
+    #   parser rejects hex octets while the wider world does not, so the whole
+    #   IP-literal defence was one encoding away from being bypassed.
+    #
+    # Requiring the last label to look like a real suffix closes both, and
+    # closes the encodings nobody has thought of yet: every website has an
+    # alphabetic TLD and no numeric spelling of an address does.
+    if not _HOSTNAME.fullmatch(host):
+        raise BadOriginError("that is not a website address")
+
+    try:
+        port = parts.port
+    except ValueError as exc:
+        # `.port` raises rather than returning None for `:99999`, and an
+        # exception escaping here is a crashed turn instead of a refused
+        # navigation — this is called with whatever a page contained.
+        raise BadOriginError("that address has a port that is not valid") from exc
+    if port is not None and port != 443:
         raise BadOriginError(f"only the standard {SCHEME} port is supported")
 
     return f"{SCHEME}://{host}"

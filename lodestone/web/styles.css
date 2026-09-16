@@ -984,6 +984,24 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   overflow-wrap: anywhere; }
 .log-box:focus { outline: none; border-color: var(--accent); }
 .log-box:empty { display: none; }
+
+/* ── websites agents may read, on the Connectors screen ──────────────── */
+.cn-web { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line2); }
+.cn-web-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px; }
+.cn-web-title { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.cn-web-sub { font-size: 12px; color: var(--muted); margin-top: 3px; max-width: 46ch; }
+.cn-web-setup { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.cn-web-list { display: flex; flex-direction: column; gap: 6px; }
+.cn-web-row { display: flex; align-items: center; gap: 10px; padding: 8px 11px;
+  background: var(--panel-2); border: 1px solid var(--line2); border-radius: 9px; }
+.cn-web-host { flex: 1; font-size: 13px; }
+/* The capability, said every time rather than implied by its absence. */
+.cn-web-cap { font-size: 11px; color: var(--muted); }
+.cn-web-empty { font-size: 12px; color: var(--muted); padding: 8px 2px; }
+.cn-web-add { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.cn-web-add .set-input { flex: 1; min-width: 0; }
+.cn-web-err { font-size: 12px; color: var(--danger, #ff6b6b); margin-top: 8px; }
 .set-select:focus, .set-input:focus { outline: none; border-color: var(--accent); }
 .set-select:disabled { opacity: .5; }
 

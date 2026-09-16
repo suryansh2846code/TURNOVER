@@ -230,15 +230,50 @@ def test_the_browse_tools_are_grouped_where_a_person_would_look():
     assert tools.tool_label("browse_open")[1] == "Websites you allow"
 
 
-def test_no_shipped_agent_has_them_by_default():
-    """Like `run_python`: the user adds the capability themselves, and that
-    choice is the consent."""
+def test_an_agent_with_browse_tools_says_so_on_its_card():
+    """Informed consent, in the place the decision is actually made.
+
+    `resolved_tools()`, not `tools` — the first version of this test read the raw
+    list and passed for the wrong reason. Chief of Staff is `tools=["*"]`, which
+    exists precisely so a tool added tomorrow reaches it, so the browse tools
+    *are* on it and the raw list never says the word "browse".
+
+    Two kinds of agent may have them, and both are legible before anyone adds
+    one: the generalist, whose card already says it has everything, and an agent
+    that declares `works_with=["browser"]` — which is what puts "works with:
+    websites you allow" on the card. An agent with the most dangerous capability
+    in the app and nothing on its card saying so is the case this forbids.
+    """
     from lodestone.agents import library
 
     for template in library.TEMPLATES:
-        granted = [t for t in (getattr(template, "tools", None) or [])
-                   if str(t).startswith("browse_")]
-        assert not granted, f"{getattr(template, 'id', template)} ships with {granted}"
+        if not any(x.startswith("browse_") for x in template.resolved_tools()):
+            continue
+        declared = (library.EVERYTHING in template.tools
+                    or "browser" in template.works_with)
+        assert declared, (
+            f"{template.id} can read websites and its card never mentions it")
+
+
+def test_holding_the_tool_grants_no_access_at_all():
+    """Why the generalist having them is safe, stated as a test.
+
+    The consent that matters is the **origin**, not the tool. An agent with
+    `browse_open` and no allowed sites can reach nothing — so "every tool" can
+    keep meaning every tool, and the user's list stays the only thing that opens
+    a door. If this ever passes by reaching a page, the boundary has moved to the
+    wrong place.
+    """
+    from lodestone.agents import library
+
+    chief = next(t for t in library.TEMPLATES
+                 if library.EVERYTHING in t.tools)
+    assert "browse_open" in chief.resolved_tools()
+
+    out = browse_tools.browse_open("https://payroll.example.com/payslips")
+
+    assert out.ok is False
+    assert origins.list_grants() == []
 
 
 def test_a_write_tool_cannot_be_added_without_the_unattended_gate():
