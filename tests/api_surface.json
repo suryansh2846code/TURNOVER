@@ -67,6 +67,7 @@
  "GET /api/usage",
  "GET /onboarding",
  "GET /signin-hud",
+ "PATCH /api/agents/{agent_id}/tools",
  "PATCH /api/connectors/mcp/{server_id}",
  "PATCH /api/reminders/{rid}",
  "PATCH /api/routines/{rid}",

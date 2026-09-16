@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...agents import cancellation, list_agents, run_turn
 from ...agents.agent import AgentMemory
@@ -247,6 +247,42 @@ def available_tools():
     # group the user's own connectors instead of listing their tools as if they
     # shipped with the app.
     return {"tools": describe_tools()}
+
+
+class AgentTools(BaseModel):
+    """The whole tool list for an agent, not a delta.
+
+    A delta would need the client and the server to agree on what the list was
+    a moment ago, and the screen that sends this can have been open while a
+    connector was added. Sending the whole list makes the last writer win,
+    which is the behaviour a person expects from a row of switches.
+    """
+
+    tools: list[str] = Field(default_factory=list, max_length=200)
+
+
+@router.patch("/api/agents/{agent_id}/tools")
+def set_agent_tools(agent_id: str, body: AgentTools):
+    """Change what one agent may use, from the next question onwards.
+
+    Recorded as an override rather than an edit, so a preset keeps its shipped
+    definition and a later release can still improve it. See
+    `agents/tool_overrides.py` for why the names are not validated against the
+    live catalog here.
+    """
+    from ...agents.presets import get_agent
+    from ...agents.tool_overrides import get_tool_overrides
+
+    try:
+        get_agent(agent_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'") from None
+
+    get_tool_overrides().set(agent_id, body.tools)
+    # Return the agent as it now is, so the client renders what was actually
+    # stored rather than what it hoped it sent.
+    agent = get_agent(agent_id)
+    return {"id": agent.id, "name": agent.name, "tools": agent.tools}
 
 
 @router.post("/api/agents/custom")
