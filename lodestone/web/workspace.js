@@ -441,6 +441,20 @@ async function maybeOnboard() {
   return true;
 }
 
+//: Shown once, the first time somebody reaches the workspace with onboarding
+//: behind them. Nothing is pre-added any more, so the library IS the next step
+//: — a rail holding one lead agent and no way to find the rest is a dead end.
+const SAW_LIBRARY = "lodestone_saw_library";
+
+/** Open the Agent Library the first time, and never again on its own. */
+function libraryOnFirstRun() {
+  if (localStorage.getItem(SAW_LIBRARY)) return;
+  localStorage.setItem(SAW_LIBRARY, "1");
+  // A function declaration in library.js, which loads before this file — but
+  // guarded anyway, because a missing screen must not break first entry.
+  if (typeof openLibrary === "function") openLibrary();
+}
+
 // ── first entry: meet + name your lead agent, who then teaches the app ──────
 async function maybeWelcome() {
   if (!localStorage.getItem("lodestone_onboarded")) return;
@@ -451,7 +465,13 @@ async function maybeWelcome() {
   const go = () => createLead(inp.value.trim());
   $("#wCreate").onclick = go;
   inp.onkeydown = (e) => { if (e.key === "Enter") go(); };
-  $("#wSkip").onclick = () => { wrap.hidden = true; localStorage.setItem("lodestone_lead_agent", "skipped"); };
+  $("#wSkip").onclick = () => {
+    wrap.hidden = true;
+    localStorage.setItem("lodestone_lead_agent", "skipped");
+    // Skipping the lead agent leaves NO agents at all, so the library matters
+    // more here than on the path where one was just built.
+    libraryOnFirstRun();
+  };
 }
 async function createLead(name) {
   name = (name || "Atlas").trim() || "Atlas";
@@ -465,6 +485,12 @@ async function createLead(name) {
     $("#welcome").hidden = true;
     await loadAgents();
     await selectAgent(r.id);
+    // Naming the lead agent is the last step of onboarding, so this is the
+    // first screen after it: one agent that knows them, and the team to build.
+    // BEFORE the welcome, not after — that streams a model reply, and the
+    // library must not be contingent on a model call succeeding. The agent's
+    // introduction arrives in the chat behind the library.
+    libraryOnFirstRun();
     agentWelcome(r.id);           // the agent introduces itself + teaches the app
   } catch (e) {
     btn.disabled = false; btn.textContent = "Create →"; toast(String(e));
