@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ...agents import cancellation, list_agents, run_turn
 from ...agents.agent import AgentMemory
@@ -292,44 +292,40 @@ def agent_tools(agent_id: str):
         raise HTTPException(404, f"unknown agent '{agent_id}'") from None
 
 
-class AgentPatch(BaseModel):
-    """Changes to a custom agent. Absent means "leave it alone"."""
+class AgentTools(BaseModel):
+    """The whole tool list for an agent, not a delta.
 
-    tools: list[str] | None = None
-    name: str | None = None
-    role: str | None = None
-    system_prompt: str | None = None
-    recall_sources: list[str] | None = None
-
-
-@router.patch("/api/agents/custom/{agent_id}")
-@probes_a_provider
-def update_agent(agent_id: str, body: AgentPatch):
-    """Change a custom agent's tools without losing anything it has.
-
-    A PATCH rather than delete-and-recreate on purpose: the chat history and the
-    model binding are keyed by `agent_id`, so recreating would throw away a
-    conversation and a model the user chose.
+    A delta would need the client and the server to agree on what the list was
+    a moment ago, and the screen that sends this can have been open while a
+    connector was added. Sending the whole list makes the last writer win,
+    which is the behaviour a person expects from a row of switches.
     """
-    from ...agents.custom import get_custom_store
-    from ...agents.grants import for_agent, unknown_tools
 
-    if body.tools is not None:
-        # Named rather than dropped — a tool quietly vanishing from an agent the
-        # user just edited is the same silent failure this whole change ends.
-        unknown = unknown_tools(body.tools)
-        if unknown:
-            raise HTTPException(
-                400, "Not something an agent can be given: " + ", ".join(unknown))
+    tools: list[str] = Field(default_factory=list, max_length=200)
 
-    updated = get_custom_store().update(
-        agent_id, tools=body.tools, name=body.name, role=body.role,
-        system_prompt=body.system_prompt, recall_sources=body.recall_sources)
-    if updated is None:
-        # Presets land here too, which is the point: the boundary is the
-        # server's to enforce rather than the UI's to remember.
-        raise HTTPException(404, "not a custom agent")
-    return for_agent(agent_id)
+
+@router.patch("/api/agents/{agent_id}/tools")
+def set_agent_tools(agent_id: str, body: AgentTools):
+    """Change what one agent may use, from the next question onwards.
+
+    Recorded as an override rather than an edit, so a preset keeps its shipped
+    definition and a later release can still improve it. See
+    `agents/tool_overrides.py` for why the names are not validated against the
+    live catalog here.
+    """
+    from ...agents.presets import get_agent
+    from ...agents.tool_overrides import get_tool_overrides
+
+    try:
+        get_agent(agent_id)
+    except KeyError:
+        raise HTTPException(404, f"unknown agent '{agent_id}'") from None
+
+    get_tool_overrides().set(agent_id, body.tools)
+    # Return the agent as it now is, so the client renders what was actually
+    # stored rather than what it hoped it sent.
+    agent = get_agent(agent_id)
+    return {"id": agent.id, "name": agent.name, "tools": agent.tools}
 
 
 @router.post("/api/agents/custom")

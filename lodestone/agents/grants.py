@@ -32,11 +32,6 @@ log = get_logger(__name__)
 NOTHING_CONNECTED = ("No connectors are set up yet. Granting this now covers "
                      "them as soon as there are.")
 
-#: Why a preset's tools cannot be changed. A sentence, from the server, so the
-#: reason lives where the decision does instead of being composed by the UI.
-PRESET_NOT_EDITABLE = ("{name} is one of Lodestone's own agents, so its tools "
-                       "are part of what it is. Build your own agent to choose "
-                       "a different set.")
 
 
 def _mcp_rows() -> list[dict[str, str]]:
@@ -169,29 +164,39 @@ def reaches_connectors(agent: Any) -> bool:
 
 
 def is_custom(agent_id: str) -> bool:
-    """Did the user build this one? Not the same question as `editable`.
+    """Did the user build this one, or does it ship with Lodestone?
 
-    They coincide today — presets are the only thing that is not editable — and
-    are kept apart because they are different facts. Conflating them is how a
-    payload starts lying the moment one of them changes.
+    Not a statement about whether it can be changed — everything can, because a
+    change is recorded as an override. This is only about where the agent came
+    from, which is what decides whether deleting it is a thing that makes sense.
     """
     from .presets import PRESETS
 
     return agent_id not in PRESETS
 
 
-def editability(agent_id: str, agent: Any) -> tuple[bool, str]:
-    """(editable, reason). The reason is a sentence, and only when it is False.
+def default_tools(agent_id: str) -> list[str]:
+    """What this agent would have if the user had never changed anything.
 
-    Presets are defined in code, so the decision is the server's to state rather
-    than the UI's to infer — see the contract for why they are not editable.
+    A preset's shipped list, or a custom agent's list as it was built. Reported
+    so the UI can offer "reset to default" and show what has been changed —
+    which is only answerable because a change is recorded as an override rather
+    than written over the original.
     """
+    from .custom import get_custom_store
     from .presets import PRESETS
 
     if agent_id in PRESETS:
-        return False, PRESET_NOT_EDITABLE.format(
-            name=getattr(agent, "name", agent_id))
-    return True, ""
+        return list(PRESETS[agent_id].tools)
+    raw = get_custom_store().get(agent_id)
+    return list(raw.tools) if raw else []
+
+
+def is_overridden(agent_id: str) -> bool:
+    """Has the user changed this agent's tools from its default?"""
+    from .tool_overrides import get_tool_overrides
+
+    return get_tool_overrides().get(agent_id) is not None
 
 
 def for_agent(agent_id: str) -> dict[str, Any]:
@@ -199,14 +204,15 @@ def for_agent(agent_id: str) -> dict[str, Any]:
     from .presets import get_agent
 
     agent = get_agent(agent_id)
-    editable, why_not = editability(agent_id, agent)
     rows = _rows_for(agent)
     return {
         "agent_id": agent.id,
         "agent_name": agent.name,
         "custom": is_custom(agent_id),
-        "editable": editable,
-        "editable_reason": why_not,
+        # Every agent is editable — a change is recorded as an override, so a
+        # preset keeps its shipped definition and can still be improved later.
+        "overridden": is_overridden(agent_id),
+        "default_tools": default_tools(agent_id),
         "reaches_connectors": reaches_connectors(agent),
         "connector_tool_count": len(_mcp_rows()),
         "tools": rows,
@@ -232,26 +238,11 @@ def connector_gaps() -> dict[str, Any]:
     for agent in list_agents():
         if reaches_connectors(agent):
             continue
-        editable, why_not = editability(agent.id, agent)
         missing.append({
             "agent_id": agent.id,
             "agent_name": agent.name,
             "custom": is_custom(agent.id),
-            "editable": editable,
-            "editable_reason": why_not,
         })
     return {"connectors": connectors, "tool_count": len(rows), "agents": missing}
 
 
-def unknown_tools(names: list[str]) -> list[str]:
-    """The ids in `names` that are not a tool anything could grant.
-
-    Named rather than dropped: a tool silently disappearing from an agent the
-    user just edited is the same class of quiet failure this module exists to
-    end.
-    """
-    from . import mcp_tools
-    from .tools import TOOL_DEFS
-
-    known = set(TOOL_DEFS) | {SENTINEL} | {r.get("name", "") for r in _mcp_rows()}
-    return [n for n in names if n not in known and mcp_tools.lookup(n) is None]

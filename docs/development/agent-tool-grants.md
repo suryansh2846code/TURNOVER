@@ -41,24 +41,44 @@ Four things were missing, and each is a section below:
 
 ## 1. Two decisions, made deliberately
 
-### Preset agents are not editable — and the API says so per agent
+### Every agent is editable — a change is recorded as an override
 
-A preset's tools are code: `library.py` builds each `Template` from `_CORE` plus
-its own additions. Making them editable means an overrides table, and an
-overrides table has to answer a question this change is not the place to settle:
-when a template gains a tool in a later version, does a stale override withhold
-it? Answer it wrong and an agent silently stops keeping up with its own
-template.
+**This reverses the first answer written here, and the reversal is the
+interesting part.** The original decision was that presets are *not* editable,
+because making them editable needs an overrides table and that table has to
+answer a hard question: when a template gains a tool in a later version, does a
+stale override withhold it?
 
-It is also not the reported problem. **Every preset already reaches connectors**,
-because `_CORE` carries the sentinel. The failure was a custom agent.
+A parallel session building the frontend answered it, and answered it better.
+Recording the change as an **override** rather than an edit of the original
+means:
 
-So: `editable: false` on preset rows, with `editable_reason` — a sentence for a
-person, returned by the API rather than composed by the UI, so the reason lives
-where the decision does.
+* the preset stays a code constant, so a later release that improves a preset is
+  not permanently blocked by the fact that somebody once touched it;
+* reset-to-default is deleting a row, rather than needing to remember what the
+  default used to be;
+* one table covers presets and custom agents, so `get_agent()` applies it at one
+  seam instead of each caller knowing which kind it holds.
 
-*Deliberately still open:* there is no "duplicate this preset as my own agent"
-path. That is the escape hatch this decision implies and it is not built here.
+The stale-override question is real and is not dissolved — an agent with an
+override does not automatically pick up a tool its template gains later. It is
+made *recoverable* instead of permanent, which is the part that matters: the
+default is still there, the UI can show that the two differ, and one tap
+restores it. That is a better trade than refusing to let anyone change anything.
+
+So there is no `editable` flag. Every agent can be changed, and the payload
+instead reports what is genuinely useful under this design:
+
+| field | meaning |
+|---|---|
+| `custom` | did the user build it, or does it ship with Lodestone — which is about whether *deleting* it makes sense, not whether it can be changed |
+| `overridden` | has the user changed this agent's tools from its default |
+| `default_tools` | what it would have if they never had, so "reset" and "what did I change" are both answerable |
+
+Storage and the write path are `agents/tool_overrides.py`, which distinguishes
+`None` (untouched, fall back to the default) from `[]` (an agent the user
+deliberately stripped of everything) — collapsing those two would silently undo
+the second.
 
 ### New custom agents **do** get connector access
 
@@ -92,9 +112,9 @@ What this agent has, what it could have, and for anything it cannot have, why.
 {
   "agent_id": "chotu",            // id
   "agent_name": "chotu",          // display
-  "custom": true,
-  "editable": true,
-  "editable_reason": "",          // display; non-empty only when editable=false
+  "custom": true,                 // user-built, vs ships with Lodestone
+  "overridden": false,            // has the user changed its tools
+  "default_tools": ["…"],         // ids — what it has if they never had
   "reaches_connectors": false,    // does it have the sentinel, or any connector tool
   "connector_tool_count": 25,     // readable connector tools existing right now
   "tools": [ /* rows, see below */ ]
@@ -171,27 +191,28 @@ The handler is on the `@probes_a_provider` lane for that reason.
 
 ---
 
-## 3. `PATCH /api/agents/custom/{agent_id}`
+## 3. `PATCH /api/agents/{agent_id}/tools`
 
-A real update. Delete-and-recreate would lose the agent's chat history (keyed by
-`agent_id` in `agent_messages`) and its model binding (`agent_model_configs`) —
-so it is not an implementation detail that this is a `PATCH`.
+The same path as §2, which is the point: one resource, read with `GET` and
+written with `PATCH`, rather than a read here and a write somewhere else.
 
 ```jsonc
-// request — every field optional; absent means "leave it alone"
-{ "tools": ["search_brain", "mcp"],
-  "name": "…", "role": "…", "system_prompt": "…", "recall_sources": ["notion"] }
+{ "tools": ["search_brain", "mcp"] }   // the WHOLE list, not a delta
 ```
 
-* `404` if the id is not a custom agent — **including when it is a preset**, so
-  the boundary is enforced by the server and not by the UI remembering to.
-* `400` naming every unknown tool id, rather than dropping them silently. An id
-  is accepted if it is a built-in, the sentinel, or a connector tool that
-  resolves right now.
-* The **id never changes**, whatever happens to `name`. The id is what the chat
-  history and the model binding are keyed by.
-* Returns the same envelope as `GET /api/agents/{agent_id}/tools`, so the caller
-  needs no second round trip to redraw.
+* **The whole list, never a delta.** A delta needs client and server to agree on
+  what the list was a moment ago, and the screen sending this can have been open
+  while a connector was added. Last writer wins is what a person expects from a
+  row of switches.
+* **Works for any agent**, preset or custom. `404` only when the id is nothing.
+* **The names are not validated against the live tool catalogue**, deliberately.
+  A connector that is signed out drops its tools out of the catalogue, so
+  validating here would strip every Notion tool from an agent the moment Notion
+  went down — turning an outage into a permanent edit. Resolving names to real
+  tools is `build_tools()`'s job and it already ignores what it cannot find.
+* Nothing is recreated, so the chat history (`agent_messages`) and the model
+  binding (`agent_model_configs`), both keyed by `agent_id`, are untouched.
+* Returns the agent as it now is: `{id, name, tools}`.
 
 ---
 
@@ -216,8 +237,7 @@ The answer to *"I just connected something — who cannot use it?"*
   "connectors": ["Notion", "Linear"],   // display labels, currently readable
   "tool_count": 25,
   "agents": [                            // only those that cannot reach any of it
-    { "agent_id": "chotu", "agent_name": "chotu",
-      "custom": true, "editable": true, "editable_reason": "" }
+    { "agent_id": "chotu", "agent_name": "chotu", "custom": true }
   ]
 }
 ```
@@ -241,7 +261,8 @@ shows the list and a way to act on it; each act goes through §3.
 |---|---|
 | `agents/library.py` | `BASE_TOOLS` — the one definition of what every agent starts with, preset or custom |
 | `agents/grants.py` | the per-agent view: states, reasons, and which connectors are contributing nothing |
-| `agents/custom.py` | `update()` — the real update, id-preserving |
+| `agents/tool_overrides.py` | what the user changed, as an override; `None` ≠ `[]` |
+| `agents/presets.py` | applies the override at one seam, for both kinds of agent |
 | `api/routes/agents.py` | the three endpoints, thin over the above |
 
 `agents/grants.py` is new and deliberately not in `tools.py`: `describe_tools()`

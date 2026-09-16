@@ -870,6 +870,15 @@ async function openInboxScreen() {
   try { await loadRoutines(); } catch (_) {}
   try { await loadReminders(); } catch (_) {}
 }
+async function openToolsScreen() {
+  const m = $("#modelScreen"); if (!m) return;
+  m.hidden = false;
+  showSettingsPanel("tools");
+  // The picker needs the agent list; the list needs the picker to know which
+  // agent it is for. Both come from `agents`, already loaded at startup.
+  try { renderAgentToolPicker(); } catch (_) {}
+  try { await loadAgentTools(); } catch (_) {}
+}
 async function openConnectorsScreen() {
   const m = $("#modelScreen"); if (!m) return;
   m.hidden = false;
@@ -901,6 +910,7 @@ document.querySelectorAll(".ms-nav-item").forEach((b) => {
     if (to === "model") return openModelScreen();
     if (to === "connectors") return openConnectorsScreen();
     if (to === "inbox") return openInboxScreen();
+    if (to === "tools") return openToolsScreen();
     closeModelScreen();
     if (to === "brain") openBrainScreen();
   };

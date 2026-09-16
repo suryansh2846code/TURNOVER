@@ -338,12 +338,29 @@ $("#rmCreate").onclick = async () => {
 };
 
 // ── create custom agent ─────────────────────────────────────────────────
+
+//: What a new agent starts with.
+//:
+//: The category row is checked, and that is a bug fix rather than a
+//: preference: every preset ships with it, and an agent built in the app did
+//: not — so an agent the user made was born unable to see any connector they
+//: had added, with no screen that said so. A connector somebody deliberately
+//: connected is one they want their agents to use.
+//:
+//: Asked of the ROW, not of a list of names, so the category is recognised by
+//: what the API says it is. The row only exists when there is a connector
+//: behind it, so this cannot check a box that grants nothing.
+const NEW_AGENT_TOOLS = ["search_brain", "remember", "web_search"];
+function newAgentDefault(t) {
+  return isCategoryRow(t) || NEW_AGENT_TOOLS.includes((t && t.name) || "");
+}
+
 async function openAgentModal() {
   const { tools } = await api("/api/agents/tools");
   // The value is the id the agent stores; the text is what a person reads.
   // They differ for a connector tool, whose id is a qualified name we minted.
   $("#amTools").innerHTML = tools.map((t) =>
-    `<label class="am-tool"><input type="checkbox" value="${esc(t.name)}" ${["search_brain", "remember", "web_search"].includes(t.name) ? "checked" : ""}/> ${esc(toolLabel(t))}</label>`).join("");
+    `<label class="am-tool"><input type="checkbox" value="${esc(t.name)}" ${newAgentDefault(t) ? "checked" : ""}/> ${esc(toolLabel(t))}</label>`).join("");
   $("#amName").value = ""; $("#amRole").value = ""; $("#amPrompt").value = "";
   $("#agentModal").hidden = false;
 }

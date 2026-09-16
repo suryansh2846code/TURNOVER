@@ -21,11 +21,28 @@ from .library import BY_ID, rostered_agents
 PRESETS: dict[str, Agent] = {tid: t.to_agent() for tid, t in BY_ID.items()}
 
 
-def _apply_agent_model(agent: Agent) -> Agent:
+def _with_user_edits(agent: Agent) -> Agent:
+    """The agent as the user has it: the shipped definition plus their changes.
+
+    One seam, because both `list_agents()` and `get_agent()` come through here
+    — an override applied in only one of them is an agent whose tools differ
+    depending on which call site asked, which is exactly the kind of bug that
+    shows up as "it works in the sidebar but not in the turn".
+    """
+    from .tool_overrides import get_tool_overrides
+
     p, m = get_agent_model(agent.id)
     if p:
-        return dataclasses.replace(agent, model_provider=p, model_name=m)
-    return dataclasses.replace(agent)
+        agent = dataclasses.replace(agent, model_provider=p, model_name=m)
+    else:
+        agent = dataclasses.replace(agent)
+
+    # `None` is untouched; `[]` is an agent the user deliberately stripped, and
+    # falling back to the default there would silently undo that.
+    tools = get_tool_overrides().get(agent.id)
+    if tools is not None:
+        agent = dataclasses.replace(agent, tools=tools)
+    return agent
 
 
 def list_agents() -> list[Agent]:
@@ -38,7 +55,7 @@ def list_agents() -> list[Agent]:
     from .custom import get_custom_store
 
     raw = rostered_agents() + get_custom_store().list()
-    return [_apply_agent_model(a) for a in raw]
+    return [_with_user_edits(a) for a in raw]
 
 
 def get_agent(agent_id: str) -> Agent:
@@ -49,9 +66,9 @@ def get_agent(agent_id: str) -> Agent:
     should not break when the sidebar changes.
     """
     if agent_id in PRESETS:
-        return _apply_agent_model(PRESETS[agent_id])
+        return _with_user_edits(PRESETS[agent_id])
     from .custom import get_custom_store
     custom = get_custom_store().get(agent_id)
     if custom:
-        return _apply_agent_model(custom)
+        return _with_user_edits(custom)
     raise KeyError(f"unknown agent '{agent_id}'")

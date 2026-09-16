@@ -7,7 +7,6 @@ import re
 import sqlite3
 import uuid
 from datetime import UTC, datetime
-from typing import Any
 
 from ..config import get_settings
 from ..log import suppressed
@@ -89,44 +88,17 @@ class CustomAgentStore:
         self._c.commit()
         return self.get(aid)
 
-    def update(self, agent_id: str, **fields: Any) -> Agent | None:
-        """Change a custom agent in place. None if there is no such agent.
-
-        A real update, not delete-and-recreate: the chat history in
-        `agent_messages` and the model binding in `agent_model_configs` are both
-        keyed by `agent_id`, so recreating would silently throw away a
-        conversation and a model the user chose. **The id never moves**, whatever
-        happens to `name`.
-
-        Only the fields passed are touched — absent means "leave it alone", so a
-        caller changing one thing cannot blank another by omission.
-        """
-        if self.get(agent_id) is None:
-            return None
-
-        columns: builtins.list[str] = []
-        values: builtins.list[Any] = []
-        for column in ("name", "role", "system_prompt"):
-            if column in fields and fields[column] is not None:
-                columns.append(f"{column}=?")
-                values.append(str(fields[column]))
-        for column in ("tools", "recall_sources"):
-            if column in fields and fields[column] is not None:
-                columns.append(f"{column}=?")
-                values.append(json.dumps(list(fields[column])))
-
-        if columns:
-            values.append(agent_id)
-            self._c.execute(
-                f"UPDATE custom_agents SET {', '.join(columns)} WHERE id=?",
-                values)
-            self._c.commit()
-        return self.get(agent_id)
-
     def delete(self, agent_id: str) -> bool:
         with suppressed("from .agent_models import clear_agent_model …"):
             from .agent_models import clear_agent_model
             clear_agent_model(agent_id)
+        with suppressed("from .tool_overrides import get_tool_overrides …"):
+            # An id is a slug of the name, so it is deterministic: delete
+            # "Chotu", build another "Chotu", and it lands on the same id. An
+            # override left behind would then apply to an agent that never had
+            # it — a tool list from a deleted agent, silently.
+            from .tool_overrides import get_tool_overrides
+            get_tool_overrides().clear(agent_id)
         cur = self._c.execute("DELETE FROM custom_agents WHERE id=?", (agent_id,))
         self._c.commit()
         return cur.rowcount > 0

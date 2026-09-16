@@ -118,7 +118,7 @@ async function loadAgents() {
 
 
 // ── slide-over drawers opened from the left nav ─────────────────────────────
-const DRAWER_TITLES = { tasks: "Tasks", tools: "Tools & skills" };  // model and connectors are screens now
+const DRAWER_TITLES = { tasks: "Tasks", tools: "Tools & skills" };  // model, connectors and inbox are screens
 
 function openDrawer(name) {
   if (name === "model") return openModelScreen();        // no longer a drawer

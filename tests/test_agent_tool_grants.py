@@ -26,6 +26,7 @@ from lodestone.agents.custom import get_custom_store
 from lodestone.agents.library import BASE_TOOLS
 from lodestone.agents.mcp_tools import SENTINEL
 from lodestone.agents.presets import PRESETS
+from lodestone.agents.tool_overrides import get_tool_overrides
 
 #: The agent from the report, exactly as it was stored.
 CHOTU_TOOLS = ["search_brain", "remember", "list_entities", "web_search",
@@ -78,10 +79,18 @@ def no_connectors(monkeypatch):
 def chotu():
     """A custom agent built before the connector existed."""
     store = get_custom_store()
-    agent = store.create("chotu", role="general", system_prompt="help",
-                         tools=list(CHOTU_TOOLS))
+    agent = store.create("chotu-under-test", role="general",
+                         system_prompt="help", tools=list(CHOTU_TOOLS))
     yield agent
-    store.delete(agent.id)
+    store.delete(agent.id)          # which now reaps the override too
+
+
+@pytest.fixture(autouse=True)
+def _no_leaked_overrides():
+    """An override outlives the object under test unless something clears it."""
+    yield
+    for agent_id in ("research", "chief-of-staff", "chotu-under-test"):
+        get_tool_overrides().clear(agent_id)
 
 
 # ── the reproduction ─────────────────────────────────────────────────────
@@ -108,7 +117,7 @@ def test_the_option_now_exists_to_tick(chotu, notion):
 
 
 def test_granting_the_category_closes_it(chotu, notion):
-    get_custom_store().update(chotu.id, tools=[*CHOTU_TOOLS, SENTINEL])
+    get_tool_overrides().set(chotu.id, [*CHOTU_TOOLS, SENTINEL])
     view = grants.for_agent(chotu.id)
 
     assert view["reaches_connectors"] is True
@@ -157,39 +166,64 @@ def test_choosing_no_tools_is_still_respected():
         store.delete(narrow.id)
 
 
-# ── changing a custom agent keeps what it has ────────────────────────────
-def test_an_update_keeps_the_conversation_and_the_model(chotu):
-    """The reason this is a PATCH and not delete-and-recreate."""
+# ── changing what an agent may use ───────────────────────────────────────
+def test_a_change_keeps_the_conversation_and_the_model(chotu):
+    """Recorded as an override, so nothing is recreated — which is why the chat
+    history and the model binding, both keyed by the agent id, survive."""
     from lodestone.agents.agent_models import get_agent_model, set_agent_model
+    from lodestone.agents.presets import get_agent
 
     AgentMemory().append(chotu.id, "user", "something worth keeping")
     set_agent_model(chotu.id, "openai", "gpt-5.5")
 
-    updated = get_custom_store().update(chotu.id, tools=[*CHOTU_TOOLS, SENTINEL])
+    get_tool_overrides().set(chotu.id, [*CHOTU_TOOLS, SENTINEL])
 
-    assert updated is not None
-    assert updated.id == chotu.id, "the id moved; history is keyed by it"
+    assert get_agent(chotu.id).id == chotu.id
     assert any("worth keeping" in (r["content"] or "")
                for r in AgentMemory().history(chotu.id, limit=10))
     assert get_agent_model(chotu.id) == ("openai", "gpt-5.5")
 
 
-def test_renaming_does_not_move_the_id(chotu):
-    updated = get_custom_store().update(chotu.id, name="Chotu The Second")
-    assert updated.id == chotu.id
-    assert updated.name == "Chotu The Second"
+def test_a_preset_can_be_changed_and_put_back(notion):
+    """The reversal: everything is editable, because a change is an override —
+    so the shipped definition is still there to return to."""
+    from lodestone.agents.presets import PRESETS, get_agent
+
+    shipped = list(PRESETS["research"].tools)
+    try:
+        get_tool_overrides().set("research", ["search_brain"])
+        assert get_agent("research").tools == ["search_brain"]
+        assert grants.for_agent("research")["overridden"] is True
+        # The constant in code is untouched, which is what lets a later release
+        # improve the preset for everyone who has not changed it.
+        assert list(PRESETS["research"].tools) == shipped
+
+        get_tool_overrides().clear("research")
+        assert get_agent("research").tools == shipped
+        assert grants.for_agent("research")["overridden"] is False
+    finally:
+        get_tool_overrides().clear("research")
 
 
-def test_an_absent_field_is_left_alone(chotu):
-    """So changing one thing cannot blank another by omission."""
-    get_custom_store().update(chotu.id, name="Renamed")
-    again = get_custom_store().get(chotu.id)
-    assert again.tools == CHOTU_TOOLS
-    assert again.system_prompt == "help"
+def test_the_default_is_reported_so_reset_is_possible(chotu, notion):
+    view = grants.for_agent(chotu.id)
+    assert view["default_tools"] == CHOTU_TOOLS
+    assert view["overridden"] is False
+
+    get_tool_overrides().set(chotu.id, ["search_brain"])
+    view = grants.for_agent(chotu.id)
+    assert view["overridden"] is True
+    assert view["default_tools"] == CHOTU_TOOLS, (
+        "the default must survive the change, or reset is unanswerable")
 
 
-def test_updating_something_that_is_not_a_custom_agent_returns_nothing():
-    assert get_custom_store().update("chief-of-staff", tools=["search_brain"]) is None
+def test_stripping_every_tool_is_respected_and_is_not_untouched(chotu):
+    """`None` and `[]` mean different things and must stay distinguishable."""
+    from lodestone.agents.presets import get_agent
+
+    get_tool_overrides().set(chotu.id, [])
+    assert get_agent(chotu.id).tools == []
+    assert grants.for_agent(chotu.id)["overridden"] is True
 
 
 # ── the view tells the truth ─────────────────────────────────────────────
@@ -256,17 +290,11 @@ def test_the_protocol_acronym_is_never_the_part_a_person_reads(chotu, notion):
 
 
 # ── presets ──────────────────────────────────────────────────────────────
-def test_a_preset_says_it_cannot_be_edited_and_why():
-    """Per agent, from the server — not inferred by the UI."""
-    view = grants.for_agent("chief-of-staff")
-    assert view["editable"] is False
-    assert view["custom"] is False
-    assert "Chief of Staff" in view["editable_reason"]
-
-
-def test_custom_and_editable_are_reported_separately(chotu):
-    view = grants.for_agent(chotu.id)
-    assert view["custom"] is True and view["editable"] is True
+def test_where_an_agent_came_from_is_reported(chotu):
+    """`custom` is about whether deleting it makes sense — not whether it can
+    be changed, because everything can."""
+    assert grants.for_agent("chief-of-staff")["custom"] is False
+    assert grants.for_agent(chotu.id)["custom"] is True
 
 
 def test_every_preset_already_reaches_connectors(notion):
@@ -275,11 +303,19 @@ def test_every_preset_already_reaches_connectors(notion):
         assert grants.reaches_connectors(agent), f"{agent.id} cannot"
 
 
-# ── validation ───────────────────────────────────────────────────────────
-def test_an_unknown_tool_is_named_rather_than_dropped(notion):
-    assert grants.unknown_tools(["search_brain", SENTINEL]) == []
-    assert grants.unknown_tools(["notion_search"]) == []
-    assert grants.unknown_tools(["not_a_tool", "also_not"]) == ["not_a_tool", "also_not"]
+# ── a name is kept even when the catalogue cannot resolve it ─────────────
+def test_a_signed_out_connectors_tools_are_not_stripped_from_an_agent(chotu, monkeypatch):
+    """Validating a saved list against the live catalogue would turn a Notion
+    outage into a permanent edit. `build_tools()` already ignores what it
+    cannot find, which is where that belongs."""
+    from lodestone.agents.presets import get_agent
+
+    get_tool_overrides().set(chotu.id, ["search_brain", "notion_search"])
+    monkeypatch.setattr(mcp_tools, "_supplier", lambda: None)   # Notion goes down
+    mcp_tools.clear_cache()
+
+    assert "notion_search" in get_agent(chotu.id).tools, (
+        "a temporary outage removed a tool the user had chosen")
 
 
 # ── over HTTP ────────────────────────────────────────────────────────────
@@ -309,30 +345,38 @@ def test_the_agents_list_says_which_ones_cannot_reach_connectors(chotu, notion):
     assert rows["chief-of-staff"]["reaches_connectors"] is True
 
 
-def test_patching_tools_works_and_returns_the_fresh_view(chotu, notion):
-    r = _client().patch(f"/api/agents/custom/{chotu.id}",
-                        json={"tools": [*CHOTU_TOOLS, SENTINEL]})
+def test_the_read_and_the_write_are_one_resource(chotu, notion):
+    """GET and PATCH on the same path, rather than a read here and a write
+    somewhere else."""
+    client = _client()
+    assert client.get(f"/api/agents/{chotu.id}/tools").json()[
+        "reaches_connectors"] is False
+
+    r = client.patch(f"/api/agents/{chotu.id}/tools",
+                     json={"tools": [*CHOTU_TOOLS, SENTINEL]})
     assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["reaches_connectors"] is True, "no second round trip should be needed"
-    assert get_custom_store().get(chotu.id).tools[-1] == SENTINEL
+    assert SENTINEL in r.json()["tools"]
+
+    assert client.get(f"/api/agents/{chotu.id}/tools").json()[
+        "reaches_connectors"] is True
 
 
-def test_patching_a_preset_is_refused_by_the_server(notion):
-    """The boundary is the server's to enforce, not the UI's to remember."""
-    r = _client().patch("/api/agents/custom/chief-of-staff",
-                        json={"tools": ["search_brain"]})
+def test_a_preset_can_be_changed_over_http_too(notion):
+    client = _client()
+    try:
+        r = client.patch("/api/agents/research/tools",
+                         json={"tools": ["search_brain"]})
+        assert r.status_code == 200, r.text
+        assert r.json()["tools"] == ["search_brain"]
+        # The shipped constant is untouched — that is what an override buys.
+        assert len(PRESETS["research"].tools) > 1
+    finally:
+        get_tool_overrides().clear("research")
+
+
+def test_changing_an_agent_that_does_not_exist_is_a_404():
+    r = _client().patch("/api/agents/nobody/tools", json={"tools": []})
     assert r.status_code == 404
-    assert PRESETS["chief-of-staff"].tools, "the preset was altered anyway"
-
-
-def test_patching_an_unknown_tool_names_it(chotu, notion):
-    r = _client().patch(f"/api/agents/custom/{chotu.id}",
-                        json={"tools": ["search_brain", "not_a_tool"]})
-    assert r.status_code == 400
-    assert "not_a_tool" in r.json()["detail"]
-    assert get_custom_store().get(chotu.id).tools == CHOTU_TOOLS, (
-        "a rejected update still changed the agent")
 
 
 def test_the_gaps_endpoint_answers_the_just_connected_question(chotu, notion):
@@ -393,3 +437,23 @@ def test_asking_for_no_tools_is_still_honoured_through_the_api(notion):
 
     assert not [t for t in view["tools"] if t["state"] == "granted"]
     assert not view["reaches_connectors"]
+
+
+def test_deleting_an_agent_does_not_leave_its_tool_list_behind():
+    """An id is a slug of the name, so it repeats. An override left behind
+    would apply to an agent that never had it."""
+    from lodestone.agents.presets import get_agent
+
+    store = get_custom_store()
+    first = store.create("Recycled Name", tools=["search_brain"])
+    get_tool_overrides().set(first.id, ["web_search"])
+    assert get_agent(first.id).tools == ["web_search"]
+    store.delete(first.id)
+
+    second = store.create("Recycled Name", tools=["search_brain"])
+    try:
+        assert second.id == first.id, "the premise — slugs repeat"
+        assert get_agent(second.id).tools == ["search_brain"], (
+            "a new agent inherited a deleted agent's tool list")
+    finally:
+        store.delete(second.id)

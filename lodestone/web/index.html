@@ -162,6 +162,12 @@
       <div class="drawer-body">
 
         <!-- Connectors -->
+        <!-- Tools / skills -->
+        <div class="dpanel" data-d="tools" hidden>
+          <p class="tool-intro">The skills your agents use to get things done.</p>
+          <div id="toolList" class="tools"></div>
+        </div>
+
         <!-- Tasks -->
         <div class="dpanel" data-d="tasks" hidden>
           <div class="ctx-label">Tasks <span id="taskCount" class="muted"></span></div>
@@ -171,12 +177,6 @@
           </div>
           <div id="taskList" class="tasks"></div>
           <p class="tool-intro" style="margin-top:12px">Automations and reminders live in <b>Inbox</b>.</p>
-        </div>
-
-        <!-- Tools / skills -->
-        <div class="dpanel" data-d="tools" hidden>
-          <p class="tool-intro">The skills your agents use to get things done.</p>
-          <div id="toolList" class="tools"></div>
         </div>
 
       </div>
@@ -326,6 +326,7 @@
       <nav class="ms-nav-list">
         <button class="ms-nav-item" data-msnav="inbox"><span class="ms-nav-ic" aria-hidden="true"></span><span>Inbox</span></button>
         <button class="ms-nav-item" data-msnav="brain"><span class="ms-nav-ic" aria-hidden="true"></span><span>Brain</span></button>
+        <button class="ms-nav-item" data-msnav="tools"><span class="ms-nav-ic" aria-hidden="true"></span><span>Agents &amp; tools</span></button>
       </nav>
       <div class="ms-nav-label">Settings</div>
       <nav class="ms-nav-list">
@@ -373,6 +374,25 @@
           <div id="reminderList" class="tasks"></div>
         </div>
       </section>
+    </div>
+
+    <!-- ── panel: agents & tools ───────────────────────────────────────
+         What one agent may use, what it could be given, and what it cannot
+         have with the reason. The screen that did not exist when an agent
+         silently had no connector access and said the connector was still
+         syncing. -->
+    <div class="ms-body sp" data-sp="tools" hidden>
+      <div class="at-head">
+        <div>
+          <h1 class="ms-h1" style="margin-bottom:6px">Agents &amp; tools</h1>
+          <p class="ms-sub">What each agent may use. Changes apply from its next question — nothing to restart.</p>
+        </div>
+        <label class="at-pick">
+          <span class="at-pick-lb">Agent</span>
+          <select id="agentToolPicker" class="set-select" aria-label="Which agent"></select>
+        </label>
+      </div>
+      <div id="agentToolList" class="at-list"></div>
     </div>
 
     <!-- ── panel: connectors ───────────────────────────────────────────── -->
