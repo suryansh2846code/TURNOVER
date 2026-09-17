@@ -54,9 +54,13 @@ cat > "$CONTENTS/Info.plist" <<EOF
 </plist>
 EOF
 
-# optional icon: if an icon.icns is present in scripts/, use it
-if [ -f "$PROJECT_DIR/scripts/icon.icns" ]; then
-  cp "$PROJECT_DIR/scripts/icon.icns" "$CONTENTS/Resources/icon.icns"
+# The icon lives with the rest of the packaging assets. This used to look in
+# scripts/, where there has never been one, so the dev bundle silently shipped
+# the generic application icon — the same cwd-relative mistake build-dmg.sh
+# documents having made, and just as invisible, because a missing icon looks
+# like a choice.
+if [ -f "$PROJECT_DIR/packaging/icon.icns" ]; then
+  cp "$PROJECT_DIR/packaging/icon.icns" "$CONTENTS/Resources/icon.icns"
   /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string icon" "$CONTENTS/Info.plist" 2>/dev/null || true
 fi
 
