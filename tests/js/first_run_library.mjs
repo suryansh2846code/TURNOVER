@@ -6,7 +6,7 @@
  * by the "name your lead agent" card; that card is gone, so this executes the
  * boot path instead.
  *
- * argv: <a path inside lodestone/web/>   stdin: {onboarded: bool, seen: bool}
+ * argv: <a path inside chitragupta/web/>   stdin: {onboarded: bool, seen: bool}
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -46,8 +46,8 @@ globalThis.document = {
 globalThis.window = { location: { pathname: "/", href: "/" }, addEventListener() {},
   matchMedia: () => ({ matches: false, addEventListener() {} }), open() {} };
 const store = {};
-if (onboarded) store.lodestone_onboarded = "1";
-if (seen) store.lodestone_saw_library = "1";
+if (onboarded) store.chitragupta_onboarded = "1";
+if (seen) store.chitragupta_saw_library = "1";
 globalThis.localStorage = {
   getItem: (k) => (k in store ? store[k] : null),
   setItem: (k, v) => { store[k] = String(v); },
@@ -93,7 +93,7 @@ try {
 console.log(JSON.stringify({
   error,
   libraryOpen: el("#libraryScreen").hidden === false,
-  sawFlag: store.lodestone_saw_library || null,
+  sawFlag: store.chitragupta_saw_library || null,
   // `createLead` catches its own failures, so a silent abort looks identical
   // to "the library did not open". These say which happened.
   agentsEmptyState: el("#agentList").innerHTML.includes("Agent Library"),

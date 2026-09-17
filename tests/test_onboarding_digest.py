@@ -21,13 +21,13 @@ from pathlib import Path
 
 import pytest
 
-from lodestone.api.routes import brain as brain_routes
-from lodestone.brain import Brain
-from lodestone.brain.graph import DIGEST_AREAS
-from lodestone.core.store import MemoryStore
+from chitragupta.api.routes import brain as brain_routes
+from chitragupta.brain import Brain
+from chitragupta.brain.graph import DIGEST_AREAS
+from chitragupta.core.store import MemoryStore
 
 ROOT = Path(__file__).parent.parent
-WEB = ROOT / "lodestone/web"
+WEB = ROOT / "chitragupta/web"
 PAGE = WEB / "onboarding.html"
 
 #: The prose that used to sit on the cards. It must not come back anywhere —

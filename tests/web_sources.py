@@ -19,7 +19,7 @@ from __future__ import annotations
 import pathlib
 import re
 
-WEB = pathlib.Path(__file__).parent.parent / "lodestone/web"
+WEB = pathlib.Path(__file__).parent.parent / "chitragupta/web"
 
 #: `<script src="/static/core.js">` — local sources only, in document order.
 _SCRIPT_TAG = re.compile(r"""<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>""",

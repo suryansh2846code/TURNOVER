@@ -10,9 +10,9 @@ from __future__ import annotations
 import pytest
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import runtime
-from lodestone.agents.agent import AgentMemory
-from lodestone.agents.tools import MAX_PARALLEL_AGENTS, run_tool
+from chitragupta.agents import runtime
+from chitragupta.agents.agent import AgentMemory
+from chitragupta.agents.tools import MAX_PARALLEL_AGENTS, run_tool
 
 
 @pytest.fixture

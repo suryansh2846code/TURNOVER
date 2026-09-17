@@ -1,8 +1,8 @@
-# TURNOVER / Lodestone — Brain v1.5 Architecture & Specification
+# TURNOVER / Chitragupta — Brain v1.5 Architecture & Specification
 
 ## 1. Core Architectural Thesis
 
-The Brain is the persistent intelligence substrate of TURNOVER / Lodestone.
+The Brain is the persistent intelligence substrate of TURNOVER / Chitragupta.
 **The LLM is NOT the Brain.**
 The LLM is provider-agnostic execution compute that interprets, summarizes, reasons, and generates text.
 The Brain owns:
@@ -160,7 +160,7 @@ To prevent prompt injection credentials or accidental leak of tokens into persis
 
 ## 9. Migration & Zero-Downtime Compatibility
 
-- Schema migrations (`lodestone/core/db.py`) use `PRAGMA table_info` introspection.
+- Schema migrations (`chitragupta/core/db.py`) use `PRAGMA table_info` introspection.
 - Additive columns are dynamically added with `ALTER TABLE`.
 - Missing vector indexes are conditionally built only after columns are verified.
 - Malformed JSON in existing legacy databases gracefully falls back to empty default structures (`_safe_json_loads`).

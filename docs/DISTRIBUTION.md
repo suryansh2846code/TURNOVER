@@ -1,4 +1,4 @@
-# Shipping Lodestone as a `.dmg`
+# Shipping Chitragupta as a `.dmg`
 
 > How a Mac you have never touched ends up running this app, and what each step
 > exists to prevent. Written after building it: the numbers below are measured
@@ -7,9 +7,9 @@
 ## Are we going in the right direction?
 
 Partly. `scripts/build-macos-app.sh` was the right instinct at the wrong
-altitude. It writes a real `Lodestone.app` with a real `Info.plist` — but its
+altitude. It writes a real `Chitragupta.app` with a real `Info.plist` — but its
 launcher is three lines that `cd` into the source checkout and run
-`.venv/bin/lodestone app`. There is no Python inside that bundle. Copy it to
+`.venv/bin/chitragupta app`. There is no Python inside that bundle. Copy it to
 another Mac and it fails immediately, because the thing it points at does not
 exist there.
 
@@ -30,8 +30,8 @@ and is not.
 ## Why each step
 
 **1. Bundle.** The user has no Python, no `uv`, and no checkout. PyInstaller
-puts a CPython and every dependency in `Lodestone.app/Contents/Frameworks`, and
-`lodestone/web` in `Contents/Resources` where `api/assets.py::WEB` finds it.
+puts a CPython and every dependency in `Chitragupta.app/Contents/Frameworks`, and
+`chitragupta/web` in `Contents/Resources` where `api/assets.py::WEB` finds it.
 
 The interesting decision is what to leave out. `sentence-transformers` pulls
 torch, and the environment used to build this one has it installed: **1.1 GB of
@@ -41,8 +41,8 @@ download:
 
 | | size |
 |---|---|
-| `Lodestone.app` (torch excluded) | **189 MB** |
-| `Lodestone-0.1.0-arm64.dmg` (compressed) | **75 MB** |
+| `Chitragupta.app` (torch excluded) | **189 MB** |
+| `Chitragupta-0.1.0-arm64.dmg` (compressed) | **75 MB** |
 | the same bundle with torch | ~2 GB |
 
 A user who wants local embeddings installs the extra into a source checkout.
@@ -64,7 +64,7 @@ opened because Apple cannot check it for malicious software"*.
 > **The way through changed, and got worse.** It used to be right-click → Open.
 > **Apple removed that bypass in macOS 15**, so on any current Mac the only
 > route is: open the app and let it be blocked, then go to
-> **System Settings → Privacy & Security**, scroll to the "Lodestone was
+> **System Settings → Privacy & Security**, scroll to the "Chitragupta was
 > blocked" line, click **Open Anyway**, and open the app again. Anything still
 > telling a tester to right-click strands them on a dialog whose only button is
 > *Done*. This file and `scripts/build-dmg.sh` both said it until 2026-09-16.
@@ -77,7 +77,7 @@ instruction `CLAUDE.md` says never to give:
 
 An app whose very first interaction is a scary dialog and a workaround has
 already failed the standard the rest of the codebase is held to. **Notarisation
-is not optional for a shipped Lodestone.**
+is not optional for a shipped Chitragupta.**
 
 **4. Staple.** The ticket is fetchable online, so an unstapled build usually
 works — until someone installs it on a plane. Stapling attaches it to the `.dmg`.
@@ -88,7 +88,7 @@ works — until someone installs it on a plane. Stapling attaches it to the `.dm
 |---|---|
 | Apple Developer Program | **$99/yr** — there is no free path to notarisation |
 | A *Developer ID Application* certificate | in the login keychain |
-| A notarytool profile | `xcrun notarytool store-credentials lodestone-notary --apple-id you@example.com --team-id TEAMID --password <app-specific-password>` |
+| A notarytool profile | `xcrun notarytool store-credentials chitragupta-notary --apple-id you@example.com --team-id TEAMID --password <app-specific-password>` |
 
 An **app-specific password** is generated at appleid.apple.com, not your Apple
 ID password.
@@ -103,7 +103,7 @@ uv pip install pyinstaller
 ```
 
 The output is named for the architecture it was built on —
-`Lodestone-0.1.0-arm64.dmg` — because that is the only machine it runs on and
+`Chitragupta-0.1.0-arm64.dmg` — because that is the only machine it runs on and
 two identically-named images on a download page is not a mistake you can take
 back.
 
@@ -117,7 +117,7 @@ fixes what is missing, rather than failing halfway through a five-minute build.
 ### The smoke test is part of the build
 
 After bundling and before signing, the script launches the bundled binary, waits
-for it to write `~/Library/Lodestone/.port`, and requests `/api/sync/status`.
+for it to write `~/Library/Chitragupta/.port`, and requests `/api/sync/status`.
 A PyInstaller bundle that is missing a hidden import looks perfectly well-formed
 and dies on launch; this catches that in fifteen seconds instead of in a user's
 Downloads folder. It is the same reason the frontend has executed harnesses
@@ -153,7 +153,7 @@ to go by hand.
 AppleScript triggers a consent prompt, which needs
 `NSAppleEventsUsageDescription` in `Info.plist`. It is set in the spec; the
 string it contains is the entire explanation the user gets, so it says what
-Lodestone does with the data and that it stays on the machine.
+Chitragupta does with the data and that it stays on the machine.
 
 ## Known gaps
 
@@ -166,7 +166,7 @@ Lodestone does with the data and that it stays on the machine.
   download unless something like Sparkle is added. Worth deciding early: the
   in-app "check for updates" affordance is much easier to add before there are
   users on old versions.
-* **The bundled Google OAuth client.** `lodestone/data/google_client.json`
+* **The bundled Google OAuth client.** `chitragupta/data/google_client.json`
   ships inside the `.app`. That is a deliberate decision recorded in
   `.gitignore` (an installed-app client, which Google treats as
   non-confidential — the security is PKCE plus the loopback redirect). Shipping
@@ -193,15 +193,15 @@ serves its API and answers `/api/sync/status`. Also checked on the built
 artefact rather than assumed:
 
 ```bash
-/usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" dist/Lodestone.app/Contents/Info.plist
+/usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" dist/Chitragupta.app/Contents/Info.plist
 # icon.icns          (was icon-windowed.icns — PyInstaller's generic default)
-codesign --verify --deep --strict dist/Lodestone.app
+codesign --verify --deep --strict dist/Chitragupta.app
 # valid on disk · satisfies its Designated Requirement
 ```
 
 That second one now runs inside `--unsigned` builds too. PyInstaller ad-hoc
 signs on Apple Silicon, and a *broken* ad-hoc signature does not produce the
-"unverified developer" dialog — it produces **"Lodestone is damaged and can't be
+"unverified developer" dialog — it produces **"Chitragupta is damaged and can't be
 opened"**, which no Open Anyway sequence rescues. Skipping the signing block
 used to skip this check with it, so the build could not tell "will warn" from
 "will not open".

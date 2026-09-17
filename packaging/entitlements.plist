@@ -11,7 +11,7 @@
     allow-jit / allow-unsigned-executable-memory
       CPython and several C extensions map writable-executable memory. Without
       these the interpreter is killed at launch with EXC_BAD_ACCESS, before any
-      Lodestone code runs.
+      Chitragupta code runs.
 
     disable-library-validation
       The bundle loads .so extension modules that were built by their own
@@ -19,7 +19,7 @@
       validation refuses to load any library not signed by the same team ID.
 
     Deliberately NOT requested:
-      * App Sandbox. Lodestone reads the user's own files, mail and messages by
+      * App Sandbox. Chitragupta reads the user's own files, mail and messages by
         design, and runs vendor CLIs the user installed. A sandbox would have to
         be punctured everywhere it mattered, which is worse than being honest
         about being an unsandboxed local tool.

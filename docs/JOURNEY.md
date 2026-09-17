@@ -1,6 +1,6 @@
-# Lodestone — The Journey (how we built it, start to now)
+# Chitragupta — The Journey (how we built it, start to now)
 
-> The story of how Lodestone came to be, in order — the wrong turns, the pivots,
+> The story of how Chitragupta came to be, in order — the wrong turns, the pivots,
 > the bugs found by testing with real data, and what each taught us. Written as a
 > narrative; for the crisp "why" of each decision see [`DECISIONS.md`](DECISIONS.md).
 > Timeline: **28–30 Aug 2026**. Repo: https://github.com/suryansh2846code/TURNOVER

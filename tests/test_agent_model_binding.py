@@ -2,15 +2,15 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from lodestone.agents.agent_models import (
+from chitragupta.agents.agent_models import (
     clear_agent_model,
     get_agent_model,
     list_agent_models,
     set_agent_model,
 )
-from lodestone.agents.presets import get_agent, list_agents
-from lodestone.agents.runtime import run_turn
-from lodestone.api.app import app
+from chitragupta.agents.presets import get_agent, list_agents
+from chitragupta.agents.runtime import run_turn
+from chitragupta.api.app import app
 
 
 @pytest.fixture(autouse=True)
@@ -57,7 +57,7 @@ def test_agent_model_crud():
 def _rostered():
     """Templates are not pre-added any more, so a test about the roster has to
     put them in it."""
-    from lodestone.agents.library import add_to_roster, remove_from_roster
+    from chitragupta.agents.library import add_to_roster, remove_from_roster
 
     for tid in ("inbox", "personal", "research"):
         add_to_roster(tid)
@@ -174,7 +174,7 @@ def test_disconnected_provider_model_binding_rejected(monkeypatch):
     assert "not connected" in resp.json()["detail"].lower()
 
     # 2. Test disconnected provider (claude when disconnected)
-    from lodestone.models.connections import ConnectionStatus, get_connection, save_connection
+    from chitragupta.models.connections import ConnectionStatus, get_connection, save_connection
     conn = get_connection("claude")
     orig_status = conn.connection_status
     try:

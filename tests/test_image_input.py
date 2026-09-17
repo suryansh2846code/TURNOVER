@@ -18,8 +18,8 @@ import base64
 
 import pytest
 
-from lodestone.models.base import LLMProvider, Message
-from lodestone.models.images import (
+from chitragupta.models.base import LLMProvider, Message
+from chitragupta.models.images import (
     MAX_BASE64_BYTES,
     MAX_IMAGES,
     ImageError,
@@ -112,14 +112,14 @@ def test_no_images_is_never_refused():
 def test_an_unknown_model_is_not_treated_as_a_no(monkeypatch):
     """Discovery failing is not the same as the model saying no. Refusing on a
     failed lookup invents a limitation the user does not have."""
-    import lodestone.models.images as mod
+    import chitragupta.models.images as mod
     monkeypatch.setattr(mod, "_model_sees_images", lambda *a: None)
     assert refusal_for([ImageInput("image/png", PNG)], _ApiBackend(),
                        "openai", "who-knows") is None
 
 
 def test_a_model_without_vision_is_refused_and_offered_alternatives(monkeypatch):
-    import lodestone.models.images as mod
+    import chitragupta.models.images as mod
     monkeypatch.setattr(mod, "_model_sees_images", lambda *a: False)
     monkeypatch.setattr(mod, "_vision_alternatives", lambda *a, **k: ["GPT-5.5"])
     why = refusal_for([ImageInput("image/png", PNG)], _ApiBackend(), "openai", "text-only-1")
@@ -129,7 +129,7 @@ def test_a_model_without_vision_is_refused_and_offered_alternatives(monkeypatch)
 
 # ── the wire ──────────────────────────────────────────────────────────────
 def test_anthropic_sends_a_base64_image_block():
-    from lodestone.models.anthropic import AnthropicProvider
+    from chitragupta.models.anthropic import AnthropicProvider
     img = ImageInput("image/png", PNG)
     _system, msgs = AnthropicProvider(api_key="sk-test")._to_blocks(
         [Message(role="user", content="what is this?", images=[img])])
@@ -140,7 +140,7 @@ def test_anthropic_sends_a_base64_image_block():
 
 
 def test_openai_sends_an_image_url_part():
-    from lodestone.models.openai_compat import OpenAICompatProvider
+    from chitragupta.models.openai_compat import OpenAICompatProvider
     img = ImageInput("image/png", PNG)
     out = OpenAICompatProvider()._to_openai(
         [Message(role="user", content="what is this?", images=[img])])
@@ -150,8 +150,8 @@ def test_openai_sends_an_image_url_part():
 
 
 @pytest.mark.parametrize("provider_factory", [
-    lambda: __import__("lodestone.models.openai_compat", fromlist=["x"]).OpenAICompatProvider(),
-    lambda: __import__("lodestone.models.anthropic", fromlist=["x"]).AnthropicProvider(api_key="sk-test"),
+    lambda: __import__("chitragupta.models.openai_compat", fromlist=["x"]).OpenAICompatProvider(),
+    lambda: __import__("chitragupta.models.anthropic", fromlist=["x"]).AnthropicProvider(api_key="sk-test"),
 ])
 def test_a_text_only_turn_is_byte_for_byte_what_it_always_was(provider_factory):
     """The whole point of keeping `content` a string and adding `images`
@@ -168,16 +168,16 @@ def test_a_text_only_turn_is_byte_for_byte_what_it_always_was(provider_factory):
 # ── transport capability, declared rather than guessed ────────────────────
 def test_the_vendor_clis_do_not_claim_to_take_images():
     """They take a prompt on argv. There is nowhere for an image to go."""
-    from lodestone.models.claude_code import ClaudeCodeProvider
-    from lodestone.models.cursor import CursorProvider
-    from lodestone.models.grok_cli import GrokCliProvider
+    from chitragupta.models.claude_code import ClaudeCodeProvider
+    from chitragupta.models.cursor import CursorProvider
+    from chitragupta.models.grok_cli import GrokCliProvider
     for cls in (ClaudeCodeProvider, CursorProvider, GrokCliProvider):
         assert cls.supports_images is False, cls.__name__
 
 
 def test_anthropic_only_claims_images_when_it_has_an_api_key():
     """Without a key it delegates to the Claude CLI, which cannot take one."""
-    from lodestone.models.anthropic import AnthropicProvider
+    from chitragupta.models.anthropic import AnthropicProvider
     assert AnthropicProvider(api_key="sk-test").supports_images is True
     assert AnthropicProvider(api_key="").supports_images is False
 
@@ -206,11 +206,11 @@ def captured_wire(monkeypatch):
             return True, ""
 
         def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
-            from lodestone.models.base import ChatResult
+            from chitragupta.models.base import ChatResult
             seen["calls"].append(messages)
             return ChatResult(text="I see it.")
 
-    import lodestone.agents.runtime as runtime
+    import chitragupta.agents.runtime as runtime
     monkeypatch.setattr(runtime, "get_provider", lambda *a, **k: _Recorder())
     monkeypatch.setattr(runtime, "resolve_usable_model",
                         lambda p, m: (m or "gpt-vision-test", None))
@@ -220,7 +220,7 @@ def captured_wire(monkeypatch):
 def test_an_image_posted_to_the_api_reaches_the_provider(captured_wire):
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
 
     r = TestClient(app).post("/api/agents/inbox/chat", json={
         "message": "what is this?",
@@ -243,7 +243,7 @@ def test_an_image_on_its_own_is_a_complete_question(captured_wire):
     not be rejected as an empty message."""
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
 
     r = TestClient(app).post("/api/agents/inbox/chat", json={
         "message": "", "images": [{"data_url": URL}],
@@ -254,7 +254,7 @@ def test_an_image_on_its_own_is_a_complete_question(captured_wire):
 def test_a_turn_with_nothing_at_all_is_still_rejected():
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
 
     r = TestClient(app).post("/api/agents/inbox/chat", json={"message": ""})
     assert r.status_code == 422
@@ -263,7 +263,7 @@ def test_a_turn_with_nothing_at_all_is_still_rejected():
 def test_a_bad_attachment_is_refused_at_the_boundary_with_the_reason():
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
 
     r = TestClient(app).post("/api/agents/inbox/chat", json={
         "message": "look", "images": [{"data_url": "data:image/svg+xml;base64," + PNG}],
@@ -287,15 +287,15 @@ def test_the_refusal_happens_before_the_model_is_called(monkeypatch):
 
         def chat(self, messages, **kw):
             called["n"] += 1
-            from lodestone.models.base import ChatResult
+            from chitragupta.models.base import ChatResult
             return ChatResult(text="should never happen")
 
-    import lodestone.agents.runtime as runtime
+    import chitragupta.agents.runtime as runtime
     monkeypatch.setattr(runtime, "get_provider", lambda *a, **k: _Blind())
     monkeypatch.setattr(runtime, "resolve_usable_model", lambda p, m: (m, None))
 
-    from lodestone.agents.runtime import run_turn
-    from lodestone.models.images import parse_data_url
+    from chitragupta.agents.runtime import run_turn
+    from chitragupta.models.images import parse_data_url
     result = run_turn("inbox", "what is this?", images=[parse_data_url(URL)])
 
     assert called["n"] == 0, "the model was called despite a known refusal"

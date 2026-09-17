@@ -1,4 +1,4 @@
-"""Lodestone installs the vendor CLIs itself.
+"""Chitragupta installs the vendor CLIs itself.
 
 Claude, Cursor and Grok reach a paid plan only through their own CLI. Telling a
 user to open a terminal and paste a curl command is a developer tool, not a
@@ -14,8 +14,8 @@ from unittest.mock import patch
 
 import pytest
 
-from lodestone.models import cli_manager
-from lodestone.models.cli_manager import (
+from chitragupta.models import cli_manager
+from chitragupta.models.cli_manager import (
     PROVIDER_CLI,
     SPECS,
     install_cli,
@@ -190,7 +190,7 @@ def test_progress_is_reported_monotonically(home):
 def test_installers_are_read_as_manifests_never_executed():
     """Piping a vendor script into a shell would run arbitrary code as the user
     and could not be redirected into our own directory."""
-    src = (Path(__file__).parent.parent / "lodestone/models/cli_manager.py").read_text()
+    src = (Path(__file__).parent.parent / "chitragupta/models/cli_manager.py").read_text()
     assert "shell=True" not in src
     assert "| bash" not in src and "|bash" not in src
     assert "install.sh" in src or "cursor.com/install" in src  # read, not run

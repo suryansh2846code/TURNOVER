@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from lodestone.connectors import mcp_source, mcp_tools
-from lodestone.connectors.mcp_source import MCPServerSpec, upsert_server
-from lodestone.connectors.mcp_tools import (
+from chitragupta.connectors import mcp_source, mcp_tools
+from chitragupta.connectors.mcp_source import MCPServerSpec, upsert_server
+from chitragupta.connectors.mcp_tools import (
     MCPToolRef,
     call_tool,
     invalidate,

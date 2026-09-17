@@ -13,19 +13,19 @@ import threading
 import pytest
 from agent_harness import ScriptedProvider
 
-from lodestone.agents import cancellation, runtime
-from lodestone.agents.effort import get_effort
-from lodestone.agents.loop import STOPPED_OUTPUT, ToolRunner
-from lodestone.models.base import ToolCall
+from chitragupta.agents import cancellation, runtime
+from chitragupta.agents.effort import get_effort
+from chitragupta.agents.loop import STOPPED_OUTPUT, ToolRunner
+from chitragupta.models.base import ToolCall
 
 
 @pytest.fixture
 def scripted(monkeypatch):
     def make(script, **kw):
         provider = ScriptedProvider(script=list(script), **kw)
-        monkeypatch.setattr("lodestone.agents.runtime.get_provider",
+        monkeypatch.setattr("chitragupta.agents.runtime.get_provider",
                             lambda p, m: provider)
-        monkeypatch.setattr("lodestone.agents.runtime.resolve_usable_model",
+        monkeypatch.setattr("chitragupta.agents.runtime.resolve_usable_model",
                             lambda p, m: (m or "scripted-1", None))
         return provider
     return make
@@ -68,7 +68,7 @@ def test_a_stopped_turn_makes_no_further_model_call(scripted):
         stop.set()               # the user presses Stop during the first tool
         return "something"
 
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
     saved = tools_mod.TOOL_IMPLS["list_entities"]
     tools_mod.TOOL_IMPLS["list_entities"] = counting_tool
     try:
@@ -106,13 +106,13 @@ def test_the_half_written_answer_is_kept(scripted):
 
     class Halfway(ScriptedProvider):
         def stream(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
-            from lodestone.models.streaming import StreamEvent
+            from chitragupta.models.streaming import StreamEvent
             yield StreamEvent("text", "Here is what I foun")
             stop.set()                      # Stop lands mid-sentence
             yield StreamEvent("text", "d in your calendar…")
 
     provider = Halfway(script=[])
-    import lodestone.agents.runtime as rt
+    import chitragupta.agents.runtime as rt
     saved_get, saved_resolve = rt.get_provider, rt.resolve_usable_model
     rt.get_provider = lambda p, m: provider          # type: ignore[assignment]
     rt.resolve_usable_model = lambda p, m: (m or "x", None)  # type: ignore[assignment]
@@ -147,7 +147,7 @@ def test_queued_tools_in_a_round_do_not_run_after_stop():
     stop = threading.Event()
     ran = {"n": 0}
 
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
     saved = tools_mod.TOOL_IMPLS["list_entities"]
     tools_mod.TOOL_IMPLS["list_entities"] = lambda **kw: ran.__setitem__(
         "n", ran["n"] + 1) or "ok"
@@ -168,7 +168,7 @@ def test_queued_tools_in_a_round_do_not_run_after_stop():
 # ── delegation ───────────────────────────────────────────────────────────
 def test_stopping_a_turn_stops_the_agent_it_delegated_to():
     """Otherwise Stop is the same lie, one level further in."""
-    from lodestone.agents import delegation
+    from chitragupta.agents import delegation
 
     stop = threading.Event()
     token = delegation.enter("inbox", get_effort("high"), stop)

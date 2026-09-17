@@ -9,11 +9,11 @@ from datetime import datetime
 
 import pytest
 
-from lodestone.actions import parse_actions
-from lodestone.connectors.apple_calendar import _fmt_dt, parse_ics
-from lodestone.connectors.custom_api import _dig
-from lodestone.core.chunk import chunk_text
-from lodestone.reminders import parse_when
+from chitragupta.actions import parse_actions
+from chitragupta.connectors.apple_calendar import _fmt_dt, parse_ics
+from chitragupta.connectors.custom_api import _dig
+from chitragupta.core.chunk import chunk_text
+from chitragupta.reminders import parse_when
 
 NOW = datetime(2026, 8, 30, 13, 0, 0).astimezone()
 
@@ -105,7 +105,7 @@ def test_chunk_text_bounds(text, expect_empty):
 
 # ── connectors: every registered connector instantiates + reports readiness ─
 def test_all_connectors_instantiate():
-    from lodestone.connectors import REGISTRY
+    from chitragupta.connectors import REGISTRY
     for _name, cls in REGISTRY.items():
         inst = cls()
         ready, reason = inst.is_configured()
@@ -115,14 +115,14 @@ def test_all_connectors_instantiate():
 
 # ── custom apps: storage round-trip (create → get → delete), no network ─────
 def test_custom_app_storage_roundtrip():
-    from lodestone.connectors.custom_api import delete_app, get_app, upsert_app
+    from chitragupta.connectors.custom_api import delete_app, get_app, upsert_app
     app = upsert_app({"name": "T", "base_url": "https://ex.com", "endpoint": "/x"},
                      token="secret123")
     aid = app["id"]
     try:
         assert get_app(aid)["base_url"] == "https://ex.com"
         # addressed as custom:<id> through the connector factory
-        from lodestone.connectors import get_connector
+        from chitragupta.connectors import get_connector
         conn = get_connector(f"custom:{aid}")
         assert conn.label == "T"
     finally:
@@ -132,10 +132,10 @@ def test_custom_app_storage_roundtrip():
 
 def test_custom_api_fieldless_records_stay_distinct(tmp_path, monkeypatch):
     """Records missing the title/body field must not collapse to one 'None'."""
-    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
-    from lodestone.config import get_settings
+    monkeypatch.setenv("CHITRAGUPTA_HOME", str(tmp_path))
+    from chitragupta.config import get_settings
     get_settings.cache_clear()
-    from lodestone.connectors.custom_api import CustomAPIConnector
+    from chitragupta.connectors.custom_api import CustomAPIConnector
     app = {"id": "z", "name": "T", "base_url": "https://ex.com", "endpoint": "/x",
            "auth_type": "none", "items_path": "d", "title_field": "name",
            "body_field": "desc"}
@@ -148,18 +148,18 @@ def test_custom_api_fieldless_records_stay_distinct(tmp_path, monkeypatch):
 
 # ── reminders/scheduler: fire once, never double-fire ──────────────────────
 def test_reminder_fires_once(tmp_path, monkeypatch):
-    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
-    from lodestone.config import get_settings
+    monkeypatch.setenv("CHITRAGUPTA_HOME", str(tmp_path))
+    from chitragupta.config import get_settings
     get_settings.cache_clear()
-    import lodestone.notify as notify
+    import chitragupta.notify as notify
     calls = []
     monkeypatch.setattr(notify, "desktop_notify", lambda t, m: calls.append((t, m)) or True)
 
     from datetime import datetime, timedelta
 
-    import lodestone.reminders as reminders_mod
-    from lodestone.reminders import get_reminders
-    from lodestone.scheduler import Scheduler
+    import chitragupta.reminders as reminders_mod
+    from chitragupta.reminders import get_reminders
+    from chitragupta.scheduler import Scheduler
     monkeypatch.setattr(reminders_mod, "_store", None)   # rebind to tmp home
     store = get_reminders()
     past = (datetime.now().astimezone() - timedelta(minutes=5)).isoformat()
@@ -179,10 +179,10 @@ def test_reminder_fires_once(tmp_path, monkeypatch):
 
 # ── migrations: idempotent, version-bump triggered, empty-safe ─────────────
 def test_migrations_idempotent_and_bump_triggered(tmp_path, monkeypatch):
-    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
-    from lodestone.brain import get_brain
-    from lodestone.config import get_settings
-    from lodestone.core.store import get_store
+    monkeypatch.setenv("CHITRAGUPTA_HOME", str(tmp_path))
+    from chitragupta.brain import get_brain
+    from chitragupta.config import get_settings
+    from chitragupta.core.store import get_store
     get_settings.cache_clear()
     get_brain.cache_clear()
     get_store.cache_clear()
@@ -209,7 +209,7 @@ def test_migrations_idempotent_and_bump_triggered(tmp_path, monkeypatch):
 def test_gmail_decode_handles_unpadded_base64():
     import base64
 
-    from lodestone.connectors.gmail import _decode
+    from chitragupta.connectors.gmail import _decode
     padded = base64.urlsafe_b64encode("café ☕".encode()).decode()
     assert _decode(padded) == "café ☕"
     assert _decode(padded.rstrip("=")) == "café ☕"      # Gmail often omits '='
@@ -219,7 +219,7 @@ def test_gmail_decode_handles_unpadded_base64():
 def test_gmail_extract_body_from_unpadded_html():
     import base64
 
-    from lodestone.connectors.gmail import _extract_body
+    from chitragupta.connectors.gmail import _extract_body
     raw = base64.urlsafe_b64encode(b"<p>Hi <b>there</b></p>").decode().rstrip("=")
     payload = {"mimeType": "text/html", "body": {"data": raw}}
     assert _extract_body(payload) == "Hi there"
@@ -227,10 +227,10 @@ def test_gmail_extract_body_from_unpadded_html():
 
 # ── Google auth: corrupt token self-heals (cleaned up, clear error) ────────
 def test_google_auth_corrupt_token_selfheals(tmp_path, monkeypatch):
-    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
-    from lodestone.config import get_settings
+    monkeypatch.setenv("CHITRAGUPTA_HOME", str(tmp_path))
+    from chitragupta.config import get_settings
     get_settings.cache_clear()
-    from lodestone.connectors.google_auth import _token_path, get_credentials
+    from chitragupta.connectors.google_auth import _token_path, get_credentials
     tp = _token_path()
     tp.parent.mkdir(parents=True, exist_ok=True)
     tp.write_text("{ not valid json ]")
@@ -242,8 +242,8 @@ def test_google_auth_corrupt_token_selfheals(tmp_path, monkeypatch):
 
 # ── model providers: unreachable/misconfigured → clean message, no traceback ─
 def test_openai_compat_unreachable_returns_clean_message():
-    from lodestone.models.base import Message
-    from lodestone.models.openai_compat import OllamaProvider, OpenAICompatProvider
+    from chitragupta.models.base import Message
+    from chitragupta.models.openai_compat import OllamaProvider, OpenAICompatProvider
     r = OllamaProvider(base_url="http://localhost:59999/v1").chat(
         [Message(role="user", content="hi")])
     assert r.text.startswith("⚠️") and "ollama" in r.text.lower()
@@ -255,12 +255,12 @@ def test_openai_compat_unreachable_returns_clean_message():
 
 # ── API input validation (empty chat, non-http custom app) ─────────────────
 def test_api_input_validation(tmp_path, monkeypatch):
-    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
-    from lodestone.config import get_settings
+    monkeypatch.setenv("CHITRAGUPTA_HOME", str(tmp_path))
+    from chitragupta.config import get_settings
     get_settings.cache_clear()
     from fastapi.testclient import TestClient
 
-    from lodestone.api.app import app
+    from chitragupta.api.app import app
     client = TestClient(app)
 
     # empty / whitespace chat message → 422, not a wasted model call
@@ -279,20 +279,20 @@ def test_api_input_validation(tmp_path, monkeypatch):
 
 # ── brain export / import round-trip (you own your data) ───────────────────
 def test_brain_export_import_roundtrip(tmp_path, monkeypatch):
-    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path / "a"))
-    from lodestone.brain import get_brain
-    from lodestone.config import get_settings
-    from lodestone.core.store import get_store
+    monkeypatch.setenv("CHITRAGUPTA_HOME", str(tmp_path / "a"))
+    from chitragupta.brain import get_brain
+    from chitragupta.config import get_settings
+    from chitragupta.core.store import get_store
     get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()
 
     b = get_brain()
     b.ingest("Alpha ships in September.", source="test")
     b.ingest("Beta uses Postgres.", source="test", event_date="2026-08-01")
     exp = b.export()
-    assert exp["count"] == 2 and exp["lodestone_backup"] == 1
+    assert exp["count"] == 2 and exp["chitragupta_backup"] == 1
 
     # import into a fresh, separate brain
-    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path / "b"))
+    monkeypatch.setenv("CHITRAGUPTA_HOME", str(tmp_path / "b"))
     get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()
     b2 = get_brain()
     assert b2.store.count() == 0
@@ -308,12 +308,12 @@ def test_brain_export_import_roundtrip(tmp_path, monkeypatch):
 
 # ── MCP server: brain tools work + about() rejects non-matches ─────────────
 def test_mcp_tools(tmp_path, monkeypatch):
-    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
-    from lodestone.brain import get_brain
-    from lodestone.config import get_settings
-    from lodestone.core.store import get_store
+    monkeypatch.setenv("CHITRAGUPTA_HOME", str(tmp_path))
+    from chitragupta.brain import get_brain
+    from chitragupta.config import get_settings
+    from chitragupta.core.store import get_store
     get_settings.cache_clear(); get_brain.cache_clear(); get_store.cache_clear()
-    import lodestone.mcp_server.server as S
+    import chitragupta.mcp_server.server as S
 
     assert "+1 memory" in S.remember("Zephyr is a project using Rust and SQLite.")
     ctx = S.search_brain("what is Zephyr built with?", limit=3)

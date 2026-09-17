@@ -5,8 +5,8 @@ import tempfile
 
 import pytest
 
-from lodestone.brain import Brain
-from lodestone.core.store import MemoryStore
+from chitragupta.brain import Brain
+from chitragupta.core.store import MemoryStore
 
 
 @pytest.fixture

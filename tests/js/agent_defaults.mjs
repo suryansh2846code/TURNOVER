@@ -13,7 +13,7 @@ import path from "node:path";
 
 import { appSource } from "./_app_source.mjs";
 
-const APP_JS = process.argv[2];   // a path inside lodestone/web/
+const APP_JS = process.argv[2];   // a path inside chitragupta/web/
 const { catalog, effort } = JSON.parse(fs.readFileSync(0, "utf8"));
 
 const registry = new Map();
@@ -93,19 +93,19 @@ let providerWrote = null;
 if (typeof prov.onchange === "function") {
   prov.value = "claude";
   try { prov.onchange(); } catch (e) { error = error || `prov onchange: ${e.message}`; }
-  providerWrote = store["lodestone_provider"] || null;
+  providerWrote = store["chitragupta_provider"] || null;
 }
-// Snapshot here: the model change below writes lodestone_model, so reading it
+// Snapshot here: the model change below writes chitragupta_model, so reading it
 // at the end would not show what the provider switch alone did.
-const storedModelAfterProviderChange = store["lodestone_model"] ?? null;
+const storedModelAfterProviderChange = store["chitragupta_model"] ?? null;
 
 // Choosing a model AFTER switching provider must store the NEW provider.
 let pairAfterSwitch = null;
 if (typeof model.onchange === "function") {
   model.value = "claude-opus-5";
   try { model.onchange(); } catch (e) { error = error || `model onchange: ${e.message}`; }
-  pairAfterSwitch = { provider: store["lodestone_provider"] || null,
-                      model: store["lodestone_model"] || null };
+  pairAfterSwitch = { provider: store["chitragupta_provider"] || null,
+                      model: store["chitragupta_model"] || null };
 }
 
 process.stdout.write(JSON.stringify({

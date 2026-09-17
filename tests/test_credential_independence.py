@@ -8,9 +8,9 @@ account. These tests pin them apart.
 import pytest
 from fastapi.testclient import TestClient
 
-from lodestone.api.app import app
-from lodestone.config import get_settings
-from lodestone.models.connections import (
+from chitragupta.api.app import app
+from chitragupta.config import get_settings
+from chitragupta.models.connections import (
     ACCOUNT,
     API_KEY,
     ConnectionStatus,
@@ -19,8 +19,8 @@ from lodestone.models.connections import (
     save_connection,
     split_legacy_status,
 )
-from lodestone.models.entitlements import provider_credentials
-from lodestone.models.registry import clear_provider_cache
+from chitragupta.models.entitlements import provider_credentials
+from chitragupta.models.registry import clear_provider_cache
 
 DUAL = ["openai", "claude", "cursor"]
 
@@ -36,7 +36,7 @@ def _no_network(monkeypatch):
     # Saving a key triggers live model discovery; that is not what is under test.
     # Account detection is left real so the "key does not imply account" assertion
     # stays meaningful.
-    monkeypatch.setattr("lodestone.models.discovery._discover_raw",
+    monkeypatch.setattr("chitragupta.models.discovery._discover_raw",
                         lambda pid, api_key: ([], {}))
 
 
@@ -95,7 +95,7 @@ def test_per_credential_state_round_trips_through_sqlite():
 ])
 def test_pre_migration_rows_split_sensibly(status, auth, expect):
     acct, key = split_legacy_status(status, auth)
-    from lodestone.models.connections import CONNECTED_STATUSES
+    from chitragupta.models.connections import CONNECTED_STATUSES
     assert (acct in CONNECTED_STATUSES, key in CONNECTED_STATUSES) == expect
 
 

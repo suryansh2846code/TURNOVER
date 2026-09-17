@@ -13,7 +13,7 @@ import path from "node:path";
 
 import { appSource } from "./_app_source.mjs";
 
-const [APP_JS, PROVIDER_ID] = process.argv.slice(2);   // a path inside lodestone/web/
+const [APP_JS, PROVIDER_ID] = process.argv.slice(2);   // a path inside chitragupta/web/
 const { catalog, authStartResponse } = JSON.parse(fs.readFileSync(0, "utf8"));
 
 // Elements remember their children by selector, so querySelector returns the

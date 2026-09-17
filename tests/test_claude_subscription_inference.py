@@ -11,16 +11,16 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from lodestone.models.anthropic import AnthropicProvider
-from lodestone.models.base import ChatResult, Message, parse_cli_json
-from lodestone.models.connections import (
+from chitragupta.models.anthropic import AnthropicProvider
+from chitragupta.models.base import ChatResult, Message, parse_cli_json
+from chitragupta.models.connections import (
     ACCOUNT,
     ConnectionStatus,
     ProviderConnection,
     get_connection,
     save_connection,
 )
-from lodestone.models.registry import clear_provider_cache
+from chitragupta.models.registry import clear_provider_cache
 
 CLI = "/opt/homebrew/bin/claude"
 HELLO = [Message(role="user", content="hello")]
@@ -40,8 +40,8 @@ def connected_account():
 
 # ── the bug ───────────────────────────────────────────────────────────────
 def test_subscription_never_calls_the_messages_api(connected_account):
-    with patch("lodestone.models.claude_code.find_claude", return_value=CLI), \
-         patch("lodestone.models.claude_code.ClaudeCodeProvider.chat",
+    with patch("chitragupta.models.claude_code.find_claude", return_value=CLI), \
+         patch("chitragupta.models.claude_code.ClaudeCodeProvider.chat",
                return_value=ChatResult(text="from the CLI")) as cli_chat, \
          patch("httpx.post", side_effect=AssertionError("posted to api.anthropic.com")) as post:
         result = AnthropicProvider(api_key="").chat(HELLO)
@@ -52,14 +52,14 @@ def test_subscription_never_calls_the_messages_api(connected_account):
 
 
 def test_subscription_is_not_ready_without_the_cli(connected_account):
-    with patch("lodestone.models.claude_code.find_claude", return_value=None):
+    with patch("chitragupta.models.claude_code.find_claude", return_value=None):
         ready, reason = AnthropicProvider(api_key="").is_ready()
     assert ready is False
     assert "Claude CLI" in reason
 
 
 def test_subscription_without_cli_explains_itself_instead_of_crashing(connected_account):
-    with patch("lodestone.models.claude_code.find_claude", return_value=None), \
+    with patch("chitragupta.models.claude_code.find_claude", return_value=None), \
          patch("httpx.post", side_effect=AssertionError("should not be called")):
         result = AnthropicProvider(api_key="").chat(HELLO)
     assert "⚠️" in result.text
@@ -77,8 +77,8 @@ def test_model_id_reaches_the_cli_unchanged(connected_account):
         def chat(self, *a, **kw):
             return ChatResult(text="ok")
 
-    with patch("lodestone.models.claude_code.find_claude", return_value=CLI), \
-         patch("lodestone.models.claude_code.ClaudeCodeProvider", FakeCLI):
+    with patch("chitragupta.models.claude_code.find_claude", return_value=CLI), \
+         patch("chitragupta.models.claude_code.ClaudeCodeProvider", FakeCLI):
         AnthropicProvider(model="claude-3-7-sonnet-latest", api_key="").chat(HELLO)
     assert seen["model"] == "claude-3-7-sonnet-latest"
 
@@ -128,14 +128,14 @@ RETIRED = ["claude-fable-5-1", "claude-3-7-sonnet-latest",
 @pytest.mark.parametrize("provider", ["claude", "claude-code", "subscription"])
 def test_catalog_offers_no_retired_claude_models(provider):
     """Verified against the live Claude CLI: these ids no longer resolve."""
-    from lodestone.models.registry import MODEL_CATALOG
+    from chitragupta.models.registry import MODEL_CATALOG
 
     ids = [m["id"] for m in MODEL_CATALOG[provider]["models"]]
     assert not (set(ids) & set(RETIRED)), f"{provider} still lists retired ids"
 
 
 def test_default_claude_model_is_current():
-    from lodestone.models.registry import MODEL_CATALOG
+    from chitragupta.models.registry import MODEL_CATALOG
 
     assert MODEL_CATALOG["claude"]["default_model"] not in RETIRED
     assert AnthropicProvider(api_key="x").model not in RETIRED
@@ -144,7 +144,7 @@ def test_default_claude_model_is_current():
 def test_fable_is_not_gated_behind_team():
     """The Team/Enterprise gate came from misreading the CLI's
     `cc-update-required-1` entry, which is a CLI *version* requirement."""
-    from lodestone.models.entitlements import evaluate_model_entitlement
+    from chitragupta.models.entitlements import evaluate_model_entitlement
 
     for plan in ("Claude Pro", "Claude Max"):
         locked, _ = evaluate_model_entitlement("claude", "claude-fable-5",

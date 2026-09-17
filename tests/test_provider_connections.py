@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from lodestone.api.app import app
-from lodestone.models.connections import (
+from chitragupta.api.app import app
+from chitragupta.models.connections import (
     ConnectionStatus,
     ProviderConnection,
     delete_connection,

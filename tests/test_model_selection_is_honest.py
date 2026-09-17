@@ -25,7 +25,7 @@ import subprocess
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-APP_JS = ROOT / "lodestone" / "web" / "app.js"
+APP_JS = ROOT / "chitragupta" / "web" / "app.js"
 HARNESS = ROOT / "tests" / "js" / "model_selection.mjs"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,
@@ -38,7 +38,7 @@ PROVIDERS = [
 ]
 
 #: The state the bug was reproduced from: a drawer still holding Claude Code.
-STALE = {"lodestone_provider": "claude-code", "lodestone_model": "claude-code"}
+STALE = {"chitragupta_provider": "claude-code", "chitragupta_model": "claude-code"}
 
 
 def run(scenario: dict) -> dict:
@@ -103,7 +103,7 @@ def test_the_agent_binding_is_still_saved():
 
 
 def test_choosing_a_provider_clears_a_stale_model_id():
-    """Picking xAI while `lodestone_model` still held `claude-code` would send
+    """Picking xAI while `chitragupta_model` still held `claude-code` would send
     xAI *with Claude's model id*, which is a 400 at best."""
     out = run({"mode": "pick", "pick": "xai", "providers": PROVIDERS,
                "storage": STALE})

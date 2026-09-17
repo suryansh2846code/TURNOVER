@@ -7,9 +7,9 @@ string through both a Gmail fetch and an embedding index, so its own default,
 """
 from __future__ import annotations
 
-from lodestone.agents import source_tools
-from lodestone.agents.presets import PRESETS
-from lodestone.agents.tools import TOOL_DEFS, TOOL_IMPLS, build_tools, run_tool
+from chitragupta.agents import source_tools
+from chitragupta.agents.presets import PRESETS
+from chitragupta.agents.tools import TOOL_DEFS, TOOL_IMPLS, build_tools, run_tool
 
 
 # ── calendar ─────────────────────────────────────────────────────────────

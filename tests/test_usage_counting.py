@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import pytest
 
-from lodestone.models.base import ChatResult, LLMProvider
-from lodestone.models.registry import _wrap_usage
+from chitragupta.models.base import ChatResult, LLMProvider
+from chitragupta.models.registry import _wrap_usage
 
 
 class _Recorder:
@@ -32,8 +32,8 @@ class _Recorder:
 @pytest.fixture
 def recorder(monkeypatch):
     rec = _Recorder()
-    import lodestone.usage
-    monkeypatch.setattr(lodestone.usage, "record", rec)
+    import chitragupta.usage
+    monkeypatch.setattr(chitragupta.usage, "record", rec)
     return rec
 
 
@@ -59,7 +59,7 @@ class _RealStreamProvider(LLMProvider):
         raise AssertionError("chat() must not be called on the streaming path")
 
     def stream(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
-        from lodestone.models.streaming import StreamEvent
+        from chitragupta.models.streaming import StreamEvent
         yield StreamEvent("text", "hel")
         yield StreamEvent("text", "lo")
         yield StreamEvent("done", result=ChatResult(
@@ -102,7 +102,7 @@ def test_a_stream_that_never_finishes_still_counts_what_it_spent(recorder):
         model = "h-1"
 
         def stream(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):
-            from lodestone.models.streaming import StreamEvent
+            from chitragupta.models.streaming import StreamEvent
             yield StreamEvent("text", "partial answer")
             # no done event — the turn was stopped
 
@@ -117,7 +117,7 @@ def test_the_turn_reports_what_it_spent(monkeypatch):
     """The number reaches TurnResult, so effort can be argued with."""
     from agent_harness import ScriptedProvider
 
-    from lodestone.agents import runtime
+    from chitragupta.agents import runtime
 
     class _Costed(ScriptedProvider):
         def chat(self, messages, *, tools=None, temperature=0.7, max_tokens=1500):

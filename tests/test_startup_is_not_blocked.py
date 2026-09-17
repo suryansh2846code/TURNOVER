@@ -26,8 +26,8 @@ import time
 
 import pytest
 
-import lodestone.core.embeddings as embeddings
-from lodestone.core.store import MemoryStore
+import chitragupta.core.embeddings as embeddings
+from chitragupta.core.store import MemoryStore
 
 
 @pytest.fixture
@@ -54,7 +54,7 @@ def counting_embedder(monkeypatch):
             return self.embed_one(q)
 
     monkeypatch.setattr(embeddings, "get_embedder", Fake)
-    monkeypatch.setattr("lodestone.core.store.get_embedder", Fake)
+    monkeypatch.setattr("chitragupta.core.store.get_embedder", Fake)
     return built
 
 
@@ -165,7 +165,7 @@ def _settings(provider: str) -> _Settings:
 def test_warming_does_not_block_the_caller(monkeypatch):
     """It runs during app startup, so it must return immediately — otherwise
     the fix has only moved the fifteen seconds somewhere else."""
-    monkeypatch.setattr("lodestone.config.get_settings",
+    monkeypatch.setattr("chitragupta.config.get_settings",
                         lambda: _settings("local"))
     slow = threading.Event()
 
@@ -185,7 +185,7 @@ def test_warming_does_not_block_the_caller(monkeypatch):
 
 def test_warming_is_skipped_for_the_offline_embedder(monkeypatch):
     """`hash` has nothing to load, so a thread for it is pure cost."""
-    monkeypatch.setattr("lodestone.config.get_settings", lambda: _settings("hash"))
+    monkeypatch.setattr("chitragupta.config.get_settings", lambda: _settings("hash"))
     called = []
     monkeypatch.setattr(embeddings, "get_embedder", lambda: called.append(1))
 
@@ -198,7 +198,7 @@ def test_warming_is_skipped_for_the_offline_embedder(monkeypatch):
 def test_a_failed_warm_up_does_not_take_the_app_down(monkeypatch):
     """It runs in the lifespan. A model that cannot load is a degraded app,
     never one that refuses to start."""
-    monkeypatch.setattr("lodestone.config.get_settings", lambda: _settings("local"))
+    monkeypatch.setattr("chitragupta.config.get_settings", lambda: _settings("local"))
 
     def broken():
         raise RuntimeError("no model on disk")

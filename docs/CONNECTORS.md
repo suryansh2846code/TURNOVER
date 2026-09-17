@@ -107,7 +107,7 @@ The whole point: **write this once, and every new source after it is config.**
 
 - [x] **2.1 — `connectors/mcp_source.py`.** A `Connector` subclass that spawns an
       MCP server over stdio and maps its tools onto `sync()`. The SDK is already
-      installed and `ClientSession` / `stdio_client` both import — Lodestone
+      installed and `ClientSession` / `stdio_client` both import — Chitragupta
       currently uses MCP in one direction only (serving its brain out via
       `mcp_server/`). This is the same library pointed the other way.
 - [x] **2.2 — Tool → memory mapping.** The hard part, and where this earns or
@@ -173,7 +173,7 @@ Connectors are read-only today by design (decision C1). MCP tools write.
 
 ## Phase 5 — What a server can answer, offered to the agent
 
-*`lodestone/connectors/mcp_tools.py`. The connector half only — how an agent
+*`chitragupta/connectors/mcp_tools.py`. The connector half only — how an agent
 loop presents these is Agents' call, and the contract between the two is
 `MCPToolRef` / `list_tools()` / `call_tool()` / `invalidate()`.*
 
@@ -223,7 +223,7 @@ Turnstone actually closes — **locally**, which is the entire point.
 - **No Composio, and no hosted broker.** Turnstone routes connectors through
   Composio's cloud (`TURNSTONE-TEARDOWN.md`: *"your data + tokens leave your
   machine… their local story is really cloud-brain"*), and that trade is exactly
-  the ground Lodestone owns. Adopting it deletes the winning rows from our own gap
+  the ground Chitragupta owns. Adopting it deletes the winning rows from our own gap
   analysis.
 - **No scraping, ever** — of LinkedIn or anything else. A ban lands on the
   *user's* account, not ours.

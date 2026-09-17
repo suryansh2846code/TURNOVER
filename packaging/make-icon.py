@@ -3,13 +3,13 @@
 
 The icon is generated rather than hand-drawn so it cannot drift from the brief
 it is supposed to embody. Every colour here is copied from `docs/DESIGN-BRIEF.md`
-and `lodestone/web/styles.css` — the night-sky ground, the cool-white particles,
+and `chitragupta/web/styles.css` — the night-sky ground, the cool-white particles,
 and the one warm gold pole-star that is the app's single accent.
 
 The mark is the same rotated square (`.brand-mark` in styles.css) the sidebar
-wears, with a constellation inside it and the pole star on its north vertex.
-That is the whole brand hook in one shape: *lodestone, the stone that points
-north*.
+wears, with a constellation inside it and one gold star at its top vertex. That
+is the brand hook in a shape: a field of scattered things, the lines drawn
+between them, and a single bright point for the one being written down.
 
 Two things make it survive being shrunk to 16px in a Finder list:
 

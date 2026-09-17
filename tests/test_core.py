@@ -2,14 +2,14 @@
 import os
 import tempfile
 
-os.environ.setdefault("LODESTONE_EMBEDDING_PROVIDER", "hash")
-os.environ.setdefault("LODESTONE_MODEL_PROVIDER", "mock")
-os.environ["LODESTONE_HOME"] = tempfile.mkdtemp()
+os.environ.setdefault("CHITRAGUPTA_EMBEDDING_PROVIDER", "hash")
+os.environ.setdefault("CHITRAGUPTA_MODEL_PROVIDER", "mock")
+os.environ["CHITRAGUPTA_HOME"] = tempfile.mkdtemp()
 
-from lodestone.agents import list_agents, run_turn
-from lodestone.brain import Brain
-from lodestone.core.store import MemoryStore
-from lodestone.models import Message, Tool, get_provider
+from chitragupta.agents import list_agents, run_turn
+from chitragupta.brain import Brain
+from chitragupta.core.store import MemoryStore
+from chitragupta.models import Message, Tool, get_provider
 
 
 def _brain():
@@ -43,7 +43,7 @@ def test_nothing_is_pre_added_and_the_library_is_where_a_team_comes_from():
     A fresh install is not empty: onboarding builds the user their own lead
     agent. What must be true is that no *template* arrives unasked.
     """
-    from lodestone.agents.library import BY_ID, DEFAULT_ROSTER
+    from chitragupta.agents.library import BY_ID, DEFAULT_ROSTER
 
     assert DEFAULT_ROSTER == [], "a template is still being pre-added"
     assert len(BY_ID) >= 8, "the library people choose from is thin"
@@ -73,7 +73,7 @@ def test_task_store_due_parsing():
     import tempfile
     from datetime import date, timedelta
 
-    from lodestone.tasks import TaskStore
+    from chitragupta.tasks import TaskStore
     ts = TaskStore(db_path=tempfile.mktemp(suffix=".db"))
     t = ts.add("finish the launch page tomorrow")
     assert t["title"] == "finish the launch page"          # date phrase stripped

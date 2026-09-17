@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parent.parent
-APP_JS = ROOT / "lodestone/web/app.js"
+APP_JS = ROOT / "chitragupta/web/app.js"
 HARNESS = ROOT / "tests/js/render_provider_box.mjs"
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None,
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None,
 
 
 def _render_all() -> dict:
-    from lodestone.models.registry import get_model_catalog
+    from chitragupta.models.registry import get_model_catalog
 
     proc = subprocess.run(
         ["node", str(HARNESS), str(APP_JS)],
@@ -58,7 +58,7 @@ def test_every_provider_renders_visible_content(rendered):
 
 # ── the card each provider should get, derived from its capabilities ─────
 def test_key_only_providers_get_no_account_or_signin_card(rendered):
-    from lodestone.models.capabilities import get_capabilities
+    from chitragupta.models.capabilities import get_capabilities
 
     for pid, r in rendered.items():
         caps = get_capabilities(pid)
@@ -69,7 +69,7 @@ def test_key_only_providers_get_no_account_or_signin_card(rendered):
 
 
 def test_signin_button_appears_only_where_a_sign_in_exists(rendered):
-    from lodestone.models.capabilities import get_capabilities
+    from chitragupta.models.capabilities import get_capabilities
 
     for pid, r in rendered.items():
         caps = get_capabilities(pid)
@@ -93,7 +93,7 @@ def test_openrouter_is_key_only(rendered):
 
 def test_a_disconnected_provider_shows_no_connected_badge(rendered):
     """Nothing is connected in a fresh catalog, so nothing may claim to be."""
-    from lodestone.models.registry import get_model_catalog
+    from chitragupta.models.registry import get_model_catalog
 
     catalog = {p["id"]: p for p in get_model_catalog()}
     for pid, r in rendered.items():
@@ -109,7 +109,7 @@ CLICK_HARNESS = ROOT / "tests/js/click_signin.mjs"
 
 @pytest.fixture(scope="module")
 def catalog_json():
-    from lodestone.models.registry import get_model_catalog
+    from chitragupta.models.registry import get_model_catalog
 
     return get_model_catalog()
 
@@ -123,8 +123,8 @@ def _click_signin(provider: str, catalog=None, auth_start=None) -> dict:
     back empty — which is exactly the bug that made "Sign in with Cursor" do
     nothing. Asserting on source order does not catch that.
     """
-    from lodestone.models.auth_flows import get_flow
-    from lodestone.models.registry import get_model_catalog
+    from chitragupta.models.auth_flows import get_flow
+    from chitragupta.models.registry import get_model_catalog
 
     payload = json.dumps({
         "catalog": catalog if catalog is not None else get_model_catalog(),

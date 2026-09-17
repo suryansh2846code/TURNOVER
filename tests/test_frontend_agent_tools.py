@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parent.parent
-WEB = ROOT / "lodestone/web"
+WEB = ROOT / "chitragupta/web"
 
 #: One word each, and a heading — the shape `describe_tools()` now returns.
 BUILTIN = [
@@ -191,7 +191,7 @@ def test_an_unreachable_connector_states_the_reason(full):
 
 def test_an_unreachable_connector_is_listed_at_all(full):
     """Contributing no tools, it would otherwise be absent — and absent reads
-    as "Lodestone lost it" rather than "sign in again"."""
+    as "Chitragupta lost it" rather than "sign in again"."""
     assert any(g["name"] == "Linear" for g in full["groups"])
 
 

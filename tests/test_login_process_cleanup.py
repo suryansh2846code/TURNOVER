@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-from lodestone.models import login_processes
+from chitragupta.models import login_processes
 
 
 @pytest.fixture(autouse=True)

@@ -76,7 +76,7 @@ underneath them.
 ## "Default AI for new agents" is not a default
 
 `#defProvider`/`#defModel` call `setActiveModel`, which writes the same
-`lodestone_provider` / `lodestone_model` keys every turn reads — so it changes
+`chitragupta_provider` / `chitragupta_model` keys every turn reads — so it changes
 the model for the conversation you are already in. `#defEffort` is likewise
 global, not per-new-agent.
 

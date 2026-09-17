@@ -8,7 +8,7 @@ that had just exited read as taken, even though uvicorn would have bound it.
 """
 import socket
 
-from lodestone.desktop import _reserve_port
+from chitragupta.desktop import _reserve_port
 
 HOST = "127.0.0.1"
 

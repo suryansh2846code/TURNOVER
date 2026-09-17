@@ -1,9 +1,13 @@
-# ◆ Lodestone
+# ◆ Chitragupta
 
 **The local-first AI workspace where your agents already know you.**
 
-Lodestone is an open competitor to [Turnstone](https://myturnstone.ai). Connect
-your apps and folders; Lodestone turns them into a **continuously-updated
+> **Chitragupta** — in Hindu tradition, the scribe who keeps the record of what
+> each person has actually done. Fitting for an app whose whole job is to
+> remember your work and always be able to say where a fact came from.
+
+Chitragupta is an open competitor to [Turnstone](https://myturnstone.ai). Connect
+your apps and folders; Chitragupta turns them into a **continuously-updated
 knowledge-graph brain** on your own machine. Then spin up specialized **agents**
 — Inbox, Launch, Research, Personal — that all share that one brain and run on
 **any model you already pay for**. Stop re-explaining yourself to AI.
@@ -12,7 +16,7 @@ knowledge-graph brain** on your own machine. Then spin up specialized **agents**
 - 🤖 **Four agents, one brain** — Inbox · Launch · Research · Personal, each domain-scoped, each remembering its own work.
 - 🔌 **Bring your own model** — subscription gateway · Claude · OpenAI · OpenRouter · Ollama. Swap freely.
 - 🛠️ **Agents that act** — tool-using loop: search the brain, search the web, pull live Gmail, remember new facts.
-- 🔒 **Local-first** — everything in `~/Library/Lodestone`, no cloud copy, no telemetry.
+- 🔒 **Local-first** — everything in `~/Library/Chitragupta`, no cloud copy, no telemetry.
 - ⚡ **Runs day one** — offline `mock` model + `hash` embeddings mean zero keys required to try it.
 
 > 📖 **Changing the code?** Start with
@@ -60,7 +64,7 @@ knowledge-graph brain** on your own machine. Then spin up specialized **agents**
 
 Agents are the core primitive. Each runs a **model + tool-use loop**: the model
 decides to call tools (`search_brain`, `web_search`, `gmail_search`, `remember`),
-Lodestone executes them against the shared brain and live connectors, and the
+Chitragupta executes them against the shared brain and live connectors, and the
 model answers — already knowing you.
 
 ## Install
@@ -74,7 +78,7 @@ uv pip install -e ".[all]"              # + real embeddings & all connector SDKs
 
 ```bash
 curl -LsSf https://raw.githubusercontent.com/suryansh2846code/TURNOVER/main/scripts/install.sh | bash
-cd ~/lodestone && .venv/bin/lodestone app
+cd ~/chitragupta && .venv/bin/chitragupta app
 ```
 Local-first connectors (Files, Apple Mail, Apple Calendar, iMessage) need no
 sign-in — just Full Disk Access.
@@ -83,24 +87,24 @@ sign-in — just Full Disk Access.
 
 ```bash
 uv pip install -e ".[desktop]"           # native-window deps (pywebview)
-lodestone app                            # opens Lodestone in a native window
-bash scripts/build-macos-app.sh          # → ~/Applications/Lodestone.app (double-click)
+chitragupta app                            # opens Chitragupta in a native window
+bash scripts/build-macos-app.sh          # → ~/Applications/Chitragupta.app (double-click)
 ```
 
 ## Quickstart (browser)
 
 ```bash
-lodestone serve                          # workspace at http://127.0.0.1:8787
-lodestone agents                         # list Inbox/Launch/Research/Personal
-lodestone ingest --text "I build for Indian SMBs on Cloudflare Workers."
-lodestone chat research "what do I build?"
-lodestone stats                          # brain + knowledge-graph stats
-lodestone providers                      # model backends & readiness
+chitragupta serve                          # workspace at http://127.0.0.1:8787
+chitragupta agents                         # list Inbox/Launch/Research/Personal
+chitragupta ingest --text "I build for Indian SMBs on Cloudflare Workers."
+chitragupta chat research "what do I build?"
+chitragupta stats                          # brain + knowledge-graph stats
+chitragupta providers                      # model backends & readiness
 ```
 
 ## Bring your own model
 
-Set `LODESTONE_MODEL_PROVIDER` (and the matching key) in `.env`:
+Set `CHITRAGUPTA_MODEL_PROVIDER` (and the matching key) in `.env`:
 
 | provider | how | key |
 |----------|-----|-----|
@@ -109,10 +113,10 @@ Set `LODESTONE_MODEL_PROVIDER` (and the matching key) in `.env`:
 | `openai` | GPT | `OPENAI_API_KEY` |
 | `openrouter` | hundreds of models | `OPENROUTER_API_KEY` |
 | `ollama` | free local models | none (Ollama on :11434) |
-| `subscription` | your paid ChatGPT/Claude/Cursor session via a local OpenAI-compatible gateway | `LODESTONE_SUBSCRIPTION_BASE_URL` |
+| `subscription` | your paid ChatGPT/Claude/Cursor session via a local OpenAI-compatible gateway | `CHITRAGUPTA_SUBSCRIPTION_BASE_URL` |
 
 > The `subscription` path is the hard, ToS-sensitive route Turnstone advertises.
-> Lodestone treats it as a pluggable gateway (point it at a local subscription
+> Chitragupta treats it as a pluggable gateway (point it at a local subscription
 > proxy) rather than reverse-engineering each vendor's private auth.
 
 ## The brain

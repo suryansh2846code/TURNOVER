@@ -14,10 +14,10 @@ import pytest
 from agent_harness import ScriptedProvider
 from fastapi.testclient import TestClient
 
-from lodestone.agents import runtime
-from lodestone.api.app import app
-from lodestone.models.base import ChatResult, ToolCall
-from lodestone.models.streaming import anthropic_events, from_result, openai_events, sse_payloads
+from chitragupta.agents import runtime
+from chitragupta.api.app import app
+from chitragupta.models.base import ChatResult, ToolCall
+from chitragupta.models.streaming import anthropic_events, from_result, openai_events, sse_payloads
 
 client = TestClient(app)
 
@@ -99,7 +99,7 @@ def test_sse_ignores_the_done_sentinel_and_blank_lines():
 def test_every_registered_provider_can_stream():
     """The seam exists so callers never branch on whether a backend supports
     it. A provider that cannot really stream still yields a valid stream."""
-    from lodestone.models.registry import _REGISTRY
+    from chitragupta.models.registry import _REGISTRY
 
     for name, cls in _REGISTRY.items():
         assert hasattr(cls, "stream"), name
@@ -114,8 +114,8 @@ def test_the_fallback_is_a_valid_stream():
 
 
 def test_the_offline_model_streams_so_the_path_can_be_exercised_with_no_keys():
-    from lodestone.models import get_provider
-    from lodestone.models.base import Message
+    from chitragupta.models import get_provider
+    from chitragupta.models.base import Message
 
     provider = get_provider("mock", "mock-1")
     out = list(provider.stream([Message(role="user", content="a b c d e f g h")]))
@@ -130,15 +130,15 @@ def test_the_offline_model_streams_so_the_path_can_be_exercised_with_no_keys():
 def scripted(monkeypatch):
     def make(script, **kw):
         provider = ScriptedProvider(script=list(script), **kw)
-        monkeypatch.setattr("lodestone.agents.runtime.get_provider", lambda p, m: provider)
-        monkeypatch.setattr("lodestone.agents.runtime.resolve_usable_model",
+        monkeypatch.setattr("chitragupta.agents.runtime.get_provider", lambda p, m: provider)
+        monkeypatch.setattr("chitragupta.agents.runtime.resolve_usable_model",
                             lambda p, m: (m or "scripted-1", None))
         return provider
     return make
 
 
 def test_a_turn_reports_tokens_tools_and_a_result(scripted, monkeypatch):
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
 
     monkeypatch.setitem(tools_mod.TOOL_IMPLS, "list_entities", lambda **kw: "two entities")
     scripted([[("list_entities", {"limit": 3})], "Here is the answer."])
@@ -158,7 +158,7 @@ def test_a_turn_reports_tokens_tools_and_a_result(scripted, monkeypatch):
 def test_watching_a_turn_does_not_change_it(scripted, monkeypatch):
     """One loop, two viewings. If the streamed turn could differ from the plain
     one, every bug would need reproducing twice."""
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
 
     monkeypatch.setitem(tools_mod.TOOL_IMPLS, "list_entities", lambda **kw: "two")
     script = [[("list_entities", {"limit": 3})], "Same answer."]

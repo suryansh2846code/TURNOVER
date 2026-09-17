@@ -48,7 +48,7 @@ LOOKED_SAFE = [
 
 @pytest.mark.parametrize("name", LOOKED_SAFE)
 def test_an_unrecognised_verb_is_treated_as_a_write(name):
-    from lodestone.connectors.mcp_source import classify_tools
+    from chitragupta.connectors.mcp_source import classify_tools
 
     required = [] if name in ("reset", "drop_all", "disconnect", "clear_all") else ["id"]
     kinds = classify_tools([tool(name, required)])
@@ -65,7 +65,7 @@ def test_an_unrecognised_verb_is_treated_as_a_write(name):
 def test_a_recognised_read_stays_callable(name):
     """Failing closed is only acceptable if ordinary reads still work — every
     read needing a tap would make the category useless."""
-    from lodestone.connectors.mcp_source import classify_tools
+    from chitragupta.connectors.mcp_source import classify_tools
 
     kinds = classify_tools([tool(name, ["q"])])
     assert name in kinds.readable, f"{name} should not need an approval card"
@@ -80,7 +80,7 @@ def test_a_listing_named_for_its_contents_is_a_read(name):
     `recent_items` is deliberately not here: `recent` is a read stem, so it is
     a read on the stronger rule above and stays one with arguments.
     """
-    from lodestone.connectors.mcp_source import classify_tools
+    from chitragupta.connectors.mcp_source import classify_tools
 
     assert name in classify_tools([tool(name)]).readable
     assert name in classify_tools([tool(name, ["target"])]).write
@@ -88,7 +88,7 @@ def test_a_listing_named_for_its_contents_is_a_read(name):
 
 def test_the_servers_own_declaration_wins_over_the_name():
     """A hint is evidence; a name is a guess. `readOnlyHint` beats both stems."""
-    from lodestone.connectors.mcp_source import classify_tools
+    from chitragupta.connectors.mcp_source import classify_tools
 
     kinds = classify_tools([tool("merge_pull_request", ["id"], read_only=True)])
     assert "merge_pull_request" in kinds.readable
@@ -101,7 +101,7 @@ def test_a_bulk_hint_never_matches_a_substring():
     """`clear_all` contains "all" and takes no arguments. Matching bulk hints as
     substrings put it in the read pile, which is a destructive call nobody saw
     coming."""
-    from lodestone.connectors.mcp_source import classify_tools
+    from chitragupta.connectors.mcp_source import classify_tools
 
     assert "clear_all" in classify_tools([tool("clear_all")]).write
 
@@ -114,7 +114,7 @@ def test_explain_sees_through_an_exception_group():
     receives an `ExceptionGroup` whose str() is "unhandled errors in a
     TaskGroup". Matching on that text meant a missing binary, a revoked token
     and a crashed server all produced the same fallback sentence."""
-    from lodestone.connectors.mcp_errors import explain
+    from chitragupta.connectors.mcp_errors import explain
 
     wrapped = BaseExceptionGroup(
         "unhandled errors in a TaskGroup",
@@ -131,7 +131,7 @@ def test_a_cancellation_never_explains_a_failure():
     cancellation would tell the user nothing about what actually broke."""
     import asyncio
 
-    from lodestone.connectors.mcp_errors import explain
+    from chitragupta.connectors.mcp_errors import explain
 
     group = BaseExceptionGroup(
         "g", [asyncio.CancelledError(), PermissionError("operation not permitted")])
@@ -144,7 +144,7 @@ def test_a_cancellation_never_explains_a_failure():
 def test_a_connectors_key_never_lands_in_the_spec_file(isolated_home):
     """`mcp_servers.json` is returned verbatim by `GET /api/connectors`, so a
     token stored in it is a credential on disk *and* on the wire."""
-    from lodestone.connectors.mcp_source import (
+    from chitragupta.connectors.mcp_source import (
         MCPServerSpec,
         get_server,
         set_server_env,
@@ -167,7 +167,7 @@ def test_a_legacy_plaintext_key_is_migrated_on_read(isolated_home):
     """An existing install is repaired by opening Connectors, with nothing for
     the user to do — the alternative is a plaintext token sitting there until
     somebody notices."""
-    from lodestone.connectors.mcp_source import get_server
+    from chitragupta.connectors.mcp_source import get_server
 
     (isolated_home / "mcp_servers.json").write_text(json.dumps({
         "old": {"id": "old", "name": "Old", "command": "x",
@@ -182,8 +182,8 @@ def test_a_legacy_plaintext_key_is_migrated_on_read(isolated_home):
 def test_removing_a_connector_forgets_its_key(isolated_home):
     """Re-adding a connector must not silently reuse access the user believed
     they had revoked."""
-    from lodestone.config import get_settings
-    from lodestone.connectors.mcp_source import (
+    from chitragupta.config import get_settings
+    from chitragupta.connectors.mcp_source import (
         MCPServerSpec,
         delete_server,
         secret_key,
@@ -204,7 +204,7 @@ def test_removing_a_connector_forgets_its_key(isolated_home):
 def test_an_agent_can_propose_a_connector_action():
     """The whole approval path existed and was unreachable: `parse_actions` had
     no `mcp_action` arm, so a model emitting the tag produced nothing."""
-    from lodestone.actions import parse_actions
+    from chitragupta.actions import parse_actions
 
     actions = parse_actions(
         'Drafted it.\n<action type="mcp_action" server="linear" '
@@ -221,7 +221,7 @@ def test_an_agent_can_propose_a_connector_action():
 def test_a_fenced_argument_block_is_still_understood():
     """Models wrap JSON in a code fence about half the time, and a silently
     refused action teaches the user nothing."""
-    from lodestone.actions import parse_actions
+    from chitragupta.actions import parse_actions
 
     actions = parse_actions(
         '<action type="mcp_action" server="l" tool="t">```json\n'
@@ -232,7 +232,7 @@ def test_a_fenced_argument_block_is_still_understood():
 def test_malformed_arguments_are_dropped_rather_than_guessed():
     """Half-parsing a model's arguments and running the result is how an action
     does something nobody proposed."""
-    from lodestone.actions import parse_actions
+    from chitragupta.actions import parse_actions
 
     assert parse_actions(
         '<action type="mcp_action" server="l" tool="t">not json</action>') == []
@@ -241,7 +241,7 @@ def test_malformed_arguments_are_dropped_rather_than_guessed():
 def test_a_connector_write_still_needs_a_tap_when_nobody_is_watching():
     """Nothing about making writes proposable may let an unattended routine
     take one."""
-    from lodestone.agents.permissions import NEVER_UNATTENDED, check
+    from chitragupta.agents.permissions import NEVER_UNATTENDED, check
 
     assert "mcp_action" in NEVER_UNATTENDED
     verdict = check("mcp_action", {"server_id": "x", "tool": "delete_everything"})
@@ -252,7 +252,7 @@ def test_a_connector_write_still_needs_a_tap_when_nobody_is_watching():
 def test_the_confirmation_card_shows_what_will_be_written():
     """"Run write_file on a folder" is not enough to judge. Which file, and
     with what in it, is the entire decision."""
-    from lodestone.agents.approvals import describe
+    from chitragupta.agents.approvals import describe
 
     summary = describe("mcp_action", {
         "server_id": "files", "connector": "A folder on this Mac",
@@ -270,7 +270,7 @@ def test_the_confirmation_card_shows_what_will_be_written():
 def test_every_catalog_entry_is_addressable():
     """The catalog this replaces listed a package that never existed on npm and
     two that were deprecated upstream. Every row of it failed."""
-    from lodestone.connectors.mcp_catalog import CATALOG
+    from chitragupta.connectors.mcp_catalog import CATALOG
 
     assert CATALOG, "a catalog with nothing in it is a browser with no connectors"
     for entry in CATALOG:
@@ -286,7 +286,7 @@ def test_a_catalog_entry_can_ask_for_a_positional_setting():
     """The filesystem server takes its folder as an argument, and the catalog
     could only describe environment variables — so it was offered with no way
     to say which folder, and exited on launch every time."""
-    from lodestone.connectors.mcp_catalog import BY_ID
+    from chitragupta.connectors.mcp_catalog import BY_ID
 
     entry = BY_ID["filesystem"]
     assert entry.needs_args, "this entry cannot work without one"
@@ -298,7 +298,7 @@ def test_a_chosen_folder_is_resolved_before_it_is_stored():
     """macOS makes /tmp a symlink to /private/tmp, and a server that realpaths
     its allowed directory then rejects every write under the name the user
     typed."""
-    from lodestone.connectors.mcp_catalog import BY_ID
+    from chitragupta.connectors.mcp_catalog import BY_ID
 
     entry = BY_ID["filesystem"]
     spec = entry.to_spec(args={"root": "/tmp"})
@@ -307,7 +307,7 @@ def test_a_chosen_folder_is_resolved_before_it_is_stored():
 
 def test_a_setup_field_never_makes_a_person_read_a_variable_name():
     """`SLACK_BOT_TOKEN` is an internal. A label is what a person reads."""
-    from lodestone.connectors.mcp_catalog import CATALOG
+    from chitragupta.connectors.mcp_catalog import CATALOG
 
     for entry in CATALOG:
         for value in (*entry.needs_env, *entry.needs_args):
@@ -322,13 +322,13 @@ def test_a_missing_runtime_is_named_rather_than_launched():
     """A `.app` opened from the Dock gets a stripped PATH, so a perfectly well
     installed Node is invisible to it. Resolving up front is what tells "not
     installed" apart from "installed where the Dock cannot see"."""
-    from lodestone.connectors.mcp_source import MCPServerSpec, resolve_command
+    from chitragupta.connectors.mcp_source import MCPServerSpec, resolve_command
 
     assert resolve_command("definitely-not-a-real-binary") is None
     assert resolve_command(sys.executable) == sys.executable
 
     spec = MCPServerSpec(id="x", name="Thing", command="definitely-not-a-real-binary")
-    from lodestone.connectors.mcp_source import MCPConnector
+    from chitragupta.connectors.mcp_source import MCPConnector
 
     ready, reason = MCPConnector(spec).is_configured()
     assert not ready
@@ -341,7 +341,7 @@ def test_a_probe_never_opens_a_browser(monkeypatch):
     expired would hijack the screen while the user was doing something else."""
     import webbrowser
 
-    from lodestone.connectors import mcp_auth
+    from chitragupta.connectors import mcp_auth
 
     opened = []
     monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url))
@@ -355,7 +355,7 @@ def test_a_probe_never_opens_a_browser(monkeypatch):
 def test_a_server_that_exits_at_startup_says_what_to_do():
     """"Connection closed" is what a server does when it is missing a setting —
     a different problem from "not installed", with a different next step."""
-    from lodestone.connectors.mcp_errors import explain
+    from chitragupta.connectors.mcp_errors import explain
 
     message = explain(RuntimeError("Connection closed"), "A folder on this Mac")
     assert "missing a setting" in message
@@ -367,7 +367,7 @@ def test_a_tool_list_the_sdk_rejects_is_still_usable():
     Strict validation turned every one of those into "did not respond as
     expected": a working connector reported broken over a field we never read.
     """
-    from lodestone.connectors.mcp_source import _tolerant_tools, classify_tools
+    from chitragupta.connectors.mcp_source import _tolerant_tools, classify_tools
 
     tools = _tolerant_tools({"tools": [
         {"name": "read_file", "description": "Read one file.",
@@ -392,7 +392,7 @@ def test_narrowing_a_connector_takes_effect_on_the_next_turn(isolated_home):
     """`allowed_tools` was defined, serialised, honoured and tested — and had no
     writer outside the test suite, so on every real install it was empty and
     `permits()` returned True for everything."""
-    from lodestone.connectors.mcp_source import (
+    from chitragupta.connectors.mcp_source import (
         MCPServerSpec,
         get_server,
         upsert_server,
@@ -417,8 +417,8 @@ def _prompt(tools, labels):
     """`build()` with a fixed set of connector labels behind the sentinel."""
     from types import SimpleNamespace
 
-    import lodestone.connectors.mcp_tools as supplier
-    from lodestone.agents import prompt as mod
+    import chitragupta.connectors.mcp_tools as supplier
+    from chitragupta.agents import prompt as mod
 
     refs = [SimpleNamespace(server_label=name, server_id=name.lower(),
                             tool=f"{name.lower()}-search", writes=False,
@@ -442,7 +442,7 @@ def test_an_agent_with_a_live_connector_is_told_to_ask_it():
     checking it, because it was written before a connector could be asked
     anything live.
     """
-    from lodestone.agents.mcp_tools import SENTINEL
+    from chitragupta.agents.mcp_tools import SENTINEL
 
     text = _prompt(["search_brain", SENTINEL], ["Notion"])
 
@@ -466,7 +466,7 @@ def test_the_prompt_never_forbids_checking_a_connector():
     """`You do NOT connect to, authorize, or 'check' Gmail/Google/Notion
     yourself` shipped as an absolute, and became false the moment a connector
     could answer live."""
-    from lodestone.agents.mcp_tools import SENTINEL
+    from chitragupta.agents.mcp_tools import SENTINEL
 
     for tools in (["search_brain"], ["search_brain", SENTINEL]):
         text = _prompt(tools, ["Notion"])
@@ -484,7 +484,7 @@ def test_every_entry_sits_on_a_named_shelf():
     the UI cannot disagree about where something belongs — and the order is
     served, not hardcoded, for the same reason.
     """
-    from lodestone.connectors.mcp_catalog import CATALOG, CATEGORIES
+    from chitragupta.connectors.mcp_catalog import CATALOG, CATEGORIES
 
     for entry in CATALOG:
         assert entry.category in CATEGORIES, (
@@ -494,7 +494,7 @@ def test_every_entry_sits_on_a_named_shelf():
 
 def test_no_shelf_is_empty():
     """A heading with nothing under it is a promise the catalog does not keep."""
-    from lodestone.connectors.mcp_catalog import CATALOG, CATEGORIES
+    from chitragupta.connectors.mcp_catalog import CATALOG, CATEGORIES
 
     used = {e.category for e in CATALOG}
     assert not (set(CATEGORIES) - used), (
@@ -511,7 +511,7 @@ def test_every_remote_entry_names_a_reachable_endpoint():
     import urllib.error
     import urllib.request
 
-    from lodestone.connectors.mcp_catalog import CATALOG
+    from chitragupta.connectors.mcp_catalog import CATALOG
 
     for entry in CATALOG:
         if not entry.is_remote:
@@ -533,7 +533,7 @@ def test_asking_a_question_is_never_an_action():
     would have put an approval card in front of every question the connector
     exists to answer. Failing closed must not mean treating curiosity as an
     act."""
-    from lodestone.connectors.mcp_source import classify_tools
+    from chitragupta.connectors.mcp_source import classify_tools
 
     kinds = classify_tools([tool(n, ["q"]) for n in
                             ("ask_question", "analyze_costs", "explain_error",

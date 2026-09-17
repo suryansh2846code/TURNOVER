@@ -11,13 +11,13 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from lodestone.models.anthropic import AnthropicProvider
-from lodestone.models.base import Message
-from lodestone.models.claude_code import ClaudeCodeProvider
-from lodestone.models.cursor import CursorProvider
-from lodestone.models.errors import ErrorKind, classify_cli, classify_http, extract_detail, redact
-from lodestone.models.openai_compat import OllamaProvider, OpenAICompatProvider, OpenRouterProvider
-from lodestone.models.xai import XAIProvider
+from chitragupta.models.anthropic import AnthropicProvider
+from chitragupta.models.base import Message
+from chitragupta.models.claude_code import ClaudeCodeProvider
+from chitragupta.models.cursor import CursorProvider
+from chitragupta.models.errors import ErrorKind, classify_cli, classify_http, extract_detail, redact
+from chitragupta.models.openai_compat import OllamaProvider, OpenAICompatProvider, OpenRouterProvider
+from chitragupta.models.xai import XAIProvider
 
 HELLO = [Message(role="user", content="hi")]
 
@@ -155,8 +155,8 @@ def test_ollama_down_names_the_fix():
 
 
 def test_xai_billing_explains_the_subscription_split():
-    with patch("lodestone.models.xai_auth.get_xai_access_token", return_value="tok"), \
-         patch("lodestone.models.base._saved_key", return_value=""):
+    with patch("chitragupta.models.xai_auth.get_xai_access_token", return_value="tok"), \
+         patch("chitragupta.models.base._saved_key", return_value=""):
         p = XAIProvider(api_key=None)
     p.api_key = "tok"
     with patch("httpx.post", return_value=_resp(402, '{"code":"spending-limit"}')):
@@ -185,8 +185,8 @@ def test_cli_message_does_not_duplicate_the_cli_suffix():
 
 
 @pytest.mark.parametrize("make,finder", [
-    (ClaudeCodeProvider, "lodestone.models.claude_code.find_claude"),
-    (CursorProvider, "lodestone.models.cursor.find_cursor_cli"),
+    (ClaudeCodeProvider, "chitragupta.models.claude_code.find_claude"),
+    (CursorProvider, "chitragupta.models.cursor.find_cursor_cli"),
 ])
 def test_cli_providers_return_replies_on_failure(make, finder):
     with patch(finder, return_value="/usr/bin/x"), \
@@ -199,8 +199,8 @@ def test_cli_providers_return_replies_on_failure(make, finder):
 
 
 def test_model_not_found_suggests_models_the_user_can_run():
-    from lodestone.models import discovery, entitlements
-    from lodestone.models.discovery import DiscoveredModel, clear_model_cache
+    from chitragupta.models import discovery, entitlements
+    from chitragupta.models.discovery import DiscoveredModel, clear_model_cache
 
     clear_model_cache()
     with patch.object(discovery, "_discover_raw",
@@ -216,9 +216,9 @@ def test_model_not_found_suggests_models_the_user_can_run():
 
 # ── Gemini uses the shared taxonomy but keeps its own wording ────────────
 def _gemini(body, status):
-    from lodestone.models.gemini import GeminiProvider
+    from chitragupta.models.gemini import GeminiProvider
 
-    with patch("lodestone.models.gemini.resolve_gemini_credentials") as cred, \
+    with patch("chitragupta.models.gemini.resolve_gemini_credentials") as cred, \
          patch("httpx.post", return_value=_resp(status, body)):
         cred.return_value.valid = True
         cred.return_value.secret = "AIzaTESTKEY12345678901234"
@@ -259,7 +259,7 @@ def test_every_http_error_handler_uses_the_shared_classifier():
     import re
     from pathlib import Path
 
-    models = Path(__file__).parent.parent / "lodestone/models"
+    models = Path(__file__).parent.parent / "chitragupta/models"
     offenders = []
     for f in sorted(models.glob("*.py")):
         if f.name == "errors.py":
@@ -275,7 +275,7 @@ def test_every_http_error_handler_uses_the_shared_classifier():
 
 def test_error_kinds_are_exhaustively_messaged():
     """Every kind must produce a non-empty, actionable message."""
-    from lodestone.models.errors import classify_http
+    from chitragupta.models.errors import classify_http
 
     seen = set()
     for status in (400, 401, 402, 403, 404, 413, 429, 500, 503):

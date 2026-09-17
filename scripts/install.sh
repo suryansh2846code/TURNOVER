@@ -1,13 +1,13 @@
 #!/bin/bash
-# Lodestone — one-command install for technical testers (macOS).
+# Chitragupta — one-command install for technical testers (macOS).
 #   curl -LsSf https://raw.githubusercontent.com/suryansh2846code/TURNOVER/main/scripts/install.sh | bash
 # or, after cloning:  bash scripts/install.sh
 set -e
 
 REPO="https://github.com/suryansh2846code/TURNOVER.git"
-DIR="${LODESTONE_DIR:-$HOME/lodestone}"
+DIR="${CHITRAGUPTA_DIR:-$HOME/chitragupta}"
 
-echo "◆ Installing Lodestone into $DIR"
+echo "◆ Installing Chitragupta into $DIR"
 
 # 1. uv (fast Python package manager) — installs Python too if needed
 if ! command -v uv >/dev/null 2>&1; then
@@ -33,18 +33,18 @@ uv pip install -e ".[desktop,gmail,gdrive,notion]"
 
 cat <<EOF
 
-✓ Lodestone installed.
+✓ Chitragupta installed.
 
 Run it as a desktop app:
-    cd "$DIR" && .venv/bin/lodestone app
+    cd "$DIR" && .venv/bin/chitragupta app
 
 Or in a browser:
-    cd "$DIR" && .venv/bin/lodestone serve      # → http://127.0.0.1:8787
+    cd "$DIR" && .venv/bin/chitragupta serve      # → http://127.0.0.1:8787
 
 Connectors that need NO sign-in (local-first): Local Files, Apple Mail,
 Apple Calendar, iMessage  (grant Full Disk Access in System Settings).
 
 Optional — sharper semantic recall (downloads ~a few hundred MB of PyTorch):
     uv pip install -e ".[local-embeddings]"
-    echo "LODESTONE_EMBEDDING_PROVIDER=local" >> .env
+    echo "CHITRAGUPTA_EMBEDDING_PROVIDER=local" >> .env
 EOF

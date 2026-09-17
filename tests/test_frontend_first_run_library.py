@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parent.parent
-WEB = ROOT / "lodestone/web"
+WEB = ROOT / "chitragupta/web"
 
 
 def _boot(onboarded: bool, seen: bool) -> dict:
@@ -53,7 +53,7 @@ def test_an_empty_rail_explains_itself():
 
 
 @pytest.mark.parametrize("gone", ["createLead", "maybeWelcome", "agentWelcome",
-                                  "lodestone_lead_agent"])
+                                  "chitragupta_lead_agent"])
 def test_the_lead_agent_flow_is_gone_from_the_frontend(gone):
     """It was a second definition of Chief of Staff. Leaving half of it behind
     is how a dead path gets called again by accident."""

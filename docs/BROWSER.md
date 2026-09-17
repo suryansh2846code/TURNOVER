@@ -1,13 +1,29 @@
-# A browser inside Lodestone
+# A browser inside Chitragupta
 
-> **Status: a plan, not a build.** Nothing in this document is implemented. It
-> exists so the first commit starts from a decision rather than a prototype.
+> **Status: steps 1–3 are built and drive a real browser. Reading only.** The rest of
+> this document is the plan it was built from; §8 records what the building
+> changed, because three of the decisions below did not survive contact and
+> pretending otherwise would make this file the wrong thing to read next.
+>
+> | | |
+> |---|---|
+> | `browser/origins.py` | **built** — which sites, for what. The boundary |
+> | `browser/page.py` | **built** — bounded, ref-based, quarantined page text |
+> | `browser/session.py` | **built** — navigation, and the landing check |
+> | `agents/browse_tools.py` | **built** — `browse_open` / `read` / `find` / `sites` |
+> | `browser/chromium.py` | **built** — profile, the one-time download, reaping |
+> | `browser/driver.py` | **built** — real Chromium, ARIA snapshots, own thread |
+> | `api/routes/browser.py` + `web/browser.js` | **built** — the list, on the Connectors screen |
+>
+> Acting — `browse_click` and friends — is untouched, and `may_act` is granted by
+> nothing. A test fails the day a write tool appears without being in
+> `permissions.NEVER_UNATTENDED`.
 
 ---
 
 ## 1. Why this, and not more connectors
 
-Lodestone reaches a source three ways today: a first-party connector, an MCP
+Chitragupta reaches a source three ways today: a first-party connector, an MCP
 server, or an API key. Between them they cover Gmail, Calendar, Drive, Notion,
 GitHub, Linear, Notes, Messages and anything the user's own MCP servers expose.
 
@@ -36,7 +52,7 @@ rest of this document is about.
 
 ## 2. What to embed
 
-Three candidates, judged against what Lodestone already is: a macOS-only,
+Three candidates, judged against what Chitragupta already is: a macOS-only,
 local-first app that ships as a signed and notarised `.dmg`.
 
 ### WKWebView, via the pywebview window we already have
@@ -83,7 +99,7 @@ it is, and the browser arrives the same way a vendor CLI does — one button, wi
 progress, managed by us, never a terminal instruction. That path already exists
 in `models/cli_manager.py` and should be reused rather than reinvented.
 
-The profile is **ours**, not the user's. They log in once, inside Lodestone,
+The profile is **ours**, not the user's. They log in once, inside Chitragupta,
 to the sites they want an agent to reach. That is slower on day one and it is
 the entire safety story: the blast radius of a mistake is the set of sites the
 user deliberately signed into *here*, not everything they have ever logged into.
@@ -92,7 +108,7 @@ user deliberately signed into *here*, not everything they have ever logged into.
 
 ## 3. Where the session lives
 
-One persistent Chromium profile under `~/Library/Lodestone/browser/`.
+One persistent Chromium profile under `~/Library/Chitragupta/browser/`.
 
 * **It never leaves the machine.** Same promise as the brain. No sync, no
   backup to anything of ours, and it must be excluded from any future export —
@@ -104,7 +120,7 @@ One persistent Chromium profile under `~/Library/Lodestone/browser/`.
 * **Sign-out is a real control.** "Forget this site" clears that origin's
   cookies and storage; "Forget everything" deletes the profile directory. Both
   live next to the connector list, because that is where a user looks for "what
-  does Lodestone have access to".
+  does Chitragupta have access to".
 * **A logged-in site is a connection, and the Connectors panel must say so.**
   Anything else and the user has no single place that answers "what can this app
   reach on my behalf".
@@ -260,7 +276,7 @@ to build first.
 1. Managed Chromium download, reusing `models/cli_manager.py`'s one-button,
    progress-bearing pattern. No agent tools yet.
 2. The profile, the window, and manual sign-in. The user can log into a site
-   inside Lodestone and see it listed in Connectors. Still no agent.
+   inside Chitragupta and see it listed in Connectors. Still no agent.
 3. **Reading only** — `browse_open`, `browse_read`, `browse_find`, the origin
    allow-list, quarantined page text. Ship the Statements agent on this alone.
 4. Acting, behind `approvals.run_or_queue`, with the screenshot card. Add the
@@ -287,3 +303,112 @@ where the review effort belongs.
 * **What happens when a site changes?** A ref-based agent degrades into "I could
   not find that button", which is the right failure. Worth confirming it says so
   rather than clicking something nearby.
+
+---
+
+## 8. What the building changed
+
+Written after steps 1–3, against the plan above. Three of its decisions were
+wrong, two of its open questions are answered, and two defects were found by the
+tests before any of this could run.
+
+### Decisions that changed
+
+**"Navigating off a granted origin ends the session" — replaced.** The rule as
+written would break on the first payroll portal using SSO, because a session
+expiring redirects to an identity provider and a link in a feed resolves through
+two hops. But the fix is not to allow those: it is that **the rule was aimed at
+the wrong layer**. Manual sign-in (step 2) is user-driven and ungated — the
+person follows the redirect themselves, in the window. The agent only ever reads
+pages the user has already authenticated, so for *tools* a hard refusal is
+correct. What changed is the wording and the state: `session.py` refuses the
+**landing**, drops the page, names both ends (*"payroll.example.com redirected to
+login.microsoftonline.test … if you were signed out, sign in again"*), and clears
+the current page rather than ending anything.
+
+**Checking the requested URL is not the boundary.** The plan says the origin
+allow-list is "checked at the tool", which is true and insufficient: a granted
+page can redirect anywhere, so the address that decides is the one the browser
+**landed on**, known only afterwards. `Session._land` is that check, it runs on
+every navigation *including a plain re-read* — a page can move itself while
+nobody is looking — and removing it turns six tests red.
+
+**"A bounded, marked result" needed one more property.** Bounding was the easy
+half. The hard half is that page content must not be able to **close the
+quarantine fence from inside itself**: a page that can do that makes its next
+paragraph look like ours, and *"ignore previous instructions"* stops reading as
+something a stranger typed into a div. `page._defuse` neutralises fence-like
+decoration and fence phrasing separately — one clever combined pattern missed
+both spaced-out equals and a trailing marker.
+
+### Answered from the open questions
+
+**The effort ceiling — answered, and cheaper than a new budget.** A page is
+capped at 12,000 characters (`file_tools` allows 20,000 for a file the user
+pointed at; a page is worth less per character and is re-read far more often).
+The larger win is `browse_read(since=…)`: a fingerprint of what the page says, so
+an agent stepping through a flow is told *"nothing has changed"* for a few tokens
+instead of paying for the page again. No change to `Effort.max_tokens_per_turn`
+was needed.
+
+**A site that changes — confirmed.** `browse_find` returns *"Nothing on this page
+matches … it may have changed"*, and the tool description tells the agent to say
+so rather than reach for something nearby.
+
+### Defects the tests found
+
+* **`https://127.0.0.1` was grantable.** It has a dot in it, and the check was
+  only refusing bare labels — which would have put every router admin page, NAS,
+  printer and cloud metadata endpoint on the user's network behind an injected
+  link, in a browser that may hold a session cookie for it. Numeric addresses are
+  now refused as a class rather than by range.
+* **The invariant suite was checking the boundary with the boundary.** It called
+  `origins.covers()` to verify decisions that *used* `origins.covers()`, so
+  reintroducing the classic `endswith` bypass left all 170 of its tests green
+  while `evil-linkedin.com` counted as `linkedin.com`. It now splits labels
+  itself. The general lesson is worth keeping: an assertion borrowed from the
+  code under test agrees with its bugs.
+
+### The driver, and what building it changed again
+
+**Playwright, not hand-rolled CDP.** `aria_snapshot()` is exactly the view §4
+asked for — roles, names and values, the tree a screen reader reads — and it
+drops `<script>` bodies and `display:none` text on the way, both verified
+against a real page. Writing CDP by hand would have meant reimplementing that
+and pinning a Chromium build number in our own source.
+
+**Parsing is a pure function.** `parse_aria` takes the snapshot text and returns
+nodes, so the part most likely to be wrong is tested exhaustively with no
+browser. It handled every real shape first try: `[level=1]` attributes, a
+`/url:` line that belongs to the link above it, `paragraph: text` with no quoted
+name, and escaped quotes in link text a site wrote.
+
+**Playwright gets a thread of its own.** Its sync API refuses to run inside an
+asyncio loop and tool code is called from anywhere. A dedicated thread with a
+command queue removes the question, and gives the other property this needs for
+free: one browser, one page, one caller at a time. Two agents on one profile
+would fight over the cookie jar that makes a site "signed in".
+
+**`goto` returning is not the same as having arrived — a real defect.** An HTTP
+redirect is followed before `goto` returns, but a `<meta refresh>` or a script
+setting `location` runs *after* load, and an expired session redirects exactly
+that way. Without a settle, the snapshot is of the page we were sent to while
+the browser is already elsewhere, and `_land` then decides about the wrong
+origin. Removing `driver.settle` turns that test red; the integration suite uses
+a client-side redirect rather than a 302 for this reason (Chromium also does not
+re-route a redirect it follows itself, so a 302 cannot be intercepted anyway).
+
+**Headless or visible — answered: visible.** A user who can watch is a user who
+can stop, and MFA is never automated, so it needs a window a person can reach.
+
+### Still open
+
+* **Acting.** Unchanged and untouched: `browse_click` and friends, behind
+  `approvals.run_or_queue` with the screenshot card, and in `NEVER_UNATTENDED`
+  in the same commit. `may_act` is stored and granted by nothing.
+* **Downloads through `file_tools` grants** — unchanged, and still the answer:
+  one boundary, not two.
+* **The `.dmg`.** `scripts/build-dmg.sh` does not yet know about Playwright, and
+  the browser is fetched at runtime rather than signed into the bundle. That is
+  the deliberate trade from §2 — but a notarised app spawning a downloaded
+  binary is its own problem, and it has not been faced yet.

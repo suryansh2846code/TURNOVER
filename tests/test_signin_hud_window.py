@@ -1,6 +1,6 @@
 """The floating sign-in card must behave like a macOS floating panel.
 
-The card exists for the moments Lodestone is NOT the active app: the user is in
+The card exists for the moments Chitragupta is NOT the active app: the user is in
 a browser authorising. It went missing there — not behind the browser, but on
 another Space. A window with the default collection behaviour belongs to the
 Space it was created on, and a full-screen browser gets a Space of its own.
@@ -15,7 +15,7 @@ import pytest
 
 AppKit = pytest.importorskip("AppKit", reason="macOS-only window behaviour")
 
-from lodestone import hud
+from chitragupta import hud
 
 
 class FakeWindow:
@@ -69,7 +69,7 @@ def test_it_is_not_pinned_to_the_screen(raised):
     assert not mask & AppKit.NSWindowCollectionBehaviorStationary
 
 
-def test_it_stays_visible_when_lodestone_is_not_active(raised):
+def test_it_stays_visible_when_chitragupta_is_not_active(raised):
     hides = raised.named("setHidesOnDeactivate_")
     assert hides and hides[0][1][0] is False
 
@@ -109,7 +109,7 @@ def test_there_is_never_a_second_card():
 import pathlib
 from html.parser import HTMLParser
 
-CARD_HTML = pathlib.Path(__file__).resolve().parents[1] / "lodestone/web/signin_hud.html"
+CARD_HTML = pathlib.Path(__file__).resolve().parents[1] / "chitragupta/web/signin_hud.html"
 
 
 def test_the_window_has_no_opaque_backing():
@@ -214,7 +214,7 @@ def test_an_unchanged_height_is_left_alone():
 
 
 def test_fit_is_harmless_without_a_window():
-    """`lodestone serve` has no Cocoa window; the page still calls fit()."""
+    """`chitragupta serve` has no Cocoa window; the page still calls fit()."""
     previous = hud._hud_window
     hud._hud_window = None
     try:

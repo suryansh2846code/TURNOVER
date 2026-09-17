@@ -16,37 +16,37 @@ import sqlite3
 
 import pytest
 
-from lodestone.agents.runtime import run_turn
-from lodestone.core.models import (
+from chitragupta.agents.runtime import run_turn
+from chitragupta.core.models import (
     MemoryStatus,
     MemoryType,
     OpenLoopPriority,
 )
-from lodestone.core.store import MemoryStore
+from chitragupta.core.store import MemoryStore
 
 
 @pytest.fixture
 def gate_env(tmp_path, monkeypatch):
-    import lodestone.brain.brain
-    import lodestone.brain.canonical.service
-    import lodestone.config
-    import lodestone.core.store
+    import chitragupta.brain.brain
+    import chitragupta.brain.canonical.service
+    import chitragupta.config
+    import chitragupta.core.store
 
-    lodestone.config.get_settings.cache_clear()
-    lodestone.core.store.get_store.cache_clear()
-    monkeypatch.setenv("LODESTONE_HOME", str(tmp_path))
-    monkeypatch.setenv("LODESTONE_MODEL_PROVIDER", "mock")
-    monkeypatch.setenv("LODESTONE_MODEL_NAME", "mock-v1")
+    chitragupta.config.get_settings.cache_clear()
+    chitragupta.core.store.get_store.cache_clear()
+    monkeypatch.setenv("CHITRAGUPTA_HOME", str(tmp_path))
+    monkeypatch.setenv("CHITRAGUPTA_MODEL_PROVIDER", "mock")
+    monkeypatch.setenv("CHITRAGUPTA_MODEL_NAME", "mock-v1")
 
-    lodestone.brain.brain.get_brain.cache_clear()
-    lodestone.brain.canonical.service.get_canonical.cache_clear()
+    chitragupta.brain.brain.get_brain.cache_clear()
+    chitragupta.brain.canonical.service.get_canonical.cache_clear()
 
     yield tmp_path
 
-    lodestone.brain.brain.get_brain.cache_clear()
-    lodestone.brain.canonical.service.get_canonical.cache_clear()
-    lodestone.core.store.get_store.cache_clear()
-    lodestone.config.get_settings.cache_clear()
+    chitragupta.brain.brain.get_brain.cache_clear()
+    chitragupta.brain.canonical.service.get_canonical.cache_clear()
+    chitragupta.core.store.get_store.cache_clear()
+    chitragupta.config.get_settings.cache_clear()
 
 
 # ============================================================================
@@ -56,7 +56,7 @@ def test_section_2_entire_brain_loop(gate_env):
     """USER INPUT -> INGEST -> MEMORY -> ENTITY EXTRACTION -> GRAPH -> RECALL ->
     AGENT CONTEXT -> RESPONSE -> AUTO-LEARN -> NEXT RECALL
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     # Step 1: User says something durable to an agent
@@ -67,7 +67,7 @@ def test_section_2_entire_brain_loop(gate_env):
     # Learning from a turn is deliberately off the critical path — the reply
     # arrives, then the brain catches up. The loop under test is unchanged; it
     # just no longer blocks the answer, so wait before reading the brain.
-    from lodestone.agents import background
+    from chitragupta.agents import background
     assert background.wait_for_idle(timeout=30), "background learning did not finish"
 
     # Step 2: Auto-learn ingests into memory and graph
@@ -97,7 +97,7 @@ def test_section_3_realistic_memory_30_queries(gate_env):
     open loops, completed tasks, historical/current states, contradictions,
     and 30 evaluated queries.
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     # Entities
@@ -249,7 +249,7 @@ def test_section_4_temporal_preference_sequence(gate_env):
     4. Ask historical preference -> A
     5. History preserved (A not deleted)
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     # 1. User prefers A
@@ -299,7 +299,7 @@ def test_section_5_confidence_provenance(gate_env):
     """Verify explicit statement, repeated statement, connector fact,
     observed behavior, LLM inference, and weak heuristic inference.
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     # 1. Explicit user statement
@@ -350,7 +350,7 @@ def test_section_6_ambiguity_handling(gate_env):
     Project B: Product Launch (company-wide GTM)
     Project C: TURNOVER Launch (TURNOVER software release)
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     b.ingest("General Launch tracker tracks quarterly company milestones.", title="General Launch", source="manual")
@@ -375,7 +375,7 @@ def test_section_7_open_loop_statuses_and_retrieval(gate_env):
     """Statuses: open, waiting, blocked, completed, cancelled, stale.
     Verify normal recall prioritizes active loops, while completed remain historically retrievable.
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     l_open = b.create_open_loop("Prepare staging build", status="open", priority="high")
@@ -403,7 +403,7 @@ def test_section_7_open_loop_statuses_and_retrieval(gate_env):
 # ============================================================================
 def test_section_8_deduplication_scaling(gate_env):
     """Ingest 1x, 10x, 100x and verify zero duplicate memory explosion."""
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     initial_count = b.store.count()
@@ -433,7 +433,7 @@ def test_section_9_security_and_prompt_injection(gate_env):
     """Verify secrets redaction and that untrusted connector instructions
     are treated as passive text data, not system instructions.
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     # Credentials
@@ -524,7 +524,7 @@ def test_section_11_failure_recovery_modes(gate_env, monkeypatch):
     - Embedding failure -> lexical search fallback
     - Corrupted metadata -> safe parsing
     """
-    from lodestone.brain import get_brain
+    from chitragupta.brain import get_brain
     b = get_brain()
 
     # Ingest standard note

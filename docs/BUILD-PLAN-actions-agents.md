@@ -18,7 +18,7 @@
 
 ## Key design decisions
 - **Confirm before any outward action.** Agents *propose*; the user *confirms*;
-  only then does Lodestone execute. Irreversible/outbound = always gated.
+  only then does Chitragupta execute. Irreversible/outbound = always gated.
 - **Backend-agnostic proposal (works on claude-code too).** Agents can't rely on
   tool-calling (claude-code has none). So an agent **proposes an action inside
   its reply** using a small tag the UI parses:

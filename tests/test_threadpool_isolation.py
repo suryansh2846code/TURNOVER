@@ -19,8 +19,8 @@ import anyio
 import httpx
 import pytest
 
-from lodestone.api import concurrency
-from lodestone.api.app import app
+from chitragupta.api import concurrency
+from chitragupta.api.app import app
 
 SLOW = 0.25          # long enough to overlap, short enough to keep the suite fast
 
@@ -53,10 +53,10 @@ def slow_probe(monkeypatch):
         def status(self):
             with rec:
                 time.sleep(SLOW)
-            from lodestone.models.auth_flows import AuthStatus
+            from chitragupta.models.auth_flows import AuthStatus
             return AuthStatus(provider_id="cursor", status="idle")
 
-    monkeypatch.setattr("lodestone.models.auth_flows.get_flow", lambda _n: _Flow())
+    monkeypatch.setattr("chitragupta.models.auth_flows.get_flow", lambda _n: _Flow())
     return rec
 
 
@@ -122,7 +122,7 @@ def test_the_slow_routes_are_the_ones_on_a_lane():
     vendor CLI or queries a provider."""
     import inspect
 
-    from lodestone.api.routes import agents, brain, connectors, providers
+    from chitragupta.api.routes import agents, brain, connectors, providers
 
     must_be_offloaded = [
         (agents, "chat"),
@@ -145,7 +145,7 @@ def test_offloading_does_not_change_what_fastapi_sees():
     silently stop validating anything."""
     import inspect
 
-    from lodestone.api.routes import providers
+    from chitragupta.api.routes import providers
 
     sig = inspect.signature(providers.disconnect_provider_endpoint)
     assert list(sig.parameters) == ["name", "scope"]

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build a double-clickable "Lodestone.app" for THIS machine, for development.
+# Build a double-clickable "Chitragupta.app" for THIS machine, for development.
 #
 # The launcher it writes runs this checkout's virtualenv, so the bundle contains
 # no Python and works nowhere else. That is the point — it is a fast way to get
@@ -15,10 +15,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 # pyproject.toml said 0.1.0.
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' "$PROJECT_DIR/pyproject.toml" | head -1)"
 VENV="$PROJECT_DIR/.venv"
-APP_DIR="${1:-$HOME/Applications}/Lodestone.app"
+APP_DIR="${1:-$HOME/Applications}/Chitragupta.app"
 CONTENTS="$APP_DIR/Contents"
 
-if [ ! -x "$VENV/bin/lodestone" ]; then
+if [ ! -x "$VENV/bin/chitragupta" ]; then
   echo "❌ venv not found at $VENV — run: uv venv && uv pip install -e '.[all,desktop]'"
   exit 1
 fi
@@ -28,12 +28,12 @@ rm -rf "$APP_DIR"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
 # launcher
-cat > "$CONTENTS/MacOS/Lodestone" <<EOF
+cat > "$CONTENTS/MacOS/Chitragupta" <<EOF
 #!/bin/bash
 cd "$PROJECT_DIR"
-exec "$VENV/bin/lodestone" app
+exec "$VENV/bin/chitragupta" app
 EOF
-chmod +x "$CONTENTS/MacOS/Lodestone"
+chmod +x "$CONTENTS/MacOS/Chitragupta"
 
 # Info.plist
 cat > "$CONTENTS/Info.plist" <<EOF
@@ -41,12 +41,12 @@ cat > "$CONTENTS/Info.plist" <<EOF
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Lodestone</string>
-  <key>CFBundleDisplayName</key><string>Lodestone</string>
-  <key>CFBundleIdentifier</key><string>ai.lodestone.app</string>
+  <key>CFBundleName</key><string>Chitragupta</string>
+  <key>CFBundleDisplayName</key><string>Chitragupta</string>
+  <key>CFBundleIdentifier</key><string>ai.chitragupta.app</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
-  <key>CFBundleExecutable</key><string>Lodestone</string>
+  <key>CFBundleExecutable</key><string>Chitragupta</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSHighResolutionCapable</key><true/>

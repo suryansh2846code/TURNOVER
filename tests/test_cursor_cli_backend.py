@@ -17,9 +17,9 @@ import pytest
 from fastapi.testclient import TestClient
 from web_sources import app_source
 
-from lodestone.api.app import app
-from lodestone.models.base import Message, parse_cli_json
-from lodestone.models.cursor import CursorProvider, find_cursor_cli
+from chitragupta.api.app import app
+from chitragupta.models.base import Message, parse_cli_json
+from chitragupta.models.cursor import CursorProvider, find_cursor_cli
 
 HELLO = [Message(role="user", content="hi")]
 
@@ -39,7 +39,7 @@ def _proc(stdout="", stderr="", code=0):
 
 # ── never speak HTTP to api.cursor.com ───────────────────────────────────
 def test_cursor_never_posts_to_a_nonexistent_endpoint():
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc('{"result":"hello"}')), \
          patch("httpx.post", side_effect=AssertionError("posted to api.cursor.com")):
         assert CursorProvider().chat(HELLO).text == "hello"
@@ -47,14 +47,14 @@ def test_cursor_never_posts_to_a_nonexistent_endpoint():
 
 def test_an_api_key_alone_is_not_enough():
     """There is no endpoint a key could authenticate against."""
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=None):
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=None):
         ready, reason = CursorProvider(api_key="cur-real-key").is_ready()
     assert ready is False
     assert "cursor.com/install" in reason
 
 
 def test_missing_cli_explains_itself_instead_of_failing_silently():
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=None):
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=None):
         result = CursorProvider().chat(HELLO)
     assert "⚠️" in result.text and "agent" in result.text
 
@@ -68,7 +68,7 @@ def test_headless_invocation_matches_the_documented_flags():
         seen["env"] = kw.get("env", {})
         return _proc('{"result":"ok"}')
 
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", side_effect=fake_run):
         CursorProvider(model="gpt-5", api_key="cur-key").chat(HELLO)
 
@@ -82,7 +82,7 @@ def test_headless_invocation_matches_the_documented_flags():
 def test_system_context_is_folded_into_the_prompt():
     """`agent -p` wants an instruction, not a User:/Assistant: transcript."""
     seen = {}
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", side_effect=lambda cmd, **kw: (seen.setdefault("cmd", cmd),
                                                                 _proc('{"result":"ok"}'))[1]):
         CursorProvider().chat([
@@ -98,20 +98,20 @@ def test_system_context_is_folded_into_the_prompt():
 
 
 def test_cli_failure_is_reported_readably():
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc("", "not logged in", code=1)):
         result = CursorProvider().chat(HELLO)
     assert "not logged in" in result.text and "agent login" in result.text
 
 
 def test_a_timeout_is_reported_not_raised():
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", side_effect=subprocess.TimeoutExpired("agent", 180)):
         assert "timed out" in CursorProvider().chat(HELLO).text
 
 
 def test_leading_cli_noise_does_not_break_parsing():
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc('update available\n{"result":"hi"}')):
         assert CursorProvider().chat(HELLO).text == "hi"
 
@@ -132,7 +132,7 @@ def test_cursors_own_agent_is_accepted():
 
 # ── sign-in tells the truth ──────────────────────────────────────────────
 def test_signin_points_at_the_cli_instead_of_a_dead_browser_flow():
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=None), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=None), \
          patch("webbrowser.open", side_effect=AssertionError("opened a useless page")):
         body = TestClient(app).post("/api/providers/cursor/signin").json()
     assert body["started"] is False
@@ -151,7 +151,7 @@ def test_signin_runs_the_cli_browser_login_when_installed():
         spawned["cmd"] = cmd
         return object()
 
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')), \
          patch("subprocess.Popen", side_effect=fake_popen):
         body = TestClient(app).post("/api/providers/cursor/auth/start").json()
@@ -163,30 +163,30 @@ def test_signin_runs_the_cli_browser_login_when_installed():
 
 
 def test_status_polls_the_cli_and_connects_on_success():
-    from lodestone.models import cursor as mod
-    from lodestone.models.connections import ProviderConnection, get_connection, save_connection
+    from chitragupta.models import cursor as mod
+    from chitragupta.models.connections import ProviderConnection, get_connection, save_connection
 
     save_connection(ProviderConnection(provider="cursor"))
 
     # Nothing in flight and not signed in -> idle. "waiting" means a sign-in we
     # started is still running.
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')):
         assert TestClient(app).get("/api/providers/cursor/auth/status").json()["status"] == "idle"
 
     mod._session.proc, mod._session.baseline = _Running(), {"authenticated": False, "email": None}
     mod.reset_auth_cache()
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc('{"isAuthenticated": false}')):
         assert TestClient(app).get("/api/providers/cursor/auth/status").json()["status"] == "waiting"
     mod.reset_login_state()
 
     # Sign-in state is cached for a few seconds so polling doesn't spawn a
     # subprocess per tick; a completed login is noticed once that lapses.
-    from lodestone.models.cursor import reset_auth_cache
+    from chitragupta.models.cursor import reset_auth_cache
     reset_auth_cache()
 
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run",
                return_value=_proc('{"isAuthenticated": true, "email": "me@example.com"}')):
         body = TestClient(app).get("/api/providers/cursor/auth/status").json()
@@ -245,9 +245,9 @@ CLI_AUTHED = """{
 def test_identity_is_read_from_the_nested_userInfo():
     """`agent status --format json` nests it; reading the top level found
     nothing, so the card kept showing a stale account."""
-    from lodestone.models.cursor import cursor_cli_auth_status
+    from chitragupta.models.cursor import cursor_cli_auth_status
 
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc(CLI_AUTHED)):
         st = cursor_cli_auth_status()
     assert st["authenticated"] is True
@@ -258,9 +258,9 @@ def test_identity_is_read_from_the_nested_userInfo():
 def test_the_cli_account_beats_the_cursor_apps_cached_one():
     """The Cursor *app* caches a different account in its sqlite. The CLI is
     what we actually run, so after signing in there its identity must win."""
-    from lodestone.models.accounts import detect_cursor_account
+    from chitragupta.models.accounts import detect_cursor_account
 
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc(CLI_AUTHED)):
         acct = detect_cursor_account()
     assert acct["email"] == "new@example.com"
@@ -270,10 +270,10 @@ def test_the_cli_account_beats_the_cursor_apps_cached_one():
 def test_refresh_finishes_a_sign_in_the_poll_gave_up_on():
     """A browser login completes long after the HUD stops polling, so Refresh
     must adopt it rather than being decorative."""
-    from lodestone.models.connections import ProviderConnection, get_connection, save_connection
+    from chitragupta.models.connections import ProviderConnection, get_connection, save_connection
 
     save_connection(ProviderConnection(provider="cursor"))
-    with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+    with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
          patch("subprocess.run", return_value=_proc(CLI_AUTHED)):
         assert TestClient(app).post("/api/providers/cursor/refresh").status_code == 200
 
@@ -298,13 +298,13 @@ def test_the_waiting_hud_polls_every_provider():
 
 # ── a re-sign-in must not be satisfied by the existing session ───────────
 def _flow_status(proc, baseline, cli_json):
-    from lodestone.models import cursor as mod
-    from lodestone.models.auth_flows import get_flow
+    from chitragupta.models import cursor as mod
+    from chitragupta.models.auth_flows import get_flow
 
     mod._session.proc, mod._session.baseline = proc, baseline
     mod.reset_auth_cache()
     try:
-        with patch("lodestone.models.cursor.find_cursor_cli", return_value=AGENT), \
+        with patch("chitragupta.models.cursor.find_cursor_cli", return_value=AGENT), \
              patch("subprocess.run", return_value=_proc(cli_json)):
             return get_flow("cursor").status().status
     finally:
@@ -339,7 +339,7 @@ def test_no_sign_in_running_just_reports_the_current_state():
 
 
 def test_cancelling_clears_the_in_flight_state():
-    from lodestone.models import cursor as mod
+    from chitragupta.models import cursor as mod
 
     mod._session.proc, mod._session.baseline = _Running(), BASE
     with patch.object(_Running, "terminate", create=True):

@@ -9,11 +9,11 @@ trying something else.
 """
 from __future__ import annotations
 
-from lodestone.agents.effort import get_effort
-from lodestone.agents.loop import ToolRunner
-from lodestone.agents.results import ToolResult, worked
-from lodestone.agents.tools import run_tool
-from lodestone.models.base import ToolCall
+from chitragupta.agents.effort import get_effort
+from chitragupta.agents.loop import ToolRunner
+from chitragupta.agents.results import ToolResult, worked
+from chitragupta.agents.tools import run_tool
+from chitragupta.models.base import ToolCall
 
 
 def test_a_tool_result_is_still_a_string():
@@ -53,7 +53,7 @@ def test_a_plain_string_from_a_tool_still_means_it_worked():
 
 def test_the_repeat_note_does_not_launder_a_failure_into_a_success():
     """`str + str` would drop the verdict — the exact shape of the old bug."""
-    from lodestone.agents import tools as tools_mod
+    from chitragupta.agents import tools as tools_mod
 
     saved = tools_mod.TOOL_IMPLS["list_entities"]
     tools_mod.TOOL_IMPLS["list_entities"] = lambda **kw: ToolResult.failed("it broke")
@@ -74,9 +74,9 @@ def test_a_round_that_failed_is_what_triggers_the_retry_nudge(monkeypatch):
     """End to end: the nudge follows the field, not the prose."""
     from agent_harness import ScriptedProvider
 
-    from lodestone.agents import runtime
-    from lodestone.agents import tools as tools_mod
-    from lodestone.agents.planning import RETRY_NUDGE
+    from chitragupta.agents import runtime
+    from chitragupta.agents import tools as tools_mod
+    from chitragupta.agents.planning import RETRY_NUDGE
 
     saved = tools_mod.TOOL_IMPLS["list_entities"]
     # Phrased so no prefix in the old marker list would ever have matched it.
