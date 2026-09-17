@@ -162,7 +162,7 @@ This is a better answer than a connector, not a lesser one:
   linked-device library is a banned account, and it happens late enough that
   the user is already relying on it. A browser session is the user's own
   session, in a window, doing what a browser does.
-* **The user signs in, and can see it.** The profile is Lodestone's own, so the
+* **The user signs in, and can see it.** The profile is Chitragupta's own, so the
   blast radius is the set of sites they deliberately logged into *here*.
 * **One mechanism, three apps.** And the fourth, whatever it is, needs no code.
 

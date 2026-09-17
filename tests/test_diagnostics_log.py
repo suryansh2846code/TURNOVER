@@ -191,7 +191,7 @@ def test_a_token_in_an_exception_is_not_handed_back(client, written):
     """This panel exists to be copied into a bug report. The file was already on
     the user's disk; what is new is how easily its contents travel."""
     written.write_text(
-        "2026-09-16 21:22:56,474 ERROR lodestone.gmail: 401 invalid "
+        "2026-09-16 21:22:56,474 ERROR chitragupta.gmail: 401 invalid "
         "Bearer ya29.a0AfB1234567890abcdefghijklmnop\n")
 
     line = client.get("/api/diagnostics/log").json()["lines"][0]
@@ -207,7 +207,7 @@ def test_a_token_in_an_exception_is_not_handed_back(client, written):
     "AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZ0123456",
 ])
 def test_every_key_shape_this_app_handles_is_stripped(client, written, secret):
-    written.write_text(f"ERROR lodestone.models: {secret} was rejected\n")
+    written.write_text(f"ERROR chitragupta.models: {secret} was rejected\n")
 
     assert secret not in client.get("/api/diagnostics/log").json()["lines"][0]
 

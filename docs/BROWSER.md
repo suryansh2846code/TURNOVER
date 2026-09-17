@@ -408,7 +408,16 @@ can stop, and MFA is never automated, so it needs a window a person can reach.
   in the same commit. `may_act` is stored and granted by nothing.
 * **Downloads through `file_tools` grants** — unchanged, and still the answer:
   one boundary, not two.
-* **The `.dmg`.** `scripts/build-dmg.sh` does not yet know about Playwright, and
-  the browser is fetched at runtime rather than signed into the bundle. That is
-  the deliberate trade from §2 — but a notarised app spawning a downloaded
-  binary is its own problem, and it has not been faced yet.
+* **The `.dmg`.** Half of this is now answered, and not the way it was written.
+  Playwright **is** in the bundle — 130 MB of it — because `driver.py` spells the
+  import statically inside a function and PyInstaller follows that. Measured:
+  the app went 189 MB → 321 MB, the image 75 MB → 122 MB, and the bundled driver
+  runs (`Version 1.63.0`, `drivable: true`). So the feature ships and works; the
+  §2 trade about keeping the image small did not survive contact, and the user
+  pays 122 MB up front *plus* ~150 MB of Chromium on first use. **Decided
+  2026-09-17: keep it** — see DECISIONS.md → P1.
+
+  Still unfaced: **a notarised app spawning a downloaded binary.** Nothing here
+  has been through signing or notarisation, and Chromium arriving at runtime
+  under the Hardened Runtime is exactly the case the entitlements were not
+  written for.

@@ -34,7 +34,7 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None,
 BLOCKED = {
     "name": "imessage", "label": "Messages", "ready": False,
     "reason": ("macOS is blocking access to your Messages. Open System Settings "
-               "→ Privacy & Security → Full Disk Access, turn on Lodestone, "
+               "→ Privacy & Security → Full Disk Access, turn on Chitragupta, "
                "then try again."),
     "fix": "full_disk_access", "state": None,
 }
@@ -72,7 +72,7 @@ def test_the_reason_reaches_the_screen_rather_than_the_catalogue_blurb():
     r = run({"bridge": True, "connector": BLOCKED})
     assert "macOS is blocking" in r["status"], (
         f"the row explained nothing; it said {r['status']!r}")
-    assert "Lodestone" in r["status"], "it does not say which app to switch on"
+    assert "Chitragupta" in r["status"], "it does not say which app to switch on"
 
 
 def test_a_blocked_row_does_not_also_offer_connect():

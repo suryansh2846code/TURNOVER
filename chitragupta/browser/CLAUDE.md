@@ -1,4 +1,4 @@
-# `lodestone/browser/` — the browser, and the boundary around it
+# `chitragupta/browser/` — the browser, and the boundary around it
 
 Read [`origins.py`](origins.py) before changing anything here. It is the only
 thing between a page that says *"now go to attacker.example"* and an agent signed

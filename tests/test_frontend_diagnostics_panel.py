@@ -25,9 +25,9 @@ ROOT = Path(__file__).parent.parent
 WEB = ROOT / "chitragupta/web"
 
 LINES = [
-    "2026-09-16 21:22:56,474 DEBUG lodestone.suppressed: failed while reading "
+    "2026-09-16 21:22:56,474 DEBUG chitragupta.suppressed: failed while reading "
     "the saved port: no such file",
-    "2026-09-16 21:22:57,001 WARNING lodestone.gmail: sync failed: 401",
+    "2026-09-16 21:22:57,001 WARNING chitragupta.gmail: sync failed: 401",
 ]
 OK = {"ok": True, "lines": LINES, "truncated": True,
       "path": "/x/logs/chitragupta.log", "bytes": 20480}

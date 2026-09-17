@@ -52,6 +52,15 @@ HIDDEN = [
     # Telethon is imported inside functions so a build without it still runs;
     # that is also why the analyser cannot see it and it has to be named here.
     "telethon",
+    # Playwright, and it is NOT decoration. It reaches the bundle today only
+    # because `browser/driver.py` spells the import statically inside a
+    # function, which PyInstaller's bytecode analysis happens to follow.
+    # Rewrite that one line as `importlib.import_module(...)` and 130 MB of
+    # driver silently stops shipping — the build still succeeds, the app still
+    # starts, `can_drive()` still answers (it only asks `find_spec`), and the
+    # browser dies the moment a user actually opens a page, after they have
+    # downloaded 150 MB of Chromium. Named here so that cannot happen quietly.
+    "playwright", "playwright.sync_api",
     "anyio._backends._asyncio",
 ]
 HIDDEN += collect_submodules("chitragupta")
