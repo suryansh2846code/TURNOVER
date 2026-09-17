@@ -64,11 +64,13 @@ types it into the real site, in a real browser, in a window they can see.
 
 ---
 
-## What is missing
+## What is built
 
-Reading works today. Connecting does not, and it is the smaller half.
+Reading already worked. Connecting is now built — `browser/signin.py`, four
+endpoints, and a landing check that knows the difference between "not allowed"
+and "signed out".
 
-### 1. A "Connect a site" flow
+### 1. A "Connect a site" flow — **built**
 
 One button per site. It opens our Chromium, visibly, at that site's sign-in
 page, and waits. The user signs in — including any two-factor step, which is a
@@ -79,7 +81,21 @@ What decides "signed in" is the same landing check `session.py` already runs
 after every navigation: the address the browser ended up on. Nothing about the
 page's text is trusted for this.
 
-### 2. Sessions expire, and must say so
+The one honest question is how we know the user is done, and the answer is that
+we ask. A heuristic watching for a cookie would be wrong on some site, silently,
+and *connected* is the claim the whole feature rests on. The user presses Done;
+we check they are not still sitting on a sign-in page and say so if they are —
+and `force` lets them overrule that, because a heuristic that cannot be
+overruled is one that locks people out of their own accounts.
+
+**The sign-in window drives the driver, not `Session`.** `Session` is what
+agents hold, and its origin check is the only thing between a page saying *"now
+go to attacker.example"* and an account. Signing in has to reach a site nobody
+has granted yet — that is what signing in *is* — so `chromium.open_driver()` was
+split out and the boundary gained no exception. A boundary with an exception in
+it is not a boundary.
+
+### 2. Sessions expire, and must say so — **built**
 
 A session that quietly lapses turns every agent answer into *"I could not find
 anything"*, which reads as the feature being broken rather than the login having
@@ -87,12 +103,27 @@ ended. The landing check already catches a redirect to a login page; what is
 missing is treating that as **a reconnect prompt**, not a read failure. The
 grant stays; only the session needs renewing.
 
-### 3. The Connectors screen shows what is connected
+Landing on a sign-in page for a site that *is* granted now returns
+`needs_signin` with the page **dropped**, not rendered. Handing an agent a login
+form means it reads one and reports on it, and *"Sign in to LinkedIn"* is a
+perfectly coherent summary of a page nobody wanted summarised — it reads to the
+user as the feature being broken rather than the login having ended.
 
-`profile_sites()` gives the count. A person needs the list, with a Reconnect and
-a Disconnect per site — and Disconnect has to clear that site's cookies from the
-profile, not just drop the grant. A revoked grant with a live session is a lie
-about what disconnecting did.
+Only the **path** may stop a read (`is_sign_in_url`). A title may only advise
+(`looks_like_sign_in`): *"Sign up for our newsletter | BBC News"* is an article,
+and refusing it would make a legitimate page unreadable with nothing on screen
+to say why. Writing the test is what turned that up.
+
+### 3. The Connectors screen shows what is connected — **half built**
+
+`DELETE /api/browser/sites/{host}` now clears the cookies as well as the grant —
+`chromium.forget_site()`, matching `.host` so a token left on `www.` or `m.` does
+not survive a disconnect the user was told had happened. It costs a browser
+start, which is the price of not editing an encrypted cookie database on disk.
+
+**Still to build: the screen itself.** `GET /api/browser/sites` and
+`profile_sites()` have what it needs; what is missing is the frontend — a list
+with Connect, Reconnect and Disconnect per site. That is the frontend lane's.
 
 ---
 
@@ -119,10 +150,9 @@ have not earned.
 
 ## Order of work
 
-1. **Connect a site** — the visible sign-in window and the grant it records.
-   Nothing below matters without it.
-2. **Reconnect on expiry** — the failure mode that otherwise reads as a bug.
-3. **The Connectors list** — what is connected, reconnect, disconnect-for-real.
+1. ~~**Connect a site**~~ — **done**. `browser/signin.py`.
+2. ~~**Reconnect on expiry**~~ — **done**. `Reading.needs_signin`.
+3. **The Connectors list** — the API half is done; the screen is not.
 4. **Reddit via its API**, because it is the one that should not be a browser.
 5. Revisit `may_act` only after all of the above have been used for a while.
    It is still ungranted, and `test_browse_tools.py` fails if a write tool lands

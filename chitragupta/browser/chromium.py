@@ -306,8 +306,25 @@ def open_session():
             "The browser has not been set up yet. Open Connectors and choose "
             "“Set up browsing” — it is a one-time download of about 150 MB.")
 
-    from .driver import PlaywrightDriver
     from .session import Session
+
+    return Session(open_driver())
+
+
+def open_driver():
+    """The browser itself, with no boundary around it.
+
+    Split out for the sign-in flow, which has to reach a site the user has not
+    granted yet — that is the whole point of signing in. It drives the browser
+    directly rather than gaining a bypass in `Session`, because `Session` is
+    what agents hold and its origin check is the one thing standing between a
+    page that says "now go to attacker.example" and an account. A boundary with
+    an exception in it is not a boundary; a boundary nothing agent-facing can
+    get past is.
+
+    Everything that calls this is user-driven: a person pressed Connect.
+    """
+    from .driver import PlaywrightDriver
 
     os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(install_dir()))
     profile_dir().mkdir(parents=True, exist_ok=True)
@@ -315,8 +332,32 @@ def open_session():
     # **Visible, not headless.** `docs/BROWSER.md`: a user who can watch is a
     # user who can stop — and MFA, which is never automated, needs a window the
     # person can actually reach.
-    return Session(PlaywrightDriver(str(binary) if binary else None,
-                                    str(profile_dir()), headless=False))
+    return PlaywrightDriver(str(binary) if binary else None,
+                            str(profile_dir()), headless=False)
+
+
+def forget_site(host: str) -> bool:
+    """Sign one site out of the profile, leaving the others signed in.
+
+    Dropping a grant alone would leave the user signed in with a cookie jar
+    that outlives the permission — a lie about what Disconnect did. This is the
+    other half.
+
+    Costs a browser start, which is why it is here rather than in the delete
+    handler: the alternative is editing Chrome's cookie database on disk, which
+    is encrypted, locked while the browser runs, and exactly the thing
+    `/CLAUDE.md` refuses to do to another product's files — our own included.
+    """
+    clean = str(host or "").strip().lower().lstrip(".")
+    if not clean or not is_installed():
+        return False
+    driver = None
+    with suppressed("signing a site out of the browser profile"):
+        driver = open_driver()
+        driver.clear_cookies("." + clean)
+        log.info("signed out of %s", clean)
+        return True
+    return False
 
 
 def reap() -> int:

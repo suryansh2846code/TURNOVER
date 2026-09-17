@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from ..log import get_logger
+from ..log import get_logger, suppressed
 from . import origins, page
 from .page import Node, Snapshot
 
@@ -66,6 +66,10 @@ class Reading:
     reason: str = ""
     #: The page's fingerprint, so a caller can skip re-reading an unchanged page.
     digest: str = ""
+    #: The site is allowed and answered with a sign-in page. A session that has
+    #: lapsed, in other words, which is a different thing from a refusal and
+    #: needs a different answer: the grant is fine, the login is not.
+    needs_signin: bool = False
 
 
 class Session:
@@ -150,6 +154,25 @@ class Session:
             origin = origins.normalise(final_url)
         except origins.BadOriginError:            # pragma: no cover - may_read agreed
             origin = final_url
+        from .signin import is_sign_in_url
+
+        if is_sign_in_url(final_url):
+            # The page is dropped rather than returned, for the same reason a
+            # refused landing is: handing an agent a login form means it reads
+            # one and reports on it, and "Sign in to LinkedIn" is a perfectly
+            # coherent summary of a page nobody wanted summarised. Saying the
+            # session lapsed is the answer; the form is not.
+            self._snapshot = None
+            host = final_url
+            with suppressed("naming the site whose session lapsed"):
+                host = origins.host_of(final_url)
+            log.info("browser landed on a sign-in page at %s", final_url)
+            return Reading(False, url=final_url, needs_signin=True,
+                           reason=(f"You are signed out of {host}. The user "
+                                   "needs to connect it again under Connectors "
+                                   "— tell them, and do not try to sign in or "
+                                   "read around it."))
+
         snap = page.build(final_url, title, origin, nodes)
         self._snapshot = snap
         text, cut = page.render(snap)

@@ -23,8 +23,9 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ...browser import chromium, origins
+from ...browser import chromium, origins, signin
 from ...log import get_logger
+from ..concurrency import probes_a_provider
 
 log = get_logger(__name__)
 router = APIRouter()
@@ -68,10 +69,76 @@ def allow_site(body: SiteIn):
 
 
 @router.delete("/api/browser/sites/{host}")
+@probes_a_provider
 def forget_site(host: str):
-    """Stop agents reading a site. Takes effect on the next call, not the next
-    launch — anything the user can grant they can take back."""
-    return {"revoked": origins.revoke(host)}
+    """Disconnect a site: the permission AND the sign-in.
+
+    Takes effect on the next call, not the next launch — anything the user can
+    grant they can take back.
+
+    Dropping the grant alone would leave the user signed in with a cookie jar
+    that outlives the permission, which is a lie about what Disconnect did. The
+    cookies go too, so reconnecting means signing in again.
+    """
+    revoked = origins.revoke(host)
+    return {"revoked": revoked, "signed_out": chromium.forget_site(host)}
+
+
+# ── connecting a site: the user signs in once, here ──────────────────────
+#
+# Four endpoints rather than one, because signing in is not one moment. A window
+# opens, a person does something we cannot see or hurry — a password, a code
+# from their phone, a CAPTCHA — and only they know when it is done. Each step
+# returns the same `{ok, error, detail}` shape so the card driving it never has
+# to tell them apart.
+#
+# Contract: docs/development/connected-sites.md
+class ConnectIn(BaseModel):
+    """Which site to open for signing in."""
+
+    url: str
+
+
+class FinishIn(BaseModel):
+    """Done signing in.
+
+    `force` is the user overriding our guess. The sign-in heuristic will be
+    wrong on some site, and a person who cannot say "I really am signed in" is
+    one we have locked out of their own account.
+    """
+
+    force: bool = False
+
+
+@router.get("/api/browser/connect")
+def connect_status():
+    """Whether a sign-in is in progress, and what it is waiting on."""
+    return signin.status()
+
+
+@router.post("/api/browser/connect")
+@probes_a_provider
+def connect_begin(body: ConnectIn):
+    """Open the browser at a site so the user can sign in.
+
+    Grants nothing. A window being open is not consent, and a user who thinks
+    better of it should leave no trace behind.
+    """
+    return signin.begin(body.url)
+
+
+@router.post("/api/browser/connect/finish")
+@probes_a_provider
+def connect_finish(body: FinishIn):
+    """Record the connection, once the user says they are signed in."""
+    return signin.finish(force=body.force)
+
+
+@router.post("/api/browser/connect/cancel")
+@probes_a_provider
+def connect_cancel():
+    """Give up on a sign-in. Nothing is granted and nothing is remembered."""
+    return signin.cancel()
 
 
 @router.post("/api/browser/install")

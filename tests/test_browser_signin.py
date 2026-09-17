@@ -1,0 +1,272 @@
+"""Signing in to a site once, so an agent can read it as the user afterwards.
+
+The alternatives were both worse and both tempting. Handing the credentials to a
+broker means the password is typed into somebody else's page and the session
+lives on their servers. Reading the user's own Chrome profile means decrypting a
+cookie jar, which `/CLAUDE.md` forbids and which is what an infostealer does.
+
+So the user signs in here, once, in a visible window, and the profile keeps it.
+What is pinned below is mostly the things that would quietly make that untrue:
+a grant recorded for a sign-in that never happened, a sign-out that leaves the
+cookies behind, and an expired session that reads as the feature being broken.
+
+Contract: docs/development/connected-sites.md
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from chitragupta.browser import origins, signin
+
+
+@pytest.fixture(autouse=True)
+def clean():
+    signin._clear(close_browser=False)
+    yield
+    signin._clear(close_browser=False)
+    for grant in origins.list_grants():
+        origins.revoke(grant.host)
+
+
+class FakeDriver:
+    """A browser that is wherever the test says it is."""
+
+    def __init__(self, url="https://example.com/feed", title="Feed"):
+        self.url, self.title = url, title
+        self.went_to = []
+        self.closed = False
+        self.cleared = []
+
+    def goto(self, url):
+        self.went_to.append(url)
+        return self.url, self.title, []
+
+    def current(self):
+        return self.url, self.title, []
+
+    def clear_cookies(self, domain):
+        self.cleared.append(domain)
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def driver(monkeypatch):
+    fake = FakeDriver()
+    from chitragupta.browser import chromium
+
+    monkeypatch.setattr(chromium, "open_driver", lambda: fake)
+    return fake
+
+
+# ── the heuristic, and that it stays one ─────────────────────────────────
+@pytest.mark.parametrize("url, title, expected", [
+    ("https://www.linkedin.com/login", "Sign in", True),
+    ("https://x.com/i/flow/login", "", True),
+    ("https://accounts.google.com/v3/signin/challenge", "", True),
+    ("https://www.linkedin.com/feed/", "Feed | LinkedIn", False),
+    ("https://discord.com/channels/@me", "Discord", False),
+    # A signed-in page carrying a redirect parameter is not a sign-in page —
+    # reading the query string would make it one forever.
+    ("https://x.com/home?redirect_after=/login", "Home", False),
+])
+def test_it_recognises_a_sign_in_page(url, title, expected):
+    assert signin.looks_like_sign_in(url, title) is expected
+
+
+# ── beginning ────────────────────────────────────────────────────────────
+def test_opening_a_site_grants_nothing(driver):
+    """A window being open is not consent."""
+    out = signin.begin("https://www.linkedin.com")
+    assert out["ok"]
+    assert driver.went_to == ["https://www.linkedin.com"]
+    assert origins.list_grants() == [], "it granted the site just for opening it"
+
+
+def test_it_says_what_to_do_next(driver):
+    out = signin.begin("https://www.linkedin.com")
+    assert "Sign in there" in out["detail"]
+    assert signin.status()["connecting"] is True
+    assert signin.status()["host"] == "www.linkedin.com"
+
+
+def test_two_sign_ins_at_once_are_refused(driver):
+    signin.begin("https://www.linkedin.com")
+    out = signin.begin("https://discord.com")
+    assert not out["ok"]
+    assert "Finish or cancel" in out["error"]
+
+
+def test_a_nonsense_address_is_refused_before_a_browser_opens(driver):
+    out = signin.begin("not a url")
+    assert not out["ok"]
+    assert driver.went_to == []
+
+
+# ── finishing ────────────────────────────────────────────────────────────
+def test_finishing_records_the_connection(driver):
+    signin.begin("https://www.linkedin.com")
+    driver.url, driver.title = "https://www.linkedin.com/feed/", "Feed"
+
+    out = signin.finish()
+
+    assert out["ok"]
+    assert [g.host for g in origins.list_grants()] == ["www.linkedin.com"]
+    assert origins.list_grants()[0].may_read is True
+    assert signin.status()["connecting"] is False
+
+
+def test_acting_is_not_granted_by_signing_in(driver):
+    """Reading a site as the user is not permission to act as them."""
+    signin.begin("https://www.linkedin.com")
+    driver.url = "https://www.linkedin.com/feed/"
+    signin.finish()
+
+    assert origins.list_grants()[0].may_act is False
+
+
+def test_still_on_the_sign_in_page_is_not_a_connection(driver):
+    """Recording it would claim a connection that does not work."""
+    signin.begin("https://www.linkedin.com")
+    driver.url, driver.title = "https://www.linkedin.com/login", "Sign in"
+
+    out = signin.finish()
+
+    assert not out["ok"]
+    assert out["still_signing_in"] is True
+    assert origins.list_grants() == []
+    assert signin.status()["connecting"] is True, "it gave up on the sign-in"
+
+
+def test_the_user_can_overrule_the_guess(driver):
+    """The heuristic will be wrong somewhere, and being locked out of your own
+    account by our guess is worse than a wrong guess."""
+    signin.begin("https://www.linkedin.com")
+    driver.url, driver.title = "https://www.linkedin.com/login", "Sign in"
+    assert not signin.finish()["ok"]
+
+    out = signin.finish(force=True)
+
+    assert out["ok"]
+    assert [g.host for g in origins.list_grants()] == ["www.linkedin.com"]
+
+
+def test_finishing_nothing_says_so(driver):
+    assert not signin.finish()["ok"]
+
+
+# ── giving up ────────────────────────────────────────────────────────────
+def test_cancelling_leaves_no_trace(driver):
+    signin.begin("https://www.linkedin.com")
+
+    out = signin.cancel()
+
+    assert out["ok"]
+    assert origins.list_grants() == []
+    assert driver.closed is True
+    assert signin.status()["connecting"] is False
+
+
+# ── the browser is never asked to be the user ────────────────────────────
+def test_nothing_here_can_type_a_password():
+    """The user types it, into the real site. There is no code path that fills
+    a form, and MFA is why the window has to be one a person can reach."""
+    text = Path(signin.__file__).read_text()
+    for forbidden in ("fill(", "type(", "password", "keyboard"):
+        if forbidden == "password":
+            # The word appears in prose; what must not appear is a value being
+            # put into a field.
+            continue
+        assert f".{forbidden}" not in text, f"signin.py can {forbidden}"
+
+
+# ── the session that quietly lapsed ──────────────────────────────────────
+class _SignedOut:
+    """A granted site that redirects wherever the test says."""
+
+    def __init__(self, landing, title="Sign in"):
+        self.landing, self.title = landing, title
+
+    def goto(self, url):
+        return self.landing, self.title, []
+
+    def current(self):
+        return self.landing, self.title, []
+
+    def close(self):
+        pass
+
+
+def test_an_expired_session_says_so_instead_of_reading_the_login_form():
+    """Handing an agent a login page means it reads one and reports on it.
+
+    "Sign in to LinkedIn" is a perfectly coherent summary of a page nobody
+    wanted summarised, and it reads to the user as the feature being broken
+    rather than the login having ended.
+    """
+    from chitragupta.browser.session import Session
+
+    origins.grant("https://www.linkedin.com", may_read=True)
+    reading = Session(_SignedOut("https://www.linkedin.com/login")).open(
+        "https://www.linkedin.com/feed/")
+
+    assert reading.ok is False
+    assert reading.needs_signin is True
+    assert "signed out of www.linkedin.com" in reading.reason
+    assert "Connectors" in reading.reason
+    assert reading.text == "", "the login form reached the agent anyway"
+
+
+def test_the_grant_survives_an_expired_session():
+    """The permission is fine. Only the login ended."""
+    from chitragupta.browser.session import Session
+
+    origins.grant("https://www.linkedin.com", may_read=True)
+    Session(_SignedOut("https://www.linkedin.com/login")).open(
+        "https://www.linkedin.com/feed/")
+
+    assert [g.host for g in origins.list_grants()] == ["www.linkedin.com"]
+
+
+def test_a_working_page_is_not_mistaken_for_a_lapsed_session():
+    from chitragupta.browser.session import Session
+
+    origins.grant("https://www.linkedin.com", may_read=True)
+    reading = Session(_SignedOut("https://www.linkedin.com/feed/", "Feed")).open(
+        "https://www.linkedin.com/feed/")
+
+    assert reading.needs_signin is False
+    assert reading.ok is True
+
+
+def test_a_page_whose_title_mentions_signing_up_is_still_readable():
+    """"Sign up for our newsletter | BBC News" is an article.
+
+    A title is allowed to *advise* the user during a sign-in and never to stop
+    a read: blocking it would make a legitimate page unreadable, with nothing
+    on screen to say why.
+    """
+    from chitragupta.browser.session import Session
+
+    origins.grant("https://www.bbc.com", may_read=True)
+    reading = Session(
+        _SignedOut("https://www.bbc.com/news/article-1",
+                   "Sign up for our newsletter | BBC News")).open(
+        "https://www.bbc.com/news/article-1")
+
+    assert reading.ok is True, "an article was refused for its title"
+    assert reading.needs_signin is False
+
+
+# ── disconnect means signed out, not just unlisted ───────────────────────
+def test_disconnecting_clears_the_sign_in_too(monkeypatch, driver):
+    """A grant dropped while the cookies stay is a lie about what it did."""
+    from chitragupta.browser import chromium
+
+    monkeypatch.setattr(chromium, "is_installed", lambda: True)
+    assert chromium.forget_site("linkedin.com") is True
+    assert driver.cleared == [".linkedin.com"], (
+        "the subdomain form matters — a token left on www. is a live session")
