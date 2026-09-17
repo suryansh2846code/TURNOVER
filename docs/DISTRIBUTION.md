@@ -41,12 +41,34 @@ download:
 
 | | size |
 |---|---|
-| `Chitragupta.app` (torch excluded) | **189 MB** |
-| `Chitragupta-0.1.0-arm64.dmg` (compressed) | **75 MB** |
+| `Chitragupta.app` (torch excluded) | **321 MB** |
+| `Chitragupta-0.1.0-arm64.dmg` (compressed) | **122 MB** |
+| of which Playwright | **130 MB** (116 MB arm64 node + 14 MB driver JS) |
 | the same bundle with torch | ~2 GB |
 
 A user who wants local embeddings installs the extra into a source checkout.
 That is the right trade for a download page.
+
+### Playwright is in the bundle, and that was not a decision anybody made
+
+The browser feature arrived with `docs/BROWSER.md` saying the `.dmg` "does not
+yet know about Playwright" and framing the runtime Chromium download as what
+keeps the image small. Measured on the first build after the merge, that is no
+longer true: **the app went 189 MB → 321 MB and the image 75 MB → 122 MB**,
+because `browser/driver.py` spells `from playwright.sync_api import ...`
+statically inside a function and PyInstaller's bytecode analysis follows those.
+
+It works — the bundled driver answers `Version 1.63.0` and `/api/browser/status`
+reports `drivable: true` — so a `.dmg` user really can use the browser. The user
+pays **twice**: 122 MB to download the app, then ~150 MB of Chromium on first
+use.
+
+**Decided 2026-09-17: keep it** (DECISIONS.md → P1). A feature that only exists
+for people with a git clone is not a feature of the product. `playwright` is now
+named in the spec's `HIDDEN` list. It was
+reaching the bundle by accident of static analysis, and one refactor of that
+import line would have dropped 130 MB of driver with a green build, a running
+app, and a browser that fails only after the user downloads Chromium.
 
 **2. Sign.** Notarisation refuses anything not built with the Hardened Runtime,
 and the Hardened Runtime kills CPython on launch unless three exceptions are
@@ -187,8 +209,9 @@ Chitragupta does with the data and that it stays on the machine.
 
 ## What was verified, and what was not
 
-Built and run on this machine (re-verified 2026-09-16): the bundle, the smoke
-test, and the unsigned `.dmg` — 189 MB app, 75 MB image, the app launches,
+Built and run on this machine (re-verified 2026-09-17, browser included): the
+bundle, the smoke test, and the unsigned `.dmg` — 321 MB app, 122 MB image, the
+app launches,
 serves its API and answers `/api/sync/status`. Also checked on the built
 artefact rather than assumed:
 

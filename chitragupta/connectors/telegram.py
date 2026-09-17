@@ -7,7 +7,7 @@ my.telegram.org. Sanctioned, documented, and the reason Telegram is first in
 `docs/MESSAGING.md`.
 
 The session, the loop and the three-step sign-in live in `telegram_auth.py`.
-This file is only the two things Lodestone wants: conversations read into the
+This file is only the two things Chitragupta wants: conversations read into the
 brain, and the live read/send an agent uses.
 """
 from __future__ import annotations

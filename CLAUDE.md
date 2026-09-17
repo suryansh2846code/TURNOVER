@@ -51,7 +51,6 @@ and that document is the one to update when the rule changes.
 | `desktop.py` · `hud.py` | the native window and the floating sign-in card |
 | `metrics.py` · `training.py` | numbers over time — measurements and sets/reps/load, kept as numbers not prose |
 | `config.py` · `log.py` | settings and logging. Leaf utilities — keep them that way |
-| `migration.py` | carrying a user across the Lodestone → Chitragupta rename. Delete when no installs predate it |
 
 Full ownership table and the allowed dependency direction:
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §2–3.
@@ -224,11 +223,9 @@ Many users, many machines. Do not bake in anything specific to one of either.
   `models/base.py::_saved_key` when the env var is unset.
 - **localStorage keys**: `chitragupta_onboarded`, `chitragupta_saw_library`,
   `chitragupta_provider`, `chitragupta_model`, `chitragupta_effort`,
-  `chitragupta_enrich_provider` / `_model` / `_tip_off`. `core.js` migrates any
-  `lodestone_*` key it finds on load — see `migration.py` for why the rename
-  owns that, not the user.
-  (The old `sessionStorage.ls_saw_onboarding` guard is gone: the Agent Library
-  is the first screen now, so there is no empty-brain redirect to guard.)
+  `chitragupta_enrich_provider` / `_model` / `_tip_off`.
+  (There is no `sessionStorage` onboarding guard any more: the Agent Library is
+  the first screen, so there is no empty-brain redirect to guard.)
 - **Cmd/Ctrl+R** is bound in JS on both pages — the webview does not wire it.
 - **The workspace** is a 2-column layout: agent rail (gradient orb avatars) and
   chat. Everything else is a full-screen surface. **Keep every element id** —

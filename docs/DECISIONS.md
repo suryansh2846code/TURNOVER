@@ -541,49 +541,63 @@ now the fifth check before any cut, and it refuses the bad one.
 
 ### R1 — Lodestone became Chitragupta (2026-09-16)
 
-**Why.** *Lodestone* named a compass stone: something that points you somewhere.
+*Lodestone* named a compass stone: something that points you somewhere.
 *Chitragupta* is, in Hindu tradition, the scribe who keeps the record of what
 each person has actually done — which is what this product is. It remembers your
 work and can always say where a fact came from. The second name describes the
 thing; the first described an aspiration about it.
 
-**What moved.** The package (`lodestone/` → `chitragupta/`), the CLI, the env
-prefix, the bundle id `ai.chitragupta.app`, the Keychain service, the data
-directory, the localStorage keys, and ~1,550 textual occurrences across 237
-files.
+The package, the CLI, the env prefix, the bundle id `ai.chitragupta.app`, the
+Keychain service, the data directory and the localStorage keys all moved with
+it, along with ~1,550 strings across 237 files. A `migration.py` carried
+pre-rename installs across — the data directory, the Keychain items and the
+browser prefs — and was **deleted on 2026-09-17** once nothing predated the
+rename. The one-time move is done; there is no compatibility path left, and
+`LODESTONE_*` environment variables no longer do anything.
 
-**What did NOT move, deliberately:**
+**The exception that remains.** `data/google_client.json` still reads
+`project_id: lodestone-507013`. That is a real Google Cloud project, not a
+string — rewriting it breaks Google sign-in for every user. Renaming it means
+renaming the project (or issuing a new client) in the Cloud console first; see
+[`development/google-client-rotation.md`](development/google-client-rotation.md)
+and A1 in [`AUDIT.md`](AUDIT.md), which already wants that client rotated.
 
-* `data/google_client.json` still says `project_id: lodestone-507013`. That is a
-  real Google Cloud project, not a string — rewriting it breaks Google sign-in
-  for everyone. Renaming the Cloud project (or issuing a new client) is a
-  separate, console-side job. See A1 in [`AUDIT.md`](AUDIT.md), which already
-  wants that client rotated.
-* `LODESTONE_*` environment variables keep working, permanently. They live in
-  people's shell profiles and we do not edit those.
-* The visual identity. "Living Constellation" was designed for the *brain* —
-  night sky, memories as particles, the graph as lines between them — not for
-  the wordmark, so it survived the rename intact. Only the sentences claiming
-  the name *meant* "compass stone" had to be rewritten.
+The visual identity was untouched: "Living Constellation" was designed for the
+*brain* — night sky, memories as particles, the graph as lines between them —
+not for the wordmark, so it survived intact.
 
-**The migration is ours, because the rename was ours.** `migration.py` carries a
-pre-rename install across, in three mechanisms that fail differently:
+---
 
-| store | when | why that way |
-|---|---|---|
-| data directory | eagerly, at startup | a same-volume `rename(2)`; 745 MB costs the same as 745 bytes |
-| Keychain secrets | lazily, on first read of each key | the key set is open-ended, and enumerating would mean walking the user's whole keychain |
-| `localStorage` | on page load, in `web/core.js` | only the page can reach it |
+## Packaging (P-series)
 
-It refuses every ambiguous case rather than guessing: two non-empty homes are
-never merged, a failed move never fails the launch, and a credential is never
-deleted from the old service unless the new write succeeded. `/CLAUDE.md`'s
-first product rule is *never lose the user's state to our mistakes* — and a
-rename is exactly such a mistake if it is done carelessly.
+### P1 — Playwright ships inside the `.dmg` (2026-09-17)
 
-**Delete `migration.py`** once no install predates the rename. `LEGACY_NAME`,
-`LEGACY_ENV_PREFIX` and `LEGACY_KEYCHAIN_SERVICE` exist so that sweep has
-something to grep for.
+**Decided: keep it.** The browser feature costs **130 MB** in the bundle
+(116 MB arm64 node binary + 14 MB driver JS), taking the app from 189 MB to
+321 MB and the download from 75 MB to 122 MB. The alternative was excluding it
+and making the browser a source-checkout-only feature.
+
+Kept because a feature that only exists for people with a git clone is not a
+feature of the product. `can_drive()` would have answered `False` cleanly, so
+nothing would have offered a dead button — the browser would simply have been
+absent from every installed copy, which is a strange thing to build and then
+not ship.
+
+The user does pay twice: 122 MB for the app, then ~150 MB of Chromium on first
+use. That is the accepted cost.
+
+**How it nearly broke silently.** Playwright reached the bundle only because
+`browser/driver.py` spells `from playwright.sync_api import ...` statically
+inside a function, which PyInstaller's bytecode analysis happens to follow.
+Rewriting that one line as `importlib.import_module(...)` would have dropped
+130 MB of driver with a green build, a running app, `can_drive()` still
+answering `True` (it only asks `find_spec`), and the browser failing at the
+moment a user opened a page — *after* downloading 150 MB of Chromium. It is now
+named in the spec's `HIDDEN` list so that cannot happen quietly.
+
+**Still unfaced:** a notarised app spawning a downloaded binary. Nothing here
+has been signed or notarised, and Chromium arriving at runtime under the
+Hardened Runtime is the case `packaging/entitlements.plist` was not written for.
 
 ---
 

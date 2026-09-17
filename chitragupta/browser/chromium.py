@@ -9,7 +9,7 @@ instruction.
 Three things this owns, and the third is a standing invariant rather than a
 feature.
 
-**The profile is ours.** `~/Library/Lodestone/browser/profile`. The user signs in
+**The profile is ours.** `~/Library/Chitragupta/browser/profile`. The user signs in
 here, once, to the sites they want an agent to reach — so the blast radius of a
 mistake is the set of sites somebody deliberately signed into *in this app*, not
 everything they have ever logged into. It is not `secrets.json`: cookies are not

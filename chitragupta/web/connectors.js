@@ -112,7 +112,7 @@ let _cnFilter = "all";
 // takes no arguments on purpose: the URL it opens is a constant in
 // `connectors/permissions.py`, because `/api/open-browser` refuses custom
 // schemes and widening that guard to reach a Settings pane is not a trade worth
-// making. See lodestone/connectors/permissions.py.
+// making. See chitragupta/connectors/permissions.py.
 function canOpenPrivacySettings() {
   return !!window.pywebview?.api?.open_privacy_settings;
 }
@@ -122,7 +122,7 @@ async function openPrivacySettings() {
     await window.pywebview.api.open_privacy_settings();
   } catch (_) {
     toast("Could not open System Settings. Open it yourself and go to " +
-          "Privacy & Security → Full Disk Access, then turn on Lodestone.");
+          "Privacy & Security → Full Disk Access, then turn on Chitragupta.");
   }
 }
 

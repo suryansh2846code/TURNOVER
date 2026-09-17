@@ -16,29 +16,6 @@
  * `app.js`, because they know what the page looks like.
  */
 
-// ── the rename: Lodestone → Chitragupta, 2026-09-16 ────────────────────────
-// Prefs were stored under `lodestone_*`. Losing them means the app reopens as
-// if the user had never onboarded: no chosen model, no provider, straight back
-// to the first-run screen. This runs before anything reads a pref, moves each
-// key once, and is a no-op on every later load.
-//
-// It deliberately does NOT delete the old keys. localStorage is per-origin and
-// the desktop app binds a saved port, but a user who once opened the browser
-// build on a different port has prefs there too; leaving the originals costs a
-// few bytes and means a downgrade still finds them.
-(function migrateStoredPrefs() {
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (!k || !k.startsWith("lodestone_")) continue;
-      const renamed = "chitragupta_" + k.slice("lodestone_".length);
-      if (localStorage.getItem(renamed) === null) {
-        localStorage.setItem(renamed, localStorage.getItem(k));
-      }
-    }
-  } catch (_) { /* private mode, or storage disabled — not worth a failure */ }
-})();
-
 const $ = (s) => document.querySelector(s);
 const api = (p, o) => fetch(p, o).then((r) => r.ok ? r.json() : r.json().then((e) => Promise.reject(e.detail || r.statusText)));
 

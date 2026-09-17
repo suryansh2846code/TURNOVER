@@ -36,11 +36,7 @@ if uses_dotenv():
 
 def _default_home() -> Path:
     """Where the brain lives. macOS-native by default, like Turnstone."""
-    # `LODESTONE_HOME` still works, permanently. It lives in somebody's shell
-    # profile and we do not edit those — see `migration.py`.
-    from .migration import legacy_env
-
-    override = os.environ.get("CHITRAGUPTA_HOME") or legacy_env("CHITRAGUPTA_HOME")
+    override = os.environ.get("CHITRAGUPTA_HOME")
     if override:
         return Path(override).expanduser()
     if os.name == "posix" and Path.home().joinpath("Library").exists():
@@ -143,27 +139,7 @@ class Settings(BaseSettings):
             return None
 
     def _kc_get(self, key: str) -> str | None:
-        """This service first, then the pre-rename one — migrating on the way.
-
-        We cannot enumerate our own Keychain items without walking the user's
-        entire keychain, and the key set is open-ended anyway (one per provider,
-        per connector, per MCP server). So the move happens a key at a time, the
-        first time each is wanted. See `migration.py`.
-        """
-        found = self._kc_read(self._KC_SERVICE, key)
-        if found is not None:
-            return found
-
-        from .migration import LEGACY_KEYCHAIN_SERVICE, migrate_secret
-
-        if LEGACY_KEYCHAIN_SERVICE == self._KC_SERVICE:
-            return None
-        return migrate_secret(
-            key,
-            read_legacy=lambda k: self._kc_read(LEGACY_KEYCHAIN_SERVICE, k),
-            write_new=self._kc_set,
-            delete_legacy=lambda k: self._kc_delete(k, LEGACY_KEYCHAIN_SERVICE),
-        )
+        return self._kc_read(self._KC_SERVICE, key)
 
     def _kc_set(self, key: str, value: str) -> bool:
         # NOTE: value is passed as an argv (briefly visible in `ps`); acceptable
@@ -178,12 +154,11 @@ class Settings(BaseSettings):
         except Exception:
             return False
 
-    def _kc_delete(self, key: str, service: str | None = None) -> None:
+    def _kc_delete(self, key: str) -> None:
         import subprocess
         with suppressed("subprocess.run(['security', 'delete-generic-password',"):
             subprocess.run(["security", "delete-generic-password",
-                            "-s", service or self._KC_SERVICE, "-a", key],
-                           capture_output=True)
+                            "-s", self._KC_SERVICE, "-a", key], capture_output=True)
 
     def get_secret(self, key: str) -> str | None:
         """Resolve a secret: env var → macOS Keychain (encrypted) → legacy file."""
@@ -269,22 +244,5 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     s = Settings()
-    # Before anything reads the home: a pre-rename install keeps its brain under
-    # the old name, and opening on an empty one with no explanation is the
-    # failure /CLAUDE.md puts first. Idempotent and cheap — a same-volume
-    # rename, and a no-op on every launch after the first.
-    from .migration import home_is_explicit, migrate_data_files, migrate_home
-
-    # Only into the *default* home. A home somebody named — CHITRAGUPTA_HOME, or
-    # the LODESTONE_HOME still in their shell profile — is a home somebody
-    # meant, and legacy data is never dragged into it. Without this guard the
-    # test suite's own `mkdtemp()` home looked like a brand-new install and the
-    # first run after the rename moved a real 745 MB brain into /var/folders.
-    if not home_is_explicit():
-        migrate_home(s.home)
-    # Always, though: the directory moving is not enough. `db_path` now names
-    # `chitragupta.db`, so a home still holding `lodestone.db` opens as an empty
-    # brain sitting beside the user's real one.
-    migrate_data_files(s.home)
     s.ensure_home()
     return s
