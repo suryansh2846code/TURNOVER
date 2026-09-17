@@ -97,6 +97,17 @@ function setActiveModel(providerId, modelId) {
   else localStorage.removeItem("chitragupta_model");   // "Auto" is the absence of one
 }
 
+//: Put a flyout where it fits. It opens to the left of the menu, which is the
+//: side with room in every normal window — this only moves it back when the
+//: left edge would be off-screen, which a narrow window or a collapsed sidebar
+//: can do. Measured after it is visible, because a hidden element has no box.
+function placeFlyout(el) {
+  if (!el) return;
+  el.classList.remove("opens-right");
+  const r = el.getBoundingClientRect();
+  if (r.left < 8) el.classList.add("opens-right");
+}
+
 function closeAllPickerFlyouts() {
   const pf = $("#cmpProvFlyout");
   const mf = $("#cmpModelFlyout");
@@ -486,6 +497,7 @@ function initComposerModelPicker() {
       if (isHidden) {
         renderProviderFlyout();
         provFlyout.hidden = false;
+        placeFlyout(provFlyout);
         provRow.classList.add("cmp-active");
       }
     };
@@ -501,6 +513,7 @@ function initComposerModelPicker() {
       if (isHidden) {
         renderModelFlyout();
         modelFlyout.hidden = false;
+        placeFlyout(modelFlyout);
         modelRow.classList.add("cmp-active");
       }
     };

@@ -665,11 +665,18 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 }
 
 /* Flyout submenus (positioned to the right) */
+/* Opens to the LEFT by default. The menu it hangs off is anchored to a pill in
+   the composer bar, which sits well right of centre — so `left: 100%` put the
+   flyout 218px further right again and pushed it off the window, clipping the
+   "Not connected" badges. JS flips it back with `.opens-right` on the rare
+   window where the left is the side without room. */
 .cmp-flyout {
   position: absolute;
-  left: calc(100% + 8px);
+  right: calc(100% + 8px);
+  left: auto;
   top: -6px;
-  width: 210px;
+  width: 232px;
+  max-width: calc(100vw - 32px);
   background: var(--panel-2);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
@@ -678,6 +685,10 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   z-index: 130;
   backdrop-filter: blur(20px);
   animation: cmpFlyoutFadeIn .12s ease-out;
+}
+.cmp-flyout.opens-right {
+  left: calc(100% + 8px);
+  right: auto;
 }
 .cmp-flyout[hidden] {
   display: none;
@@ -733,7 +744,12 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;                 /* or the label refuses to yield to the badge */
 }
+.cmp-flyout-item-label > span:first-child {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cmp-flyout-item .cmp-lock-badge { flex: none; }
 .cmp-lock-badge {
   font-size: 10px;
   font-weight: 500;
