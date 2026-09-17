@@ -73,6 +73,10 @@ _MAIL = ["search_source", "sync_source", "gmail_search",
 #: Which apps are reachable at all: docs/MESSAGING.md.
 _MESSAGES = ["list_chats", "read_chat"]
 _DIARY = ["calendar_lookup", "sync_source"]
+#: Reading websites the user has allowed. Read-only: `may_act` exists in
+#: `browser/origins.py` and nothing grants it, and a write tool has to join
+#: `permissions.NEVER_UNATTENDED` in the same commit that adds it.
+_BROWSE = ["browse_sites", "browse_open", "browse_read", "browse_find"]
 #: Numbers over time. The agent that plans training and food had none of these
 #: and was still asked to "review honestly" — so every answer about progress was
 #: a model estimating from recalled prose. See `chitragupta/metrics.py`.
@@ -251,9 +255,11 @@ TEMPLATES: tuple[Template, ...] = (
             "report; you do not send, schedule or act on the world."
         ),
         # No actions, deliberately: a researcher with no way to send should not
-        # be taught how, and then cannot claim it did.
-        tools=[*BASE_TOOLS, *_FILES],
-        works_with=[],
+        # be taught how, and then cannot claim it did. That is also what makes
+        # it the right agent to give the browser to first — it can read every
+        # site the user allowed and act on none of them.
+        tools=[*BASE_TOOLS, *_FILES, *_BROWSE],
+        works_with=["browser"],
     ),
     Template(
         id="engineer",
@@ -445,8 +451,7 @@ TEMPLATES: tuple[Template, ...] = (
         # The agent `docs/BROWSER.md` argues for: reading and reporting covers a
         # large part of the value with none of the transactional risk, which
         # makes it the right thing to ship on a read-only browser.
-        tools=[*BASE_TOOLS, "browse_sites", "browse_open", "browse_read",
-               "browse_find", "run_python", *_TASKS],
+        tools=[*BASE_TOOLS, *_BROWSE, "run_python", *_TASKS],
         works_with=["browser"],
         needs=["browser"],
     ),

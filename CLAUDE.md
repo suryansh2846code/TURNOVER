@@ -342,5 +342,6 @@ The boundaries and what each must name:
 | which messaging apps are actually reachable | [`docs/MESSAGING.md`](docs/MESSAGING.md) |
 | replacing the bundled Google OAuth client | [`docs/development/google-client-rotation.md`](docs/development/google-client-rotation.md) |
 | driving a real browser | [`docs/BROWSER.md`](docs/BROWSER.md) |
+| signing in to a site once, and keeping it | [`docs/development/connected-sites.md`](docs/development/connected-sites.md) |
 | building and shipping | [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md) |
 | known gaps | [`docs/AUDIT.md`](docs/AUDIT.md) |
