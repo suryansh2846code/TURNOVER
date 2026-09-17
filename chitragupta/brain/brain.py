@@ -224,7 +224,7 @@ class Brain:
         Bulk Gmail (HTML) and Drive docs are excluded — only the LLM graphs those."""
         if mem.source in {"notes", "agent", "manual", "notion", "gcal"}:
             return True
-        if mem.uri and mem.uri.lower().endswith(self._PROSE_EXT):
+        if mem.uri and mem.uri.lower().endswith(_prose_suffixes()):
             return True
         return mem.kind in {"note", "fact"}
 
@@ -922,6 +922,24 @@ class Brain:
         s = self.store.stats()
         s["graph"] = self.graph.stats()
         return s
+
+
+@once
+def _prose_suffixes() -> tuple[str, ...]:
+    """The suffixes the files connector treats as prose, as a TUPLE.
+
+    `self._PROSE_EXT` was read here and defined nowhere, so every heuristic
+    enrichment pass raised `AttributeError` on the first memory carrying a uri —
+    caught and logged by the scheduler, which is why it ran unnoticed after
+    every sync while the graph quietly stayed empty.
+
+    A tuple and not the connector's set: `str.endswith` takes a str or a tuple
+    and raises TypeError on a set. Converted once here rather than per memory in
+    the enrichment loop, and imported from the connector so the list of what
+    counts as prose is written down once.
+    """
+    from ..connectors.files import PROSE_EXT
+    return tuple(sorted(PROSE_EXT))
 
 
 @once
