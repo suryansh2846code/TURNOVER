@@ -917,6 +917,26 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
    under the settings and brain screens (70) — "+ Add a connector" fired, built
    its modal, and painted it behind the page the button was on. The handler
    worked; nothing appeared. Keep this above every screen in the file. */
+/* ── a plan limit, with the wait made legible ──────────────────────────────
+   The provider hands us one sentence — "5-hour session limit · resets 12am
+   (Asia/Calcutta)" — which used to land in the transcript styled exactly like
+   an answer. It is not an answer, so it does not look like one: its own card,
+   a countdown that ticks, and a retry that arms itself when the wait is over. */
+.limit-card { border: 1px solid var(--north-track); background: var(--north-dim);
+  border-radius: 14px; padding: 14px 16px; max-width: 560px; }
+.limit-head { display: flex; align-items: flex-start; gap: 10px; }
+.limit-ic { color: var(--north); flex: none; margin-top: 1px; }
+.limit-msg { font-size: 13.5px; line-height: 1.5; color: var(--star); }
+.limit-foot { display: flex; align-items: center; justify-content: space-between;
+  gap: 14px; margin-top: 12px; }
+.limit-countdown { font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em;
+  color: var(--north); font-variant-numeric: tabular-nums; }
+.limit-retry { flex: none; background: var(--north); color: var(--north-ink);
+  border: 0; border-radius: 9px; padding: 7px 14px; font-size: 12.5px;
+  font-weight: 600; cursor: pointer; }
+.limit-retry:disabled { background: transparent; color: var(--faint);
+  border: 1px solid var(--line2); cursor: not-allowed; }
+
 .modal-bg { position: fixed; inset: 0; background: rgba(4,6,10,.72); backdrop-filter: blur(5px);
   display: flex; align-items: center; justify-content: center; z-index: 90; }
 .modal-bg[hidden] { display: none; }

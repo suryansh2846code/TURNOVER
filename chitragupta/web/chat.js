@@ -691,10 +691,85 @@ function addImageFiles(files) {
   }
 }
 
+//: A plan limit, and when it lifts. The provider says "resets 12am
+//: (Asia/Calcutta)", which is wrong for a reader in another timezone and wrong
+//: for anyone reading it tomorrow — so the backend resolves it to an instant
+//: and the card counts down to that.
+function parseLimit(text) {
+  const m = /<limit\s+until="([^"]*)">([\s\S]*?)<\/limit>/i.exec(text || "");
+  if (!m) return null;
+  const until = Date.parse(m[1]);
+  return { until: Number.isNaN(until) ? 0 : until, message: m[2].trim(),
+           rest: (text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim() };
+}
+
+function untilLabel(ms) {
+  if (ms <= 0) return "";
+  const s = Math.ceil(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  if (h >= 1) return `${h}h ${m}m`;
+  if (m >= 1) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+
+//: The card the transcript shows instead of the provider's sentence. It ticks,
+//: because a static time asks the reader to do the arithmetic, and it arms its
+//: own retry rather than leaving them to type "retry" into the chat — which is
+//: what the last version taught one user to do.
+function limitCard(limit) {
+  const el = document.createElement("div");
+  el.className = "msg assistant";
+  el.innerHTML = `<div class="limit-card">
+      <div class="limit-head">
+        <span class="limit-ic">${IC.clock}</span>
+        <span class="limit-msg">${esc(limit.message)}</span>
+      </div>
+      <div class="limit-foot">
+        <span class="limit-countdown"></span>
+        <button type="button" class="limit-retry" disabled>Try again</button>
+      </div>
+    </div>`;
+  const out = el.querySelector(".limit-countdown");
+  const btn = el.querySelector(".limit-retry");
+
+  const tick = () => {
+    const left = limit.until - Date.now();
+    if (!limit.until || left <= 0) {
+      out.textContent = "You can try again now.";
+      btn.disabled = false;
+      clearInterval(iv);
+      return;
+    }
+    out.textContent = `Available again in ${untilLabel(left)}`;
+    btn.disabled = true;
+  };
+  // Every second under a minute, every ten after — a card that repaints once a
+  // second for three hours is a card nobody asked to animate.
+  const iv = setInterval(tick, (limit.until - Date.now()) > 60000 ? 10000 : 1000);
+  tick();
+  btn.onclick = () => { if (!btn.disabled) resend(); };
+  return el;
+}
+
+//: Send the last thing the user asked, again. The limit card's retry is the
+//: only caller: re-typing a question you already asked is not a retry.
+function resend() {
+  const asks = [...document.querySelectorAll("#messages .msg.user")];
+  const last = asks[asks.length - 1];
+  const text = ((last && (last.dataset.raw ?? last.textContent)) || "").trim();
+  if (text) send(text);
+}
+
 function addMsg(role, text, images) {
   const box = $("#messages");
   const he = box.querySelector(".hero-empty"); if (he) he.remove();
   if (role === "assistant") {
+    const limit = parseLimit(text);
+    if (limit) {
+      box.appendChild(limitCard(limit));
+      box.scrollTop = box.scrollHeight;
+      return;
+    }
     const { clean, actions } = parseActions(text);
     const el = document.createElement("div");
     el.className = "msg assistant";
@@ -726,6 +801,9 @@ function addMsg(role, text, images) {
   }
   const el = document.createElement("div");
   el.className = "msg " + role;
+  // The question, verbatim. `textContent` would also pick up an attachment's
+  // alt text, and the limit card's retry has to resend what was asked.
+  if (role === "user") el.dataset.raw = text || "";
   if (images && images.length) {
     // textContent for the words, built nodes for the pictures: the message is
     // user input, so it must never be interpolated into innerHTML.

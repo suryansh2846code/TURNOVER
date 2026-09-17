@@ -21,7 +21,13 @@ from pathlib import Path
 from ..log import get_logger
 from .base import ChatResult, LLMProvider, Message, parse_cli_json
 from .cli_login import augmented_path
-from .errors import ErrorKind, ProviderError, classify_cli
+from .errors import (
+    ErrorKind,
+    ProviderError,
+    classify_cli,
+    is_limit_notice,
+    parse_reset_at,
+)
 
 log = get_logger(__name__)
 
@@ -197,6 +203,17 @@ class ClaudeCodeProvider(LLMProvider):
         text = (data.get("result") or "").strip()
 
         if proc.returncode != 0 or data.get("is_error"):
+            # A plan limit is not an answer. The CLI reports one with `is_error`
+            # AND a `result` string — "5-hour session limit · resets 12am
+            # (Asia/Calcutta)" — and returning that as the reply put it in the
+            # transcript looking exactly like something the model said, with no
+            # retry and no idea how long to wait.
+            if text and is_limit_notice(text):
+                reset = parse_reset_at(text)
+                return ChatResult(text=ProviderError(
+                    kind=ErrorKind.RATE_LIMIT, provider="claude-code",
+                    message=text.strip(), model=self.model, retryable=True,
+                    retry_at=reset.isoformat() if reset else "").as_reply())
             if text:                       # Claude returned a usable message anyway
                 return ChatResult(text=text, finish_reason="stop")
             err = classify_cli("claude-code", proc.returncode,

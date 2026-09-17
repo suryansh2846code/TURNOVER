@@ -15,7 +15,9 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta, tzinfo
 from enum import StrEnum
+from zoneinfo import ZoneInfo
 
 from ..log import suppressed
 
@@ -39,6 +41,67 @@ class ErrorKind(StrEnum):
 
 # Kinds worth retrying unchanged; the rest need the user to change something.
 _RETRYABLE = {ErrorKind.RATE_LIMIT, ErrorKind.SERVER, ErrorKind.NETWORK, ErrorKind.TIMEOUT}
+
+#: A plan limit notice, and when it lifts.
+#:
+#: The CLI-backed providers do not fail cleanly here: Claude Code answers a
+#: session-limit with `is_error` AND a `result` string — "5-hour session limit ·
+#: resets 12am (Asia/Calcutta)" — so the text was being handed straight to the
+#: transcript as though it were the model's reply. Indistinguishable from an
+#: answer, no retry, no idea how long to wait. One user's response to it was to
+#: type the word "retry" into the chat, which is exactly what a UI that offers
+#: nothing teaches people to do.
+_LIMIT_PHRASES = ("session limit", "usage limit", "rate limit", "limit reached",
+                  "limit exceeded", "out of usage", "quota reached")
+
+#: "resets 12am (Asia/Calcutta)" · "resets at 5:30pm" · "resets in 3h 20m"
+_RESETS_CLOCK = re.compile(
+    r"resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?"
+    r"(?:\s*\(([A-Za-z_]+/[A-Za-z_+\-]+)\))?", re.I)
+_RESETS_DELTA = re.compile(
+    r"resets?\s+in\s+(?:(\d+)\s*d)?\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?", re.I)
+
+
+def is_limit_notice(text: str) -> bool:
+    """Is this the provider telling us the plan is spent, rather than answering?"""
+    low = (text or "").lower()
+    return any(p in low for p in _LIMIT_PHRASES)
+
+
+def parse_reset_at(text: str, *, now: datetime | None = None) -> datetime | None:
+    """When the limit lifts, as an absolute instant — or None if it does not say.
+
+    A wall-clock time is resolved in the zone the notice names, and taken as the
+    NEXT time that clock reads it: "resets 12am" written at 11pm means in one
+    hour, not twenty-three hours ago.
+    """
+    now = now or datetime.now(UTC)
+    blob = text or ""
+
+    m = _RESETS_DELTA.search(blob)
+    if m and any(m.groups()):
+        d, h, mi = (int(g or 0) for g in m.groups())
+        return now + timedelta(days=d, hours=h, minutes=mi)
+
+    m = _RESETS_CLOCK.search(blob)
+    if not m:
+        return None
+    hour, minute, half, zone = int(m.group(1)), int(m.group(2) or 0), m.group(3).lower(), m.group(4)
+    if hour == 12:
+        hour = 0
+    if half == "p":
+        hour += 12
+
+    tz: tzinfo = UTC
+    if zone:
+        with suppressed(f"resolving the timezone {zone!r} the provider named"):
+            tz = ZoneInfo(zone)
+    local = now.astimezone(tz)
+    reset = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if reset <= local:
+        reset += timedelta(days=1)       # the next time the clock reads that
+    return reset.astimezone(UTC)
+
 
 # Redact anything that looks like a credential before it reaches a UI or a log.
 _SECRET = re.compile(r"\b(sk-[A-Za-z0-9_\-]{8,}|xai-[A-Za-z0-9_\-]{8,}|"
@@ -69,10 +132,23 @@ class ProviderError:
     model: str | None = None
     detail: str = ""             # short, redacted provider detail
     retryable: bool = False
+    #: When a plan limit lifts, ISO-8601 — "" when the provider did not say.
+    #: The transcript turns this into a countdown, so it is an instant and not
+    #: the provider's wall-clock phrasing: "resets 12am" is meaningless to a
+    #: reader in another timezone, and wrong to anyone reading it tomorrow.
+    retry_at: str = ""
 
     def as_reply(self) -> str:
-        """The string a user sees in the chat transcript."""
-        text = f"⚠️ {self.message}"
+        """The string a user sees in the chat transcript.
+
+        The marker is stripped before rendering and turned into a countdown;
+        it rides in the text because that is the only channel a reply has, and
+        it survives being stored in history — so reopening the chat tomorrow
+        shows a timer that has run down rather than a stale clock time.
+        """
+        text = self.message
+        if self.retry_at:
+            text = f'<limit until="{self.retry_at}">{text}</limit>'
         if self.detail and self.detail.lower() not in self.message.lower():
             text += f"\n\n_{self.detail}_"
         return text
