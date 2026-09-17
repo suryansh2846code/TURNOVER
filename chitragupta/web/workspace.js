@@ -488,21 +488,75 @@ function newAgentDefault(t) {
   return isCategoryRow(t) || NEW_AGENT_TOOLS.includes((t && t.name) || "");
 }
 
+//: Thirty-two tools in one flat list of pills is a wall, so this borrows the
+//: grouping the Agents & tools panel already uses — connectors first, then the
+//: built-ins under the headings the API names. Creating an agent and editing
+//: one afterwards then look like the same screen, because they are the same
+//: list; the only difference is that nothing is saved until Create.
 async function openAgentModal() {
-  const { tools } = await api("/api/agents/tools");
-  // The value is the id the agent stores; the text is what a person reads.
-  // They differ for a connector tool, whose id is a qualified name we minted.
-  $("#amTools").innerHTML = tools.map((t) =>
-    `<label class="am-tool"><input type="checkbox" value="${esc(t.name)}" ${newAgentDefault(t) ? "checked" : ""}/> ${esc(toolLabel(t))}</label>`).join("");
+  const box = $("#amTools");
   $("#amName").value = ""; $("#amRole").value = ""; $("#amPrompt").value = "";
   $("#agentModal").hidden = false;
+  box.innerHTML = `<p class="am-tools-loading">Loading what it could use…</p>`;
+
+  let tools = [], categories = [];
+  try { ({ tools, categories } = await api("/api/agents/tools")); }
+  catch (e) { box.innerHTML = `<p class="am-tools-loading">Couldn't load the tool list.</p>`; return; }
+
+  // `on` here is the DEFAULT for a new agent, not something already saved.
+  const preset = tools.filter(newAgentDefault).map((t) => t.name);
+  const groups = agentToolGroups(tools, CONNECTORS, preset, categories);
+
+  box.innerHTML = groups.map((g) => {
+    const why = toolBlockedReason(g);
+    const rows = g.tools.map(({ row, on }) => {
+      const name = (row && row.name) || "";
+      // Never a control that cannot work: a blocked group says why instead.
+      const control = why
+        ? `<span class="am-blocked">${esc(why)}</span>`
+        : `<button type="button" role="switch" aria-checked="${on}"
+             class="am-toggle${on ? " is-on" : ""}" data-tool="${esc(name)}"
+             data-on="${on ? "1" : ""}"><span class="am-knob"></span></button>`;
+      return `<div class="am-row">
+        <span class="am-text">
+          <span class="am-nm">${esc(toolLabel(row))}</span>
+          <span class="am-ds">${esc(toolBlurb(row))}</span>
+        </span>${control}</div>`;
+    }).join("");
+    return `<section class="am-group${why ? " is-blocked" : ""}">
+      <h4 class="am-group-nm">${esc(g.name)}</h4>
+      <div class="am-card">${rows}</div>
+    </section>`;
+  }).join("");
+
+  // A switch is the user's action; it flips on click and is read back off the
+  // DOM at Create, so nothing here talks to the server.
+  box.querySelectorAll("[data-tool]").forEach((b) => b.onclick = () => {
+    const on = b.dataset.on !== "1";
+    b.dataset.on = on ? "1" : "";
+    b.classList.toggle("is-on", on);
+    b.setAttribute("aria-checked", String(on));
+    updateAgentToolCount();
+  });
+  updateAgentToolCount();
 }
+
+//: What this agent will be able to do, said before it exists. Without it the
+//: only way to know is to count switches.
+function updateAgentToolCount() {
+  const el = $("#amToolCount"); if (!el) return;
+  const all = document.querySelectorAll("#amTools [data-tool]");
+  const on = document.querySelectorAll('#amTools [data-tool][data-on="1"]');
+  el.textContent = all.length ? `${on.length} of ${all.length} on` : "";
+}
+
 $("#newAgentBtn").onclick = openAgentModal;
 $("#amClose").onclick = () => $("#agentModal").hidden = true;
 $("#amCreate").onclick = async () => {
   const name = $("#amName").value.trim();
   if (!name) { toast("Name required"); return; }
-  const chosen = [...document.querySelectorAll("#amTools input:checked")].map((c) => c.value);
+  const chosen = [...document.querySelectorAll('#amTools [data-tool][data-on="1"]')]
+    .map((b) => b.dataset.tool);
   const a = await api("/api/agents/custom", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, role: $("#amRole").value.trim(),

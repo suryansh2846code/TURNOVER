@@ -221,20 +221,20 @@
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rmTitle">
       <div class="modal-head"><b id="rmTitle">Create an automation</b><button id="rmClose" class="ghost tiny" aria-label="Close"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button></div>
       <div class="am-body">
-        <label>Name</label>
+        <label class="am-label">Name</label>
         <input id="rmName" placeholder="e.g. Forward new emails" />
-        <label>Agent</label>
+        <label class="am-label">Agent</label>
         <select id="rmAgent"></select>
-        <label>Trigger</label>
+        <label class="am-label">Trigger</label>
         <select id="rmTrigger">
           <option value="new_email">When a new email arrives</option>
           <option value="schedule">On a schedule (every N minutes)</option>
         </select>
         <div id="rmIntervalWrap" hidden>
-          <label>Every (minutes)</label>
+          <label class="am-label">Every (minutes)</label>
           <input id="rmInterval" type="number" value="60" />
         </div>
-        <label>Instruction (what the agent should do)</label>
+        <label class="am-label">Instruction (what the agent should do)</label>
         <textarea id="rmInstruction" rows="3" placeholder="e.g. Summarize the new email and send the summary to me@gmail.com"></textarea>
         <p class="t" style="font-size:11px;margin-top:6px">Automations run without a per-time confirm — actions fire automatically. Disable or delete anytime.</p>
       </div>
@@ -247,13 +247,22 @@
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="amTitle">
       <div class="modal-head"><b id="amTitle">Create an agent</b><button id="amClose" class="ghost tiny" aria-label="Close"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button></div>
       <div class="am-body">
-        <label>Name</label>
+        <p class="am-intro">Give it a name and a focus. What it can reach is set below, and
+          can be changed any time from <b>Agents &amp; tools</b>.</p>
+
+        <label class="am-label" for="amName">Name</label>
         <input id="amName" placeholder="e.g. Sales" />
-        <label>Focus (short)</label>
-        <input id="amRole" placeholder="e.g. outreach & CRM" />
-        <label>Instructions (system prompt)</label>
-        <textarea id="amPrompt" rows="3" placeholder="What this agent does and how it should behave…"></textarea>
-        <label>Tools</label>
+
+        <label class="am-label" for="amRole">Focus</label>
+        <input id="amRole" placeholder="e.g. outreach &amp; CRM" />
+
+        <label class="am-label" for="amPrompt">Instructions</label>
+        <textarea id="amPrompt" rows="3" placeholder="What this agent does, and how it should behave…"></textarea>
+
+        <div class="am-tools-head">
+          <span class="am-label">What it can use</span>
+          <span id="amToolCount" class="am-count"></span>
+        </div>
         <div id="amTools" class="am-tools"></div>
       </div>
       <div class="modal-foot"><span></span><button id="amCreate">Create agent</button></div>
