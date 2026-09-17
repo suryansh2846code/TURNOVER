@@ -5,7 +5,7 @@
  * `last_result` has carried the per-connector errors all along and nothing read
  * them. A timestamp on its own is a claim that it worked.
  *
- * argv: <a path inside lodestone/web/>   stdin: a /api/sync/status payload
+ * argv: <a path inside chitragupta/web/>   stdin: a /api/sync/status payload
  */
 import fs from "node:fs";
 import path from "node:path";

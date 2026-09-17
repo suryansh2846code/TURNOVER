@@ -47,7 +47,10 @@ def test_a_settings_item_opens_the_screen_on_its_own_panel(clicked, nav, panel):
     of it — landing on the wrong panel shows the screen with the other page on
     it, which reads as the nav item doing nothing."""
     got = clicked["opened"][nav]
-    assert got["modelScreen"] is True and got["drawer"] is False, got
+    # The drawer itself is gone — `test_the_drawer_has_no_survivors` is where
+    # that is asserted. The harness stopped reporting it, so checking it
+    # here fails on a KeyError rather than on anything being wrong.
+    assert got["modelScreen"] is True, got
     assert got["panel"] == panel, (
         f"{nav} opened the settings screen on the {got['panel']!r} panel")
 
@@ -60,7 +63,9 @@ def test_the_drawer_has_no_survivors():
     full-screen overlay sitting at z-index 55 over everything."""
     assert "drawerBg" not in INDEX
     assert 'class="dpanel"' not in INDEX
-    assert "closeDrawer" not in (WEB / "app.js").read_text()
+    # `app_source()`, not app.js alone: the frontend is several files now,
+    # and reading one of them would pass while `closeDrawer` sat in another.
+    assert "closeDrawer" not in app_source()
 
 
 def test_the_screen_can_be_closed(clicked):

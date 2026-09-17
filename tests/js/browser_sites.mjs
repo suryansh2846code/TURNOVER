@@ -5,7 +5,7 @@
  * because the render alone would pass with no handler attached at all, which is
  * the mistake `frontend-testing.md` was written about.
  *
- * argv: <a path inside lodestone/web/>   stdin: {status, addError}
+ * argv: <a path inside chitragupta/web/>   stdin: {status, addError}
  */
 import fs from "node:fs";
 import path from "node:path";

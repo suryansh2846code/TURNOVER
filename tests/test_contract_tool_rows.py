@@ -17,9 +17,6 @@ real consumer rather than each against its own idea of the other.
 """
 from __future__ import annotations
 
-import json
-import shutil
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -63,23 +60,6 @@ def rows(monkeypatch):
     mcp_tools.clear_cache()
 
 
-def _render(rows):
-    """Run the page's real `renderToolList` over these rows."""
-    node = shutil.which("node")
-    if not node:                                  # pragma: no cover
-        pytest.skip("node not installed")
-    payload = {"tools": rows,
-               "connectors": [{"name": f"{ACRONYM}:github", "label": "GitHub",
-                               "ready": True, ACRONYM: True}]}
-    out = subprocess.run([node, str(HARNESS), str(APP_JS)],
-                         input=json.dumps(payload), capture_output=True,
-                         text=True, timeout=60)
-    assert out.returncode == 0, out.stderr
-    report = json.loads(out.stdout)
-    assert report.get("ok"), report
-    return report
-
-
 # ── the producer's half ──────────────────────────────────────────────────────
 
 def test_every_row_carries_something_a_person_can_read(rows):
@@ -112,42 +92,18 @@ def test_a_write_tool_is_not_offered_as_a_row(rows):
     assert not [r for r in rows if r["name"].endswith("create_issue")]
 
 
-# ── the consumer's half, executed ────────────────────────────────────────────
-
-def test_the_acronym_never_reaches_the_screen(rows):
-    """The whole rendered panel, checked as text — names included, not just labels.
-
-    The frontend's own test checked group *labels* for the acronym and passed
-    while a skill named for it sat on screen. Check everything that renders.
-    """
-    report = _render(rows)
-    names = [n for g in report["groups"] for n in g["tools"]]
-    assert ACRONYM not in " ".join(names).lower(), f"acronym rendered as a skill: {names}"
-    assert ACRONYM not in report["html"].lower(), "acronym reached the rendered panel"
-
-
-def test_no_qualified_name_is_shown_to_the_user(rows):
-    """`{acronym}__github__list_issues` is an id we minted. The user sees `list_issues`."""
-    report = _render(rows)
-    names = [n for g in report["groups"] for n in g["tools"]]
-    assert "list_issues" in names
-    assert not [n for n in names if "__" in n], f"a qualified id was rendered: {names}"
-
-
-def test_the_category_row_does_not_invent_a_group(rows):
-    """It is a switch for the agent builder, not a skill in the skills list."""
-    report = _render(rows)
-    groups = [g["name"] for g in report["groups"]]
-    assert "A connected app" not in groups, (
-        f"the category row was rendered as an unnamed connector: {groups}")
-    assert sorted(groups) == ["Built in", "GitHub", "Linear"], groups
-
-
-def test_each_connectors_tools_land_under_that_connector(rows):
-    report = _render(rows)
-    by_group = {g["name"]: g["tools"] for g in report["groups"]}
-    assert by_group["GitHub"] == ["list_issues"]
-    assert by_group["Linear"] == ["search_issues"]
+# ── the consumer's half ──────────────────────────────────────────────────────
+#
+# Four tests lived here and drove `renderToolList` through
+# `tests/js/tool_provenance.mjs`: the acronym never reaching the screen, a
+# qualified id never being shown to the user, the category row not inventing a
+# group, and each connector's tools landing under that connector.
+#
+# Both the renderer and the harness went with the Tools drawer, which drew a
+# read-only copy of the Agents & tools panel — same endpoint, same grouping, no
+# switches. All four properties are now pinned in `test_frontend_agent_tools.py`
+# against `renderAgentTools`, which is what ships. That is live code rather than
+# a second renderer, so the coverage is stronger, not thinner.
 
 
 # ── who owns the ceiling ─────────────────────────────────────────────────────

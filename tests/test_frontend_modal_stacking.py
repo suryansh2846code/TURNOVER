@@ -32,7 +32,12 @@ CHROME_CANDIDATES = [
 
 #: Every overlay that can be open when a modal is raised, and the element whose
 #: centre must still belong to the modal once it is.
-UNDERNEATH = ["modelScreen", "brainScreen", "drawerBg"]
+#:
+#: `drawerBg` was here until the slide-over drawer was removed — both its panels
+#: moved elsewhere, so the drawer went with them. An overlay that no longer
+#: exists cannot be stacked under anything, and that it is gone is asserted in
+#: `test_frontend_model_screen.py::test_the_drawer_has_no_survivors`.
+UNDERNEATH = ["modelScreen", "brainScreen"]
 
 PROBE = """
 <script>

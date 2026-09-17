@@ -8,7 +8,7 @@
  * not something recovered from the sentence next to them, then run the action
  * that was waiting. So the handler is invoked and the requests are captured.
  *
- * argv: <a path inside lodestone/web/>   stdin: {rows}
+ * argv: <a path inside chitragupta/web/>   stdin: {rows}
  */
 import fs from "node:fs";
 import path from "node:path";

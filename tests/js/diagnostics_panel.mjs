@@ -6,7 +6,7 @@
  * box, `ok: false` says something rather than showing an empty box, and Copy
  * puts the text on the clipboard rather than doing nothing quietly.
  *
- * argv: <a path inside lodestone/web/>   stdin: a /api/diagnostics/log payload
+ * argv: <a path inside chitragupta/web/>   stdin: a /api/diagnostics/log payload
  */
 import fs from "node:fs";
 import path from "node:path";

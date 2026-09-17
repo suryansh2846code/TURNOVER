@@ -30,7 +30,7 @@ LINES = [
     "2026-09-16 21:22:57,001 WARNING lodestone.gmail: sync failed: 401",
 ]
 OK = {"ok": True, "lines": LINES, "truncated": True,
-      "path": "/x/logs/lodestone.log", "bytes": 20480}
+      "path": "/x/logs/chitragupta.log", "bytes": 20480}
 
 
 def _run(payload):
