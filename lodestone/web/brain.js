@@ -49,7 +49,7 @@ function renderGoogleCard(s) {
     const chips = (s.services || []).map((x) => `<span class="gchip">${esc(x)}</span>`).join("");
     el.className = "google-card connected";
     el.innerHTML =
-      `<div class="gc-row"><span class="gc-ic">✓</span>
+      `<div class="gc-row"><span class="gc-ic">${IC.check}</span>
          <div class="gc-txt"><b>Google connected</b>
            <span class="gc-sub">${esc(s.account || "signed in")}</span></div>
          <button class="tiny ghost" id="gcDisconnect">Disconnect</button></div>
@@ -80,7 +80,7 @@ async function connectGoogle() {
   let tries = 0;
   const poll = setInterval(async () => {
     let g; try { g = await api("/api/google/status"); } catch { return; }
-    if (g.connected) { clearInterval(poll); toast("Google connected ✓"); renderGoogleCard(g); loadBrain(); }
+    if (g.connected) { clearInterval(poll); toast("Google connected"); renderGoogleCard(g); loadBrain(); }
     else if (++tries > 60) { clearInterval(poll); renderGoogleCard(g); toast("Didn't finish — try again"); }
   }, 3000);
 }
@@ -171,7 +171,7 @@ async function searchBrain(q) {
     `<div class="bm-mem">
        <div class="bm-mem-head"><b>${esc(m.title || m.source)}</b>
          <span><span class="bm-score">${m.score}</span>
-         <button class="tiny ghost" data-delmem="${m.id}">✕</button></span></div>
+         <button class="tiny ghost" data-delmem="${m.id}">${IC.close}</button></span></div>
        <div class="bm-mem-body">${esc(m.text)}</div>
      </div>`).join("");
   openBrainModal(`Search: "${q}"`, rows);

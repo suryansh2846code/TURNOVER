@@ -25,6 +25,24 @@ ENTITY_TYPES = {
     "technology", "concept", "event", "thing", "tool", "topic"
 }
 
+#: The four areas the "Here's your brain" digest is organised into, and the
+#: entity TYPES that belong to each.
+#:
+#: Keyed on the type the extractor derived from CONTENT — never on the connector
+#: a memory arrived from. A source→area allowlist is what this replaced: it filed
+#: every Notion page under "work" whether it was a project spec or a birthday
+#: list, and it silently dropped any connector nobody had added to the map.
+#: Content decides the area; the list of sources is derived from it afterwards.
+#:
+#: `thing` is deliberately unmapped. It is the extractor saying "I could not
+#: tell", and spreading those over four areas is how a digest starts inventing.
+DIGEST_AREAS: dict[str, tuple[str, ...]] = {
+    "work": ("organization", "project", "product", "tool", "technology"),
+    "learning": ("concept", "topic"),
+    "comm": ("person",),
+    "personal": ("place", "event"),
+}
+
 
 
 def _num(value: object, default: float) -> float:
@@ -282,3 +300,84 @@ class GraphStore:
             "ORDER BY mentions DESC, importance DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def areas(self, per_area: int = 5) -> dict[str, dict]:
+        """Real grounding for the four areas the "Here's your brain" digest shows.
+
+        For each area: the entities that actually belong to it, how many memories
+        back it, and which connectors those memories arrived from.
+
+        Every number here is counted, never assumed. An area nothing backs comes
+        home with `items == 0` and empty lists — which is what lets the caller
+        say "nothing here yet" instead of writing a sentence about a person it
+        has not read.
+        """
+        area_of = {t: area for area, types in DIGEST_AREAS.items() for t in types}
+        out: dict[str, dict] = {
+            a: {"items": 0, "mentions": 0, "themes": [], "sources": []} for a in DIGEST_AREAS}
+        if not area_of:
+            return out
+        types = list(area_of)
+        marks = ",".join("?" * len(types))
+        # `CASE e.type WHEN ? THEN ? …` — the mapping above is the only place the
+        # type→area rule is written, so SQL is handed it rather than repeating it.
+        case = "CASE e.type " + " ".join(["WHEN ? THEN ?"] * len(types)) + " END"
+        case_params: list[str] = []
+        for t in types:
+            case_params += [t, area_of[t]]
+
+        # Themes: the entities a person would recognise, most-mentioned first.
+        for r in self._conn.execute(
+            f"SELECT name, type FROM entities WHERE type IN ({marks}) "
+            "ORDER BY mentions DESC, importance DESC, name ASC LIMIT 400", types,
+        ).fetchall():
+            bucket = out[area_of[r["type"]]]["themes"]
+            if len(bucket) < per_area and r["name"] not in bucket:
+                bucket.append(r["name"])
+
+        # How often the area was actually seen. `mentions` is maintained on every
+        # upsert, so this is the one count that exists from the first sync — the
+        # extractor names entities long before it has worked out facts about them,
+        # and an area with real entities in it must not report itself as empty.
+        for r in self._conn.execute(
+            f"SELECT {case} AS area, SUM(mentions) AS m FROM entities e "
+            f"WHERE e.type IN ({marks}) GROUP BY area", case_params + types,
+        ).fetchall():
+            if r["area"]:
+                out[r["area"]]["mentions"] = int(r["m"] or 0)
+
+        # How many memories actually back each area. DISTINCT because one memory
+        # yielding three facts about the same area is one memory, and counting it
+        # three times is how "items" stops meaning anything.
+        #
+        # Only facts carry `source_mem`, so this is exact when it is non-zero and
+        # simply absent before enrichment has run. Absent is reported as absent —
+        # the caller shows `mentions` instead rather than passing one off as the
+        # other.
+        for r in self._conn.execute(
+            f"""SELECT {case} AS area, COUNT(DISTINCT r.source_mem) AS c
+                  FROM relations r
+                  JOIN entities e ON e.id = r.subject_id OR e.id = r.object_id
+                 WHERE r.source_mem IS NOT NULL AND e.type IN ({marks})
+                 GROUP BY area""", case_params + types,
+        ).fetchall():
+            if r["area"]:
+                out[r["area"]]["items"] = r["c"]
+
+        # Which connectors those memories came from — DERIVED from the memories
+        # that are already counted, never a list of source names kept here. A
+        # connector added tomorrow shows up without this file being touched.
+        for r in self._conn.execute(
+            f"""SELECT {case} AS area, m.source AS source, COUNT(DISTINCT r.source_mem) AS c
+                  FROM relations r
+                  JOIN entities e ON e.id = r.subject_id OR e.id = r.object_id
+                  JOIN memories m ON m.id = r.source_mem
+                 WHERE e.type IN ({marks})
+                 GROUP BY area, m.source
+                 ORDER BY c DESC, m.source ASC""", case_params + types,
+        ).fetchall():
+            if r["area"] and r["source"] and r["source"] not in out[r["area"]]["sources"]:
+                out[r["area"]]["sources"].append(r["source"])
+
+        return out
+

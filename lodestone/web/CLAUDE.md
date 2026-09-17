@@ -22,14 +22,25 @@ read before its definition is a temporal dead-zone `ReferenceError` that
 | `brain-screen.js` | the full-screen canvas view |
 | `usage.js` | the token meter and enrichment progress |
 | `library.js` | the Agent Library screen — templates, shelves, the roster |
-| `tools.js` | the Tools & skills panel |
-| `app.js` | the shell: state, chrome, agent rail, drawers, keyboard, boot |
+| `tools.js` | the Agents & tools panel — what one agent may use, with switches |
+| `app.js` | the shell: state, chrome, agent rail, nav, keyboard, boot |
 
 **Before moving code between them**, read the five checks in
 [`docs/development/frontend-testing.md`](../../docs/development/frontend-testing.md)
 — and grep for who reads the file you are moving out of. A test that greps one
 script out of eleven does not fail; it passes.
 
+- **Every left-nav item opens a screen.** The slide-over drawer is gone:
+  `tasks` moved into Inbox and `tools` became the Agents & tools panel, and
+  those were its only two occupants. `openDrawer()` kept its name — four call
+  sites use it — and is now pure routing. `tests/js/open_model_screen.mjs`
+  reads the nav list out of `index.html` and clicks every item.
+- **Icons are drawn, never typed.** No emoji, and no dingbat standing in for a
+  control: `IC` in `core.js` is the set. An emoji is a colour font the OS
+  picks, so it ignores `currentColor` — it cannot take the gold accent, it sits
+  at its own weight beside every drawn icon, and it changes shape between macOS
+  versions. A typographic arrow *inside a sentence* ("Add agent →", "System
+  Settings → Privacy") is not an icon and stays; the design brief asks for it.
 - Relative API paths only (`/api/…`). Never a host or port — the desktop app
   binds a different loopback port per install.
 - `Cmd+R` reloads the frontend only. It cannot reload Python; without `--dev` a

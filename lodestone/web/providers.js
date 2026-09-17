@@ -124,14 +124,14 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
   hud.innerHTML = `
     <div class="ts-hud-header">
       <div class="ts-hud-status">
-        <span class="ts-hud-icon">✨</span>
+        <span class="ts-hud-icon">${IC.spark}</span>
         <span>Waiting to connect</span>
       </div>
-      <button type="button" class="ts-hud-close" title="Dismiss">✕</button>
+      <button type="button" class="ts-hud-close" title="Dismiss">${IC.close}</button>
     </div>
     <div class="ts-hud-title">Connect ${esc(brandName)} in your browser</div>
     <div class="ts-hud-body">Sign in and approve access there. Lodestone will update when the connection is ready.</div>
-    ${authUrl ? `<button type="button" class="ts-hud-btn"><span>↗</span> Open browser sign in</button>` : ""}
+    ${authUrl ? `<button type="button" class="ts-hud-btn"><span>${IC.external}</span> Open browser sign in</button>` : ""}
     ${requiresCode ? `
       <div class="ts-hud-code-form" style="margin-top:8px;display:flex;gap:6px">
         <input type="text" class="ts-hud-code-input" placeholder="Paste code#state here" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:7px;padding:6px 10px;font-size:11px;color:#fff;font-family:var(--mono)">
@@ -168,7 +168,7 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
           method: "POST",
           body: { code }
         });
-        toast(`✓ ${res.message || 'Authenticated!'}`);
+        toast(`${res.message || 'Signed in'}`);
         await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
         dismiss();
         if (onConnected) onConnected();
@@ -209,7 +209,7 @@ function showWaitingHud({ brandName, authUrl, providerId, requiresCode = false, 
     clearInterval(pollTimer);
     pollTimer = null;
     dismiss();
-    toast(`✓ Connected ${brandName}${email ? ` (${email})` : ""}!`);
+    toast(`Connected ${brandName}${email ? ` (${email})` : ""}`);
     if (onConnected) onConnected();
   };
 
@@ -292,7 +292,7 @@ function showCliInstructions(containerEl, res, brandName, providerId, onRefresh)
         </div>
         <div class="ts-action-group" style="margin-top:10px">
           <button type="button" class="tiny primary ts-cli-install">Install &amp; sign in</button>
-          ${res.auth_url ? `<a class="pc-link" href="${esc(res.auth_url)}" target="_blank" rel="noopener">Docs ↗</a>` : ""}
+          ${res.auth_url ? `<a class="pc-link" href="${esc(res.auth_url)}" target="_blank" rel="noopener">Docs ${IC.external}</a>` : ""}
         </div>
       </div>`;
 
@@ -340,7 +340,7 @@ function showCliInstructions(containerEl, res, brandName, providerId, onRefresh)
       ).join("")}</div>` : ""}
       <div class="ts-action-group" style="margin-top:10px">
         <button type="button" class="tiny primary ts-cli-recheck">I've signed in — check again</button>
-        ${res.auth_url ? `<a class="pc-link" href="${esc(res.auth_url)}" target="_blank" rel="noopener">Docs ↗</a>` : ""}
+        ${res.auth_url ? `<a class="pc-link" href="${esc(res.auth_url)}" target="_blank" rel="noopener">Docs ${IC.external}</a>` : ""}
       </div>
     </div>`;
   containerEl.querySelectorAll(".ts-cli-cmd").forEach((el) => {
@@ -480,13 +480,13 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
         actionBtnHtml = `
           <button type="button" class="tiny ts-btn-signin" onclick="document.getElementById('apiKeyInput')?.focus()" style="background:rgba(234,179,8,0.12);border-color:rgba(234,179,8,0.3);color:#eab308;cursor:pointer">Enter API Key</button>
           <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
-          <button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:#ef4444" title="Sign out of this account">✕</button>
+          <button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:var(--danger)" title="Sign out of this account">${IC.close}</button>
         `;
       } else {
         actionBtnHtml = `
           <button type="button" class="tiny primary ts-continue-btn" style="padding:5px 12px">Continue</button>
           <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
-          <button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:#ef4444" title="Sign out of this account">✕</button>
+          <button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:var(--danger)" title="Sign out of this account">${IC.close}</button>
         `;
       }
     } else if (providerId === "openai") {
@@ -496,7 +496,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
       actionBtnHtml = `
         <button type="button" class="tiny ts-btn-signin" style="background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.3);color:#34d399;cursor:default">Connected</button>
         <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
-        <button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:#ef4444" title="Sign out of this account">✕</button>
+        <button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:var(--danger)" title="Sign out of this account">${IC.close}</button>
       `;
     }
 
@@ -537,7 +537,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
               <span>${esc(signinBtnName)}</span>
             </button>
             <button type="button" class="ts-btn-link ts-refresh-btn">Refresh</button>
-            ${hasActiveAccount ? `<button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:var(--muted)" title="Sign out of this account">✕</button>` : ""}
+            ${hasActiveAccount ? `<button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="account" style="color:var(--muted)" title="Sign out of this account">${IC.close}</button>` : ""}
           </div>
         </div>
       </div>
@@ -555,11 +555,11 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
               <span class="ts-card-title">${esc(p.label || providerId)} API key</span>
               ${hasApiKey ? `<span class="ts-badge using">Connected</span>` : ""}
             </div>
-            <span class="ts-card-sub">Used for ${esc(p.label || providerId)} runs.${keyUrl ? ` <a href="${keyUrl}" target="_blank" rel="noopener" class="pc-link" style="margin-left:4px">Get key ↗</a>` : ""}</span>
+            <span class="ts-card-sub">Used for ${esc(p.label || providerId)} runs.${keyUrl ? ` <a href="${keyUrl}" target="_blank" rel="noopener" class="pc-link" style="margin-left:4px">Get key ${IC.external}</a>` : ""}</span>
           </div>
           <div class="ts-action-group">
             <button type="button" class="tiny ghost ts-toggle-key-btn">${hasApiKey ? 'Update API key' : 'Add API key'}</button>
-            ${hasApiKey ? `<button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="api_key" style="color:#ef4444" title="Remove this API key">✕</button>` : ""}
+            ${hasApiKey ? `<button type="button" class="ts-btn-link ts-disconnect-btn" data-scope="api_key" style="color:var(--danger)" title="Remove this API key">${IC.close}</button>` : ""}
           </div>
         </div>
         <div class="ts-key-collapse" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
@@ -601,7 +601,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
               : (m.desc || m.id);
             return `
               <div class="pc-model-pill ${isLocked ? "is-locked" : ""}" title="${esc(tip)}">
-                ${isLocked ? `<span class="pc-lock" aria-hidden="true">🔒</span>` : ""}
+                ${isLocked ? `<span class="pc-lock" aria-hidden="true">${IC.lock}</span>` : ""}
                 <span>${esc(m.name || m.id)}</span>
                 ${isLocked ? `<span class="pc-tag locked">${esc(why)}</span>` : ""}
                 ${isReasoning ? `<span class="pc-tag reasoning">r1/o1</span>` : ""}
@@ -628,7 +628,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
   const setFeedback = (msg, isErr = false) => {
     if (!feedbackEl) return;
     feedbackEl.style.display = "block";
-    feedbackEl.style.color = isErr ? "#f87171" : "#34d399";
+    feedbackEl.style.color = isErr ? "var(--danger)" : "var(--ok)";
     feedbackEl.textContent = msg;
   };
 
@@ -654,7 +654,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
       setFeedback("Connecting local account…");
       try {
         const res = await api(`/api/providers/${providerId}/connect-local`, { method: "POST" });
-        toast(`✓ Connected ${p.label || providerId} account!`);
+        toast(`Connected ${p.label || providerId}`);
         await loadProviders();
         if (options.onConnect) options.onConnect();
       } catch (e) {
@@ -716,7 +716,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
 
         if (res.connected) {
           noteSigninBranch(providerId, "already-connected", res.detail || "");
-          toast(`✓ ${res.detail || 'Connected!'}`);
+          toast(`${res.detail || 'Connected'}`);
           stopPolling();
           await loadProviders();
           if (options.onConnect) options.onConnect();
@@ -803,7 +803,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
       setFeedback("Refreshing connection & models…");
       try {
         const res = await api(`/api/providers/${providerId}/refresh`, { method: "POST" });
-        setFeedback(res.ready ? `✓ Ready! (${res.models?.length || 0} models)` : `Status: ${res.reason || 'not ready'}`, !res.ready);
+        setFeedback(res.ready ? `Ready — ${res.models?.length || 0} models` : `Status: ${res.reason || 'not ready'}`, !res.ready);
         toast(`Refreshed ${p.label || providerId}`);
         await loadProviders();
       } catch (e) {
@@ -851,7 +851,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ value: keyVal }),
         });
-        toast(res.ready ? `✓ Connected ${p.label || providerId}!` : `Saved key for ${p.label || providerId}`);
+        toast(res.ready ? `Connected ${p.label || providerId}` : `Saved key for ${p.label || providerId}`);
         inputEl.value = "";
         await loadProviders();
         if (options.onConnect) options.onConnect();
@@ -875,7 +875,7 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ value: inputEl.value.trim() || "" }),
         });
-        setFeedback(res.ok ? `✓ ${res.message}` : `⚠️ ${res.message}`, !res.ok);
+        setFeedback(res.message, !res.ok);
       } catch (e) {
         setFeedback(`Test request error: ${e.message || e}`, true);
       } finally {

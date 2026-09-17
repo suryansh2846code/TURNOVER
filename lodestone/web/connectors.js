@@ -108,6 +108,24 @@ function connectorMeta(name) {
 let _cnRows = [];           // {name, label, group, ready, html} — for filtering
 let _cnFilter = "all";
 
+// The desktop app exposes `open_privacy_settings` on the pywebview bridge. It
+// takes no arguments on purpose: the URL it opens is a constant in
+// `connectors/permissions.py`, because `/api/open-browser` refuses custom
+// schemes and widening that guard to reach a Settings pane is not a trade worth
+// making. See lodestone/connectors/permissions.py.
+function canOpenPrivacySettings() {
+  return !!window.pywebview?.api?.open_privacy_settings;
+}
+
+async function openPrivacySettings() {
+  try {
+    await window.pywebview.api.open_privacy_settings();
+  } catch (_) {
+    toast("Could not open System Settings. Open it yourself and go to " +
+          "Privacy & Security → Full Disk Access, then turn on Lodestone.");
+  }
+}
+
 function _cnRowHtml(c, staleAfterMin) {
   const meta = connectorMeta(c.name);
   const ls = c.state?.last_sync ? new Date(c.state.last_sync) : null;
@@ -121,7 +139,11 @@ function _cnRowHtml(c, staleAfterMin) {
   // ask it things — it just has nothing to pull in ahead of time. Saying
   // "not synced yet" about one would promise a sync that is never coming.
   const onDemand = c.mcp && c.ready && c.can_sync === false;
-  const status = !c.ready ? (meta.desc || c.reason || "Not connected")
+  // A `fix` means the server knows exactly what is wrong and that the user can
+  // clear it. That reason outranks the catalogue blurb: "Reads your local
+  // iMessages" is true and useless when macOS is the thing standing in the way.
+  const blocked = !c.ready && !!c.fix;
+  const status = !c.ready ? (blocked ? c.reason : (meta.desc || c.reason || "Not connected"))
     : onDemand ? "Connected · answers your agents on demand"
     : !last ? "Connected · not synced yet"
     : stale ? `Connected · last synced ${last}` : `Connected · synced ${last}`;
@@ -130,13 +152,19 @@ function _cnRowHtml(c, staleAfterMin) {
 
   const sync = c.ready && !onDemand
     ? `<button class="tiny ghost" data-sync="${esc(c.name)}">Sync</button>` : "";
+  // Opening a System Settings pane needs the native bridge, which exists only
+  // in the desktop app — in a browser tab there is nothing behind the button,
+  // and a control that cannot work is worse than no control. The sentence in
+  // `status` already says where to go by hand, so the browser loses nothing.
+  const fixBtn = blocked && c.fix === "full_disk_access" && canOpenPrivacySettings()
+    ? `<button class="tiny" data-fda="${esc(c.name)}">Open Settings</button>` : "";
   const setup = c.custom
     ? `<button class="tiny ghost" data-editapp="${esc(c.name)}">Edit</button>`
-    : (c.ready ? "" : `<button class="tiny" data-setup="${esc(c.name)}">Connect</button>`);
+    : (c.ready || fixBtn ? "" : `<button class="tiny" data-setup="${esc(c.name)}">Connect</button>`);
   const del = c.custom
-    ? `<button class="tiny ghost cn-x" data-delapp="${esc(c.name)}" title="Remove" aria-label="Remove ${esc(c.label)}">✕</button>`
+    ? `<button class="tiny ghost cn-x" data-delapp="${esc(c.name)}" title="Remove" aria-label="Remove ${esc(c.label)}">${IC.close}</button>`
     : c.mcp ? `<button class="tiny ghost" data-cntools="${esc(c.name)}" data-cnlabel="${esc(c.label)}" title="What this connector can do">Permissions</button>
-               <button class="tiny ghost cn-x" data-delmcp="${esc(c.name)}" title="Remove" aria-label="Remove ${esc(c.label)}">✕</button>` : "";
+               <button class="tiny ghost cn-x" data-delmcp="${esc(c.name)}" title="Remove" aria-label="Remove ${esc(c.label)}">${IC.close}</button>` : "";
 
   return `<div class="cn-row" data-conn="${esc(c.name)}">
     <span class="cn-logo" data-state="${state}">${connectorIcon(c.name)}</span>
@@ -144,7 +172,7 @@ function _cnRowHtml(c, staleAfterMin) {
       <span class="cn-name">${esc(c.label)}${badge}</span>
       <span class="cn-sub">${esc(status)}</span>
     </span>
-    <span class="cn-actions">${sync}${setup}${del}</span>
+    <span class="cn-actions">${sync}${fixBtn}${setup}${del}</span>
   </div>`;
 }
 
@@ -154,6 +182,7 @@ function _cnRowHtml(c, staleAfterMin) {
 function bindConnectorRowActions() {
   document.querySelectorAll("[data-sync]").forEach((b) => b.onclick = () => syncConn(b.dataset.sync));
   document.querySelectorAll("[data-setup]").forEach((b) => b.onclick = () => connectorHelp(b.dataset.setup));
+  document.querySelectorAll("[data-fda]").forEach((b) => b.onclick = () => openPrivacySettings());
   document.querySelectorAll("[data-editapp]").forEach((b) => b.onclick = () =>
     customAppForm(CONNECTORS.find((x) => x.name === b.dataset.editapp)?.config));
   document.querySelectorAll("[data-delapp]").forEach((b) => b.onclick = async () => {
@@ -259,17 +288,18 @@ const CONNECTOR_HELP = {
   apple_mail: `<p>Reads mail straight off your Mac — <b>no Google sign-in</b>.
     Works if you have your account in the <b>Mail app</b>.</p><ol>
     <li>Add your email account in <b>Mail</b> (if not already).</li>
-    <li><b>System Settings → Privacy & Security → Full Disk Access</b> → add your
-        terminal / Lodestone → enable.</li>
-    <li>Restart Lodestone, then click sync.</li></ol>`,
+    <li>Open <b>System Settings → Privacy & Security → Full Disk Access</b> and
+        turn on <b>Lodestone</b>.</li>
+    <li>Reopen Lodestone, then click sync.</li></ol>`,
   apple_calendar: `<p>Reads events off your Mac — <b>no sign-in</b>. Works with any
     calendar in the <b>Calendar app</b>.</p><ol>
-    <li>Enable <b>Full Disk Access</b> for your terminal / Lodestone.</li>
-    <li>Restart Lodestone, then click sync.</li></ol>`,
+    <li>Open <b>System Settings → Privacy & Security → Full Disk Access</b> and
+        turn on <b>Lodestone</b>.</li>
+    <li>Reopen Lodestone, then click sync.</li></ol>`,
   imessage: `<p>Reads your local iMessages (fully on-device, no cloud).</p><ol>
     <li>Open <b>System Settings → Privacy & Security → Full Disk Access</b>.</li>
-    <li>Add your <b>Terminal</b> (or whatever runs Lodestone) and enable it.</li>
-    <li>Restart Lodestone, then click sync.</li></ol>
+    <li>Turn on <b>Lodestone</b> in that list.</li>
+    <li>Reopen Lodestone, then click sync.</li></ol>
     <p class="t">macOS only. Lodestone only reads, never sends.</p>`,
   notion: `Read-only access to the Notion pages you share with an integration.`,
   linear: `Read-only access to your Linear issues (status, priority, team).`,
@@ -307,7 +337,7 @@ function connectorHelp(name) {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ value }) });
         if (r.ready) {
-          toast(`${c.label} connected ✓ — syncing…`);
+          toast(`${c.label} connected — syncing…`);
           $("#brainModal").hidden = true;
           await syncConn(name);
         } else {

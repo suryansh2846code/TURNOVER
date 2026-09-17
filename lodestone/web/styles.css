@@ -163,7 +163,32 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 /* Not `margin-top: auto`. Pinning the account to the floor left a long empty
    strip between it and the navigation, and in a rail that is mostly icons
    that gap reads as something failing to load. */
-.side-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.side-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 2px; }
+.side-foot .snav { width: 100%; }
+
+/* ── icons are drawn, never typed ──────────────────────────────────────────
+   The ✕, ✓, 🔒, 📁 and ⌵ that used to sit in these controls were text: an
+   emoji is a colour font the OS picks, so it ignored `currentColor` — it could
+   not take the gold accent, it sat at its own weight beside every drawn icon,
+   and it changed shape between macOS versions. They are SVG now, which means
+   they need a glyph's alignment back.
+
+   `flex: none` matters as much as the baseline: inside a flex row an SVG with
+   a percentage-free width still shrinks, and a squashed tick is worse than the
+   character it replaced. */
+.check svg, .del svg, .cn-x svg, .ib-x svg, .het-x svg, .del-agent svg,
+.cmp-att-x svg, .ts-hud-close svg, .ts-btn-link svg, .ghost.tiny svg,
+.cmp-flyout-check svg, .gc-ic svg, .ac-ok svg, .pc-lock svg, .pc-link svg,
+.cmp-lock-badge svg, .ts-hud-icon svg, .cmp-pill-ic svg, .cmp-pill-arrow svg,
+.chip-arrow svg, .ms-back-ic svg {
+  vertical-align: -0.12em; flex: none;
+}
+/* Badges and rows that pair an icon with a word line them up properly rather
+   than relying on the baseline nudge above. */
+.cmp-lock-badge, .ac-ok, .gc-row .gc-ic, .ts-hud-icon, .cmp-flyout-check {
+  display: inline-flex; align-items: center; gap: 5px;
+}
 .user-chip { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
   border-radius: 12px; background: transparent; color: var(--text); font-size: 13.5px; }
 .user-chip:hover { background: rgba(255,255,255,.04); }

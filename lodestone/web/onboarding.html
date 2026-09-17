@@ -118,6 +118,9 @@
   .bPriv .pi{color:var(--blue);flex:none}.bPriv b{font-size:12px}.bPriv p{margin:2px 0 0;font-size:10.5px;color:var(--faint)}.bPriv a{margin-left:auto;color:var(--blue);font-size:11px;text-transform:uppercase;text-decoration:none;white-space:nowrap}
   .cancel{position:absolute;right:44px;bottom:34px;font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);background:none;border:1px solid var(--line2);border-radius:999px;padding:12px 22px;cursor:pointer}
   .cancel:hover{color:var(--star);border-color:var(--star)}
+  .bskip{position:absolute;left:44px;bottom:34px;font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--north);background:none;border:1px solid var(--north-track,rgba(245,200,119,.28));border-radius:999px;padding:12px 22px;cursor:pointer}
+  .bskip[hidden]{display:none}
+  .bskip:hover{background:rgba(245,200,119,.1)}
   /* STEP 03: Your Brain digest */
   .stage.brainready .build,.stage.brainready .cfixed{opacity:0;pointer-events:none}
   .stage.brainready .conn,.stage.brainready .lab,.stage.brainready .ver{opacity:0!important;pointer-events:none}
@@ -144,7 +147,13 @@
   .dc-it{margin-left:auto;font-size:11px;color:var(--muted)}
   .dc-p{margin:0;font-size:12px;line-height:1.6;color:var(--star);opacity:.92;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
   .dc-k{margin:14px 0 0;font-size:11px;color:var(--faint);line-height:1.5;display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
-  .dc-k .ar{color:var(--muted)}
+  .dc-k:empty,.dc-k span:empty{margin:0}
+  /* An area with nothing behind it recedes instead of shouting a blank card.
+     It stays on screen — four areas that become three teaches the user the app
+     lost one, when the truth is that nothing has synced into it yet. */
+  .digest.ready .dcard.empty{opacity:.55}
+  .dcard.empty .dc-ic{filter:saturate(.25)}
+  .dcard.empty .dc-p{color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:.04em}
   .dcont{position:absolute;left:50%;bottom:11%;transform:translateX(-50%);text-align:center}
   .dcta{font-family:var(--mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:#08090d;background:#eef1f5;border:1px solid #eef1f5;border-radius:8px;padding:16px 30px;cursor:pointer;box-shadow:0 0 30px rgba(255,255,255,.12);transition:transform .18s}
   .dcta:hover{transform:translateY(-1px)}
@@ -231,24 +240,27 @@
     <div class="bProg"><div class="bPct" id="bPct">0%</div><div class="bBar"><div class="bFill" id="bFill"></div></div><div class="bWhat">Indexing your world</div><div class="bDet" id="bDet">Reading your sources…</div></div>
     <div class="bPriv"><span class="pi"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="4" y="8" width="10" height="7" rx="1.5"/><path d="M6 8V6a3 3 0 0 1 6 0v2"/></svg></span><div><b>All processing happens locally.</b><p>Your data never leaves your device.</p></div></div>
     <button class="cancel" id="cancel">Cancel</button>
+    <!-- Appears only once the wait has been long. Anything the user starts they
+         can leave: the sync and the enrichment both keep running in the app. -->
+    <button class="bskip" id="bSkip" hidden>Continue anyway →</button>
   </div>
   <div class="creq" id="creq"><span class="rq"></span><span id="creqText">Connect Gmail &amp; an AI model to continue</span></div>
   <button class="cbtn cfixed" id="continue">Continue →</button>
   <div class="digest">
     <div class="dhead"><div class="eyebrow">Step 03</div><h1>Here's your <b>brain.</b></h1><p>A quick snapshot of what we understand about you. You can always refine this later.</p></div>
     <div class="dloading" id="dloading"><span class="dspin"></span>Analyzing your brain…</div>
-    <div class="dcard tl"><div class="dc-h"><span class="dc-ic" style="background:rgba(180,152,240,.14);color:#b498f0"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="6" width="12" height="8" rx="1.5"/><path d="M7 6V5a2 2 0 0 1 4 0v1"/></svg></span><span class="dc-nm">Work</span><span class="dc-it"></span></div>
-      <p class="dc-p">What you're building and working on.</p>
-      <div class="dc-k"><span></span><span class="ar">→</span></div></div>
-    <div class="dcard bl"><div class="dc-h"><span class="dc-ic" style="background:rgba(95,207,142,.14);color:#5fcf8e"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M9 5v10M9 5c-1.5-1.2-3.5-1.2-6-1v10c2.5-.2 4.5-.2 6 1M9 5c1.5-1.2 3.5-1.2 6-1v10c-2.5-.2-4.5-.2-6 1"/></svg></span><span class="dc-nm">Learning</span><span class="dc-it"></span></div>
-      <p class="dc-p">What you're exploring and learning.</p>
-      <div class="dc-k"><span></span><span class="ar">→</span></div></div>
-    <div class="dcard tr"><div class="dc-h"><span class="dc-ic" style="background:rgba(91,155,255,.14);color:#5b9bff"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="4" width="12" height="10" rx="1.5"/><path d="M3 5l6 4 6-4"/></svg></span><span class="dc-nm">Communication</span><span class="dc-it"></span></div>
-      <p class="dc-p">Who you talk to and collaborate with.</p>
-      <div class="dc-k"><span></span><span class="ar">→</span></div></div>
-    <div class="dcard br"><div class="dc-h"><span class="dc-ic" style="background:rgba(245,200,119,.14);color:#f5c877"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="9" cy="6" r="3"/><path d="M4 15c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg></span><span class="dc-nm">Personal</span><span class="dc-it"></span></div>
-      <p class="dc-p">Your life outside work.</p>
-      <div class="dc-k"><span></span><span class="ar">→</span></div></div>
+    <div class="dcard tl" data-area="work"><div class="dc-h"><span class="dc-ic" style="background:rgba(180,152,240,.14);color:#b498f0"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="6" width="12" height="8" rx="1.5"/><path d="M7 6V5a2 2 0 0 1 4 0v1"/></svg></span><span class="dc-nm">Work</span><span class="dc-it"></span></div>
+      <p class="dc-p"></p>
+      <div class="dc-k"><span></span></div></div>
+    <div class="dcard bl" data-area="learning"><div class="dc-h"><span class="dc-ic" style="background:rgba(95,207,142,.14);color:#5fcf8e"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M9 5v10M9 5c-1.5-1.2-3.5-1.2-6-1v10c2.5-.2 4.5-.2 6 1M9 5c1.5-1.2 3.5-1.2 6-1v10c-2.5-.2-4.5-.2-6 1"/></svg></span><span class="dc-nm">Learning</span><span class="dc-it"></span></div>
+      <p class="dc-p"></p>
+      <div class="dc-k"><span></span></div></div>
+    <div class="dcard tr" data-area="comm"><div class="dc-h"><span class="dc-ic" style="background:rgba(91,155,255,.14);color:#5b9bff"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="4" width="12" height="10" rx="1.5"/><path d="M3 5l6 4 6-4"/></svg></span><span class="dc-nm">Communication</span><span class="dc-it"></span></div>
+      <p class="dc-p"></p>
+      <div class="dc-k"><span></span></div></div>
+    <div class="dcard br" data-area="personal"><div class="dc-h"><span class="dc-ic" style="background:rgba(245,200,119,.14);color:#f5c877"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="9" cy="6" r="3"/><path d="M4 15c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg></span><span class="dc-nm">Personal</span><span class="dc-it"></span></div>
+      <p class="dc-p"></p>
+      <div class="dc-k"><span></span></div></div>
     <div class="dcont"><button class="dcta" id="toBrain">Continue to Your Brain →</button><button class="dedit">Edit summary later</button></div>
   </div>
   <div class="bfoot">Built for a more focused you</div>
@@ -526,10 +538,38 @@
   document.getElementById("buildBtn").addEventListener("click",function(){connectView=true;stage.classList.add("on");startFromZero();});
   refreshConnectors();
 
-  // ── build: trigger a real sync and follow real progress ──────────────────
-  var LOG=["Reading your sources…","Scanning emails & docs…","Extracting people & projects…","Mapping connections…","Weaving your knowledge graph…"];
+  // ── build: a real sync, a real first enrichment, and real progress ───────
+  //
+  //  The digest screen does not appear until there is something true to put on
+  //  it. That means waiting for the FIRST ENRICHMENT PASS, not just for the
+  //  sync: the offline extractor labels every entity `thing`, so a brain that
+  //  has synced but not enriched produces four cards reading "still sorting".
+  //  Showing that as the finale of onboarding is worse than making the person
+  //  wait, because the waiting screen is the one that says what is happening.
+  //
+  //  Nothing here can trap anybody. Every stage reports real numbers, Cancel
+  //  goes back, and once the wait has been long "Continue anyway" appears —
+  //  the sync and the enrichment both carry on inside the app.
+  // >>> build-progress >>>  (sliced out and EXECUTED by tests/js/onboarding_build.mjs
+  // — the whole point of this block is WHEN it hands over, which no grep can see.)
   var buildIv=null;
+
+  //: Let the first sync batch land before enriching, so the pass has something
+  //: to chew on rather than starting and immediately draining.
+  var SETTLE=3500;
+  //: How long to wait for enrichment to show ANY sign of life before deciding
+  //: it cannot run here (no model connected, provider refused). Skipped, not
+  //: hung — the cards then say what they honestly know.
+  var ENRICH_GRACE=20000;
+  //: How often to re-ask for the digest while waiting for it to have content.
+  //: The sync is still running underneath, so the answer really does change.
+  var DIGEST_RETRY=12000;
+  //: Before offering the way out. Long enough that a normal build never sees
+  //: it; short enough that a stuck one is not a hostage situation.
+  var PATIENCE=150000;
+
   function backToConnect(){if(buildIv){clearInterval(buildIv);buildIv=null;}stage.classList.remove("building");
+    var sk=document.getElementById("bSkip");if(sk)sk.hidden=true;
     document.querySelector('.step[id="stepBuild"]').classList.remove("act");document.querySelectorAll(".step")[0].classList.add("act");}
 
   function enterBuildUI(){
@@ -538,43 +578,116 @@
     document.querySelectorAll(".step")[0].classList.remove("act");document.querySelectorAll(".step")[2].classList.remove("act");}
 
   function runBuildProgress(startPct){
-    var fill=document.getElementById("bFill"),pct=document.getElementById("bPct"),det=document.getElementById("bDet"),
-        itemsEl=document.getElementById("stItems"),entEl=document.getElementById("stEnt"),prog=startPct||0.06,shown=-1;
-    // The bar loads until the profile has been EXTRACTED — then we hand off to the
-    // digest with the cards already populated. It never shows 100% (the brain keeps
-    // growing in the background; the workspace brain button shows live status).
-    var t0=Date.now(),MINWAIT=4500,HARDCAP=45000,finishing=false;
-    var digestData=null,fetchStarted=false,firstDataAt=0;digestDone=false;
+    var fill=document.getElementById("bFill"),pct=document.getElementById("bPct"),
+        det=document.getElementById("bDet"),what=document.querySelector(".bWhat"),
+        itemsEl=document.getElementById("stItems"),entEl=document.getElementById("stEnt"),
+        skipBtn=document.getElementById("bSkip");
+    var prog=startPct||0.06,t0=Date.now(),finishing=false;
+
+    var firstDataAt=0;           // when the first memory landed
+    var enrichAsked=false;       // we have called enrich/start
+    var enrichAskedAt=0;
+    var enrichSeen=false;        // it actually ran
+    var enrichOver=false;        // finished, or established that it cannot run
+    var digestAt=0,digestBusy=false,digestData=null;
+    var forced=false;            // the user pressed "Continue anyway"
+
+    digestDone=false;
     document.querySelector(".digest").classList.remove("ready");
-    if(buildIv){clearInterval(buildIv);}
+    if(skipBtn){skipBtn.hidden=true;skipBtn.onclick=function(){forced=true;};}
+    if(buildIv)clearInterval(buildIv);
+
+    function say(label,detail){if(what)what.textContent=label;
+      if(det&&det.textContent!==detail){det.textContent=detail;ripplePop();}}
+    function grounded(d){return ((d&&d.personas)||[]).filter(function(p){return p.grounded;}).length;}
+
     buildIv=setInterval(async function(){
       var total=0,ents=0,syncing=true;
       try{var st=await api("/api/brain/stats");total=st.total||0;ents=(st.graph&&st.graph.entities)||0;}catch(e){}
       try{syncing=(await api("/api/sync/status")).syncing;}catch(e){}
-      var elapsed=Date.now()-t0;
-      if(total>0&&!firstDataAt)firstDataAt=Date.now();
-      // Only extract the profile once REAL data has landed (plus a few seconds for
-      // the first batch to settle) — so the cards show real counts + a real,
-      // LLM-written profile, not an empty "0 items" snapshot. Cap the wait so a
-      // slow/empty sync still resolves.
-      var dataSettled=firstDataAt&&(Date.now()-firstDataAt)>=3500;
-      var giveUp=elapsed>=HARDCAP||(!syncing&&elapsed>=8000);
-      if(!fetchStarted&&(dataSettled||giveUp)){fetchStarted=true;fetchDigestData().then(function(d){digestData=d;});}
-      var ready=(digestData!==null&&elapsed>=MINWAIT);
-      // ease toward ~0.82 while gathering + extracting (always moving), toward
-      // ~0.96 once the profile is ready — never a hard stall, never a full bar.
-      prog+=ready?(0.96-prog)*0.14:(0.82-prog)*0.035;
-      fill.style.width=(prog*100)+"%";pct.textContent=Math.round(prog*100)+"%";
+      var now=Date.now(),elapsed=now-t0;
+      if(total>0&&!firstDataAt)firstDataAt=now;
       itemsEl.textContent=total.toLocaleString();entEl.textContent=ents.toLocaleString();
-      var li=Math.min(LOG.length-1,Math.floor((elapsed/6500)*LOG.length));
-      if(li!==shown){shown=li;det.textContent=LOG[li];ripplePop();}
-      if(ready&&prog>=0.9&&!finishing){finishing=true;clearInterval(buildIv);buildIv=null;
-        det.textContent="Assembling your snapshot…";
+      if(skipBtn&&elapsed>=PATIENCE)skipBtn.hidden=false;
+
+      // ── 1. the sync ──────────────────────────────────────────────────────
+      if(!firstDataAt){
+        prog+=(0.30-prog)*0.05;
+        say("Indexing your world",
+            syncing?"Reading your sources…":"Waiting for your first source to answer…");
+      }
+
+      // ── 2. the first enrichment pass ─────────────────────────────────────
+      // Started only once real memories exist, and followed by its own numbers
+      // rather than by a timer pretending to be one.
+      if(firstDataAt&&!enrichAsked&&(now-firstDataAt)>=SETTLE){
+        enrichAsked=true;enrichAskedAt=now;
+        api("/api/brain/enrich/start",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({provider:localStorage.getItem("lodestone_provider")||null,
+                               model:localStorage.getItem("lodestone_model")||null})}).catch(function(){});
+      }
+      if(enrichAsked&&!enrichOver){
+        var es=null;
+        try{es=await api("/api/brain/enrich/status");}catch(e){}
+        var did=es?(es.processed||0):0,left=es?(es.remaining||0):0;
+        if(es&&(es.running||did>0))enrichSeen=true;
+        if(enrichSeen&&es&&!es.running)enrichOver=true;
+        // Never started and never processed anything: it cannot run here. Move
+        // on rather than spinning on a pass that is not coming.
+        if(!enrichSeen&&(now-enrichAskedAt)>=ENRICH_GRACE)enrichOver=true;
+
+        if(!enrichOver){
+          var share=(did+left)>0?did/(did+left):0;
+          prog=Math.max(prog,0.42+0.42*share);
+          say("Understanding it", did
+            ? "Working out who's who — "+did.toLocaleString()+" of "+(did+left).toLocaleString()
+            : "Working out who's who…");
+        }
+      }
+      if(firstDataAt&&!enrichAsked){
+        prog+=(0.42-prog)*0.08;
+        say("Indexing your world",total.toLocaleString()+" memories read so far…");
+      }
+
+      // ── 3. the snapshot ──────────────────────────────────────────────────
+      // Asked for only once enrichment is over, and asked again while it has
+      // nothing to show — the sync is still running, so the answer changes.
+      if(enrichOver&&!digestBusy&&(!digestAt||(now-digestAt)>=DIGEST_RETRY)&&!grounded(digestData)){
+        digestBusy=true;digestAt=now;
+        fetchDigestData().then(function(d){digestData=d;digestBusy=false;})
+                         .catch(function(){digestBusy=false;});
+      }
+      if(enrichOver){
+        prog+=(0.95-prog)*0.10;
+        say(grounded(digestData)?"Writing your snapshot":"Understanding it",
+            grounded(digestData)?"Assembling your snapshot…"
+              :(digestData?"Still sorting — your snapshot appears as soon as there is something to show."
+                          :"Writing your snapshot…"));
+      }
+
+      fill.style.width=(prog*100)+"%";pct.textContent=Math.round(prog*100)+"%";
+
+      // ── 4. hand over ─────────────────────────────────────────────────────
+      // Only with something real on the cards — or because the user said go.
+      var ready=digestData&&(grounded(digestData)||forced);
+      if(ready&&!finishing){
+        finishing=true;clearInterval(buildIv);buildIv=null;
+        if(skipBtn)skipBtn.hidden=true;
+        prog=Math.max(prog,0.96);fill.style.width=(prog*100)+"%";pct.textContent=Math.round(prog*100)+"%";
         setTimeout(function(){stage.classList.remove("building");stage.classList.add("brainready");
-          document.querySelectorAll(".step")[2].classList.add("act");document.querySelector('.step[id="stepBuild"]').classList.remove("act");
-          fillCards(digestData);},500);}   // cards arrive already populated
+          document.querySelectorAll(".step")[2].classList.add("act");
+          document.querySelector('.step[id="stepBuild"]').classList.remove("act");
+          fillCards(digestData);},500);
+      } else if(forced&&!digestData&&!digestBusy){
+        // Pressed before the first digest even came back: fetch the measured
+        // half so the cards show what is known rather than nothing at all.
+        digestBusy=true;
+        fetchDigestData().then(function(d){digestData=d;digestBusy=false;})
+                         .catch(function(){digestBusy=false;});
+      }
     },700);
   }
+  // <<< build-progress <<<
 
   async function startBuild(){
     if(!canContinue()){refreshCount();return;}   // Gmail + an AI model are required
@@ -588,52 +701,123 @@
   document.getElementById("cancel").addEventListener("click",function(){
     api("/api/sync/cancel",{method:"POST"}).catch(function(){});backToConnect();});
 
-  // ── digest: real, LLM-written personas grounded in the brain ─────────────
-  //  Cards stay hidden (loader spins) until the profile is extracted, then fade
-  //  in. A hard timeout falls back to computed personas so it never hangs.
+  // ── digest: four areas, and nothing on a card that was not measured ──────
+  //  Cards stay hidden (loader spins) until the digest returns, then fade in.
+  //  A slow written pass falls back to the measured half, so it never hangs and
+  //  never fills the wait with a sentence nobody earned.
+  // >>> digest-render >>>  (sliced out and EXECUTED by tests/js/onboarding_digest.mjs
+  // — a grep over this page would pass while the cards rendered nothing.)
   var digestDone=false;
+
+  // How a source reads to a person. CONNECTORS is already loaded from
+  // /api/connectors for the connect screen, so the label comes from the
+  // connector itself — there is no second list here to fall out of date, and a
+  // source we cannot name is left out rather than shown as its internal key.
+  function srcNames(keys){
+    var out=[];(keys||[]).forEach(function(k){
+      var c=(CONNECTORS||[]).filter(function(x){return x.name===k;})[0];
+      if(c&&c.label&&out.indexOf(c.label)<0)out.push(c.label);});
+    return out.slice(0,3);
+  }
+  function count(n,word,plural){return n.toLocaleString()+" "+(n===1?word:(plural||word+"s"));}
+  function andList(a){
+    if(!a.length)return "";
+    if(a.length===1)return a[0];
+    return a.slice(0,-1).join(", ")+" and "+a[a.length-1];
+  }
+
+  // The line a card shows when no model wrote one. Never a sentence about the
+  // user — only what is true about where the material came from, plus the one
+  // thing they can do about it.
+  function unwrittenLine(p,reason){
+    var names=andList(srcNames(p.sources));
+    if(reason==="no_model")
+      return (names?"Read from "+names+". ":"")+"Connect an AI model and this is written from your own data.";
+    if(reason==="model_failed")
+      return (names?"Read from "+names+". ":"")+"The summary could not be written just now — your brain is unaffected.";
+    return names?("Read from "+names+"."):"Read from your connected sources.";
+  }
+
   function fillCards(data){
     if(digestDone)return;digestDone=true;
     var digest=document.querySelector(".digest");
-    var cards=document.querySelectorAll(".digest .dcard"),order=["work","learning","comm","personal"];
     var personas=(data&&data.personas)||[];
-    var totalItems=personas.reduce(function(a,p){return a+(p.items||0);},0);
-    var hp=document.querySelector(".dhead p");
-    if(hp)hp.textContent=totalItems>0
-      ? "A quick snapshot of what we understand about you. You can always refine this later."
-      : "Your brain is still filling in — this snapshot grows as your sources finish syncing.";
+    var reason=(data&&data.reason)||null;
+    // `typed` is whether the graph has worked out WHAT anything is yet. Until
+    // enrichment runs every entity is an untyped "thing", so an area counting
+    // zero means "not sorted yet" — not "you have nothing here". Saying the
+    // second when the first is true is the same failure as the copy this
+    // replaced: confident, readable, and not about the user at all.
+    var typed=Boolean(data&&data.typed);
+    var total=(data&&data.total)||0;
     var byKey={};personas.forEach(function(p){byKey[p.key]=p;});
-    cards.forEach(function(card,i){var p=byKey[order[i]];if(!p)return;
-      var it=card.querySelector(".dc-it");if(it)it.textContent=(p.items||0).toLocaleString()+" items";
-      var b=card.querySelector(".dc-p");if(b)b.textContent=p.summary||"";
-      var k=card.querySelector(".dc-k span");if(k)k.textContent=(p.themes&&p.themes.length)?("Key themes: "+p.themes.join(", ")):"";});
+    var grounded=personas.filter(function(p){return p.grounded;}).length;
+
+    var hp=document.querySelector(".dhead p");
+    if(hp)hp.textContent=grounded
+      ? "Everything here was read from the sources you connected. Nothing is assumed."
+      : (total
+          ? "Your brain has " + count(total,"memory","memories") + " in it and is still sorting them out. This fills in as it goes."
+          : "Nothing has landed in your brain yet — this fills in as your sources finish syncing.");
+
+    // Keyed on the card's own declared area, not on its position: the four are
+    // laid out by corner, and a reordered grid silently relabelling every card
+    // is exactly the kind of wrong that looks right.
+    Array.prototype.forEach.call(document.querySelectorAll(".digest .dcard"),function(card){
+      var p=byKey[card.getAttribute("data-area")];
+      var nm=card.querySelector(".dc-nm"),it=card.querySelector(".dc-it"),
+          body=card.querySelector(".dc-p"),key=card.querySelector(".dc-k span");
+      if(nm&&p&&p.title)nm.textContent=p.title;
+      // Nothing in the brain backs this area. Say that. The alternative — a
+      // line we wrote in advance — reads as something the app learned about you.
+      if(!p||!p.grounded){
+        card.classList.add("empty");
+        if(it)it.textContent="";
+        // Three different situations, and only one of them is "you have nothing
+        // here". Collapsing them would tell a user with a full brain that their
+        // work life is empty.
+        if(body)body.textContent=!total?"Nothing here yet."
+                                :(typed?"Nothing here yet."
+                                       :"Still sorting your memories into this one.");
+        if(key)key.textContent="";
+        return;
+      }
+      card.classList.remove("empty");
+      // Two true numbers, and the card says which one it is showing. Memories
+      // are exact but only exist once enrichment has drawn facts out; how often
+      // the area was named is there from the first sync. Calling the second one
+      // "items" would be the same kind of lie the written-in-advance copy was.
+      if(it)it.textContent=p.items?count(p.items,"item")
+                          :(p.mentions?count(p.mentions,"mention"):"");
+      if(body)body.textContent=p.summary||unwrittenLine(p,reason);
+      if(key)key.textContent=(p.themes&&p.themes.length)?("Key themes: "+p.themes.join(", ")):"";
+    });
     digest.classList.add("ready");            // reveal the cards + hide the loader
   }
-  async function computeFallback(){
-    var st={total:0,by_source:{}},ents=[];
-    try{st=await api("/api/brain/stats");}catch(e){}
-    try{ents=(await api("/api/brain/entities?limit=24")).entities||[];}catch(e){}
-    var CAT={gmail:"comm",apple_mail:"comm",imessage:"comm",slack:"comm",gcal:"personal",apple_calendar:"personal",
-      gdrive:"work",github:"work",linear:"work",notion:"work",files:"learning",notes:"learning"};
-    var counts={work:0,learning:0,comm:0,personal:0},bs=st.by_source||{};
-    Object.keys(bs).forEach(function(s){counts[CAT[s]||CAT[s.split(":")[0]]||"work"]+=bs[s];});
-    var names=ents.map(function(e){return e.name;}),per=Math.max(1,Math.ceil((names.length||1)/4));
-    var titles={work:"What you're building and working on.",learning:"What you're exploring and learning.",
-      comm:"Who you talk to and collaborate with.",personal:"Your life outside work."};
-    return {personas:["work","learning","comm","personal"].map(function(k,i){
-      return {key:k,items:counts[k],summary:titles[k],themes:names.slice(i*per,i*per+per).slice(0,5)};})};
-  }
-  // Resolve the digest personas: LLM-written when possible, computed (real counts
-  // + themes) as a fallback, and a hard 22s timeout so the bar never loads forever.
+  // <<< digest-render <<<
+
+  // Resolve the digest. The written pass needs a model and can take a while, so
+  // a slow one falls back to `?written=0` — the SAME endpoint returning the same
+  // measured counts, themes and sources without calling a model. The page does
+  // not compute personas of its own: two implementations of one rule is how the
+  // card and the brain screen end up disagreeing about the same user.
   function fetchDigestData(){
     return new Promise(function(resolve){
       var done=false;
-      var t=setTimeout(function(){if(!done){done=true;computeFallback().then(resolve);}},30000);
+      function settle(d){if(!done){done=true;clearTimeout(t);resolve(d);}}
+      var asked=false;
+      function measuredOnly(){
+        if(done||asked)return;
+        asked=true;clearTimeout(t);
+        api("/api/brain/digest?written=0",{method:"POST",
+          headers:{"Content-Type":"application/json"},body:JSON.stringify({message:"digest"})})
+          .then(settle).catch(function(){settle(null);});
+      }
+      var t=setTimeout(measuredOnly,30000);
       api("/api/brain/digest",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({message:"digest",provider:localStorage.getItem("lodestone_provider")||null,
           model:localStorage.getItem("lodestone_model")||null})})
-        .then(function(d){if(!done){done=true;clearTimeout(t);resolve(d);}})
-        .catch(function(){if(!done){done=true;clearTimeout(t);computeFallback().then(resolve);}});
+        .then(settle).catch(measuredOnly);
     });
   }
 

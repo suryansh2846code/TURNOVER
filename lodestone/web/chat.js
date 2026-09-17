@@ -90,7 +90,7 @@ async function maybeEnrichTip(div) {
   tip.innerHTML = `<span class="het-ic">${IC.spark}</span>
     <span class="het-tx"><b>Sharpen your brain.</b> Enrich <b>${rem.toLocaleString()}</b> memories
     into people, projects &amp; facts for more precise answers — runs locally &amp; free.</span>
-    <button class="het-go">Enrich</button><button class="het-x" title="Dismiss">✕</button>`;
+    <button class="het-go">Enrich</button><button class="het-x" title="Dismiss">${IC.close}</button>`;
   tip.querySelector(".het-go").onclick = () => { openBrainScreen(); setTimeout(() => { const b = $("#enrichBtn"); if (b && !b.classList.contains("running")) b.click(); }, 300); };
   tip.querySelector(".het-x").onclick = () => { localStorage.setItem("lodestone_enrich_tip_off", "1"); tip.remove(); };
   div.appendChild(tip);
@@ -163,7 +163,7 @@ function renderConnectorChips() {
   box.hidden = attachedConnectors.length === 0;
   box.innerHTML = attachedConnectors.map((id) =>
     `<span class="cmp-chip">${esc(CONNECTOR_LABELS[id] || id)}` +
-    `<button type="button" data-drop-connector="${esc(id)}" aria-label="Remove">✕</button></span>`).join("");
+    `<button type="button" data-drop-connector="${esc(id)}" aria-label="Remove">${IC.close}</button></span>`).join("");
   box.querySelectorAll("[data-drop-connector]").forEach((b) => {
     b.onclick = () => {
       attachedConnectors = attachedConnectors.filter((x) => x !== b.dataset.dropConnector);
@@ -370,7 +370,7 @@ function actionCard(a) {
       // card — it is where "Notion cannot delete pages, do it there" comes from.
       const note = (r.agent_note || "").trim();
       if (r.ok) {
-        rr.innerHTML = `<span class="ac-ok">✓ ${esc(resultLine(r.detail))}</span>`;
+        rr.innerHTML = `<span class="ac-ok">${IC.check} ${esc(resultLine(r.detail))}</span>`;
         loadReminders(); loadRoutines(); return;
       }
       rr.innerHTML = `<span class="ac-err">${esc(r.error || "Failed")}</span>`
@@ -435,7 +435,7 @@ function renderAttachments() {
   box.innerHTML = attachments.map((a, i) => `
     <div class="cmp-att" title="${esc(a.name || "image")}">
       <img src="${a.dataUrl}" alt="${esc(a.name || "attached image")}" />
-      <button type="button" class="cmp-att-x" data-i="${i}" aria-label="Remove ${esc(a.name || "image")}">✕</button>
+      <button type="button" class="cmp-att-x" data-i="${i}" aria-label="Remove ${esc(a.name || "image")}">${IC.close}</button>
     </div>`).join("");
   box.querySelectorAll(".cmp-att-x").forEach((b) => {
     b.onclick = () => { attachments.splice(+b.dataset.i, 1); renderAttachments(); };
@@ -447,7 +447,7 @@ function addImageFiles(files) {
   if (!list.length) return;
 
   const seeing = modelSeesImages();
-  if (!seeing.ok) { toast(`🔒 ${seeing.why}`); return; }
+  if (!seeing.ok) { toast(seeing.why); return; }
 
   for (const f of list) {
     if (attachments.length >= IMG_MAX) { toast(`Up to ${IMG_MAX} images at a time.`); break; }
@@ -706,8 +706,8 @@ async function send(text) {
     loadReminders();   // …or set a reminder
   } catch (e) {
     think.done();
-    if (controller && controller.signal.aborted) addMsg("assistant", "■ Stopped.");
-    else addMsg("assistant", "△ " + e);
+    if (controller && controller.signal.aborted) addMsg("assistant", "Stopped.");
+    else addMsg("assistant", String(e));
   }
   finally {
     controller = null; turnId = null;

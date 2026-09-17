@@ -93,39 +93,88 @@ def _extract_json(text: str) -> dict:
     return _json.loads(s)
 
 
-# maps a memory source to one of the four persona buckets
-_PERSONA_CAT = {"gmail": "comm", "apple_mail": "comm", "imessage": "comm", "slack": "comm",
-                "gcal": "personal", "apple_calendar": "personal",
-                "gdrive": "work", "github": "work", "linear": "work", "notion": "work",
-                "files": "learning", "notes": "learning"}
+#: The digest's four areas, in the order the onboarding cards sit on screen.
+#: Keys are the contract; titles are what a person reads. Which entity TYPES
+#: land in which area is decided once, in `brain/graph.py::DIGEST_AREAS`.
+_PERSONA_AREAS = (("work", "Work"), ("learning", "Learning"),
+                  ("comm", "Communication"), ("personal", "Personal"))
+
+
+def _graph_is_typed(personas: list[dict]) -> bool:
+    """Has anything in the graph been worked out yet?
+
+    The offline extractor labels every entity `thing`; only AI enrichment
+    decides that Priya is a person and Atlas is a project. Until that has run,
+    a per-area count of zero means "not sorted yet", NOT "nothing there" — and
+    the two must not be shown to the user as the same sentence.
+    """
+    return any(p["items"] or p["mentions"] or p["themes"] for p in personas)
 
 
 def _base_personas() -> list[dict]:
-    brain = get_brain()
-    by_source = brain.stats().get("by_source", {})
-    counts = {"work": 0, "learning": 0, "comm": 0, "personal": 0}
-    for src, c in by_source.items():
-        counts[_PERSONA_CAT.get(src, _PERSONA_CAT.get(src.split(":")[0], "work"))] += c
-    names = [e["name"] for e in brain.graph.top_entities(limit=24)]
-    per = max(1, -(-len(names) // 4))
+    """The four digest areas, counted from the user's own brain.
 
-    def themes(i):
-        return names[i * per:i * per + per][:5]
-    tpl = [("work", "Work", "What you're building and working on."),
-           ("learning", "Learning", "What you're exploring and learning."),
-           ("comm", "Communication", "Who you talk to and collaborate with."),
-           ("personal", "Personal", "Your life outside work.")]
-    return [{"key": k, "title": t, "items": counts[k], "themes": themes(i), "summary": s}
-            for i, (k, t, s) in enumerate(tpl)]
+    Every field is measured: `items` is how many memories back the area,
+    `themes` are entities really typed into it, `sources` are the connectors
+    those memories came from.
+
+    `summary` starts as None and is filled ONLY by a model that read the real
+    context. There is deliberately no written-in-advance sentence to fall back
+    on — "What you're building and working on." was ours, not the user's, and a
+    card is read as something the app learned about them.
+    """
+    areas = get_brain().graph.areas(per_area=5)
+    personas = []
+    for key, title in _PERSONA_AREAS:
+        a = areas.get(key) or {}
+        items = int(a.get("items") or 0)
+        mentions = int(a.get("mentions") or 0)
+        themes = list(a.get("themes") or [])
+        sources = list(a.get("sources") or [])
+
+        # Where this area's material came from — and ONLY when that can be
+        # answered exactly. A fact knows the memory it came from, and that memory
+        # knows its connector, so relations give real attribution.
+        #
+        # Nothing stands in for it. Asking the vector store which memories "feel
+        # like work" was tried here and pulled: `embedding_provider` defaults to
+        # `hash`, so on a stock install those scores are close to arbitrary, and
+        # a card that names Gmail because a hash collision ranked it first is
+        # exactly the invented-but-plausible line this whole change removes.
+        personas.append({
+            "key": key, "title": title,
+            # Two different true numbers, never conflated. `items` is memories
+            # and is exact once enrichment has produced facts; `mentions` is how
+            # often the area was named and exists from the first sync. The card
+            # shows whichever it has, labelled as what it is — and neither is
+            # invented to fill the space when there is no number to give.
+            "items": items, "mentions": mentions,
+            "themes": themes,
+            "sources": sources[:4],
+            "summary": None,
+            # The graph has this area sorted out and can back it with counts,
+            # names and connectors. When it is False the card must NOT claim the
+            # area is empty — see `_graph_is_typed`.
+            "grounded": bool(items or mentions or themes or sources),
+        })
+    return personas
 
 
 @router.post("/api/brain/digest")
 @calls_a_model
-def brain_digest(body: ChatIn | None = None):
-    """The 'Here's your brain' digest — real, LLM-written second-person personas
-    grounded in the user's actual brain. Uses the caller's chosen model (falling
-    back to the server default), and to counts + themes when there is no data yet
-    or no model is connected."""
+def brain_digest(body: ChatIn | None = None, written: bool = True):
+    """The "Here's your brain" digest — four areas, every one of them measured.
+
+    Counts, themes and sources always come from the user's own brain. A model,
+    when one is connected, additionally WRITES each area up from the real recall
+    context; when one is not, `summary` stays None and `reason` says why, so the
+    card can show what it truly knows instead of prose nobody earned.
+
+    `?written=0` returns the measured half without calling a model at all. The
+    onboarding asks for it when the written pass is taking too long: the counts,
+    themes and sources are already true, and showing those beats both a spinner
+    that never ends and a paragraph made up to fill the space.
+    """
     from ...models.base import Message
     from ...models.registry import get_provider
     personas = _base_personas()
@@ -143,8 +192,12 @@ def brain_digest(body: ChatIn | None = None):
         ready, _ = provider.is_ready()
     except Exception:
         ready = False
-    if total == 0 or not ready:
-        return {"personas": personas, "generated": False}
+    if total == 0 or not ready or not written:
+        # Why, not just "no". The card turns this into one honest line and, for
+        # `no_model`, into something the user can act on.
+        reason = "no_data" if total == 0 else ("no_model" if not ready else "not_written")
+        return {"personas": personas, "generated": False, "total": total,
+                "reason": reason, "typed": _graph_is_typed(personas)}
     ctx = brain.recall(
         "the user's work and projects, what they're learning, who they "
         "communicate with, and their personal life", limit=24).get("context", "")
@@ -164,19 +217,39 @@ def brain_digest(body: ChatIn | None = None):
         res = provider.chat([Message(role="user", content=prompt)],
                             temperature=0.4, max_tokens=900)
         data = _extract_json(res.text)
+        typed = _graph_is_typed(personas)
         keymap = {"work": "work", "learning": "learning",
                   "communication": "comm", "personal": "personal"}
         for area, pk in keymap.items():
             d = data.get(area) or {}
             for p in personas:
-                if p["key"] == pk:
-                    if d.get("summary"):
-                        p["summary"] = str(d["summary"]).strip()
-                    if isinstance(d.get("themes"), list) and d["themes"]:
-                        p["themes"] = [str(t).strip() for t in d["themes"][:5]]
-        return {"personas": personas, "generated": True}
+                if p["key"] != pk:
+                    continue
+                # Asked to describe four areas, a model describes four areas —
+                # including one with nothing behind it. So an area the graph has
+                # sorted and found empty keeps its empty state whatever came
+                # back.
+                #
+                # Only when the graph HAS sorted anything, though. Before
+                # enrichment every entity is `thing` and all four areas read as
+                # empty, and dropping the model's work there would blank the
+                # whole screen for a brain that is genuinely full — the model
+                # read the real recall context, which is grounding this check
+                # cannot see.
+                if typed and not p["grounded"]:
+                    continue
+                if d.get("summary"):
+                    p["summary"] = str(d["summary"]).strip()
+                    p["grounded"] = True      # a model read the real brain for it
+                themes = [str(t).strip() for t in (d.get("themes") or []) if str(t).strip()]
+                if themes:
+                    p["themes"] = themes[:5]
+        return {"personas": personas, "generated": True, "total": total,
+                "reason": None, "typed": typed}
     except Exception as exc:
-        return {"personas": personas, "generated": False, "error": str(exc)[:160]}
+        return {"personas": personas, "generated": False, "total": total,
+                "reason": "model_failed", "typed": _graph_is_typed(personas),
+                "error": str(exc)[:160]}
 
 
 class EnrichIn(BaseModel):

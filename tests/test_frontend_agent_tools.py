@@ -12,6 +12,7 @@ group a tool landed in, whether a row is a switch or a reason, what the switch
 sent — are all properties of the produced DOM.
 """
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -254,3 +255,45 @@ def test_trimming_is_display_only():
     blurb = src.split("function toolBlurb", 1)[1].split("\n}", 1)[0]
     for mutation in ("row.description =", "t.description =", "delete "):
         assert mutation not in blurb, f"toolBlurb mutates the row: {mutation}"
+
+
+# ── the protocol is ours to know, not the user's ──────────────────────────
+# These two rules moved here when the read-only Tools drawer was deleted. It
+# was a weaker copy of this panel — same endpoint, same grouping, no switches —
+# and it carried the only tests for them. The drawer is gone; the rules are not.
+ACRONYM = re.compile(r"\bmcp\b", re.I)
+
+#: What a person actually reads. Tags and their attributes are stripped, because
+#: the tool's stored id legitimately rides in `data-tool=` — the rule is about
+#: the words on the screen, and an assertion over raw HTML fails on the id while
+#: a visible heading could still say it.
+def _visible(html: str) -> str:
+    return re.sub(r"<[^>]*>", " ", html or "")
+
+
+def test_the_protocol_is_never_named_on_screen(full):
+    """`mcp_source.py`: "To the user this is a connector. The acronym never
+    reaches the UI, exactly as 'vendor CLI' never reaches the sign-in card."
+    The payload says "mcp" four times over; the screen must not say it once."""
+    text = _visible(full["html"])
+    hit = ACRONYM.search(text)
+    assert not hit, ("the protocol's acronym reached the screen:\n"
+                     + text[max(0, hit.start() - 120):][:300])
+
+
+def test_the_id_may_carry_it_because_the_id_is_not_read(full):
+    """The guard above is narrow on purpose. A tool's stored id is what the
+    switch sends back, and stripping it to satisfy a text rule would break the
+    save — so the id keeps the acronym and the page never shows it."""
+    assert 'data-tool="mcp"' in full["html"]
+
+
+def test_a_connector_that_did_not_name_itself_is_still_not_named_after_it():
+    """A row can arrive with a source and no connector label. Vague is
+    survivable; naming the protocol is not — and passing it off as one of ours
+    is worse, because then the user cannot disconnect what is reading for them."""
+    out = run([], [{"name": "do_thing", "label": "Do", "description": "",
+                    "source": "mcp", "connector": ""}], [])
+    assert not ACRONYM.search(_visible(out["html"])), out["html"]
+    names = [g["name"] for g in out["groups"]]
+    assert "Built in" not in names, "a connector's tool was passed off as one of ours"

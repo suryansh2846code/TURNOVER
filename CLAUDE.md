@@ -193,9 +193,16 @@ Many users, many machines. Do not bake in anything specific to one of either.
   `lodestone_provider`, `lodestone_model`; `sessionStorage.ls_saw_onboarding`
   guards the empty-brain redirect.
 - **Cmd/Ctrl+R** is bound in JS on both pages — the webview does not wire it.
-- **The workspace** is a 3-column layout: agent rail (gradient orb avatars), chat,
-  and a right Context/Tools panel. **Keep every element id** — `app.js` injects
-  into many of them.
+- **The workspace** is a 2-column layout: agent rail (gradient orb avatars) and
+  chat. Everything else is a full-screen surface. **Keep every element id** —
+  `app.js` injects into many of them.
+- **Every left-nav item opens a screen.** There is no slide-over drawer.
+- **No emoji, and no dingbat doing an icon's job.** `IC` in `web/core.js` is the
+  icon set; an emoji is a colour font that ignores `currentColor`, so it can
+  never take the accent. Arrows inside sentences are typography, not icons.
+- **When you find a defect and do not fix it, write it down** in
+  [`docs/development/frontend-parked.md`](docs/development/frontend-parked.md).
+  An audit that lives in a chat window is an audit somebody pays for twice.
 - A pydantic body model used by a route must be **defined above** it — FastAPI
   resolves the annotation at decoration time.
 - Adding an endpoint means adding a line to `tests/api_surface.json`, in the same
@@ -288,6 +295,7 @@ The boundaries and what each must name:
 | the macOS window and sign-in card | [`docs/DESKTOP-SIGNIN.md`](docs/DESKTOP-SIGNIN.md) |
 | why `app.js` cannot be split yet | [`docs/development/frontend-testing.md`](docs/development/frontend-testing.md) |
 | the first-run flow | [`docs/development/onboarding-flow.md`](docs/development/onboarding-flow.md) |
+| frontend defects found and deliberately left | [`docs/development/frontend-parked.md`](docs/development/frontend-parked.md) |
 | the brain's data model | [`docs/BRAIN-V1.5.md`](docs/BRAIN-V1.5.md) |
 | connectors | [`docs/CONNECTORS.md`](docs/CONNECTORS.md) |
 | driving a real browser (planned) | [`docs/BROWSER.md`](docs/BROWSER.md) |

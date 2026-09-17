@@ -85,17 +85,17 @@ async function loadTasks() {
   $("#taskList").innerHTML = d.tasks.map((t) => {
     const due = dueLabel(t.due);
     return `<div class="task">
-      <span class="check" data-done="${t.id}">✓</span>
+      <span class="check" data-done="${t.id}">${IC.check}</span>
       <div class="body">
         <div class="ttl">${esc(t.title)}</div>
         ${due.text ? `<div class="due ${due.cls}">${due.text}</div>` : ""}
       </div>
-      <span class="del" data-del-task="${t.id}">✕</span>
+      <span class="del" data-del-task="${t.id}">${IC.close}</span>
     </div>`;
   }).join("");
   document.querySelectorAll("[data-done]").forEach((el) => el.onclick = async () => {
     await api(`/api/tasks/${el.dataset.done}/complete`, { method: "POST" });
-    toast("Done ✓"); loadTasks();
+    toast("Task done"); loadTasks();
   });
   document.querySelectorAll("[data-del-task]").forEach((el) => el.onclick = async () => {
     await api(`/api/tasks/${el.dataset.delTask}`, { method: "DELETE" });
@@ -127,7 +127,7 @@ async function loadReminders() {
           <span class="ib-meta">${esc(when)}${r.agent_id ? " · " + esc(r.agent_id) : ""}</span>
         </span>
         <span class="ib-actions">${edit}
-          <button class="tiny ghost ib-x" data-del-rem="${r.id}" aria-label="${isAction ? "Cancel" : "Delete"}">✕</button>
+          <button class="tiny ghost ib-x" data-del-rem="${r.id}" aria-label="${isAction ? "Cancel" : "Delete"}">${IC.close}</button>
         </span></div>`;
     }).join("") : `<div class="ib-empty">Nothing coming up.</div>`;
     document.querySelectorAll("[data-del-rem]").forEach((b) => b.onclick = async () => {
@@ -293,7 +293,7 @@ async function loadRoutines() {
         <span class="ib-actions">
           <button class="tiny ghost" data-toggle-r="${r.id}" data-on="${r.enabled}">${r.enabled ? "Pause" : "Resume"}</button>
           <button class="tiny ghost" data-edit-r="${r.id}">Edit</button>
-          <button class="tiny ghost ib-x" data-del-r="${r.id}" aria-label="Delete ${esc(r.name)}">✕</button>
+          <button class="tiny ghost ib-x" data-del-r="${r.id}" aria-label="Delete ${esc(r.name)}">${IC.close}</button>
         </span></div>`;
     }).join("") : `<div class="ib-empty">No automations yet. One is an instruction plus when to run it.</div>`;
     document.querySelectorAll("[data-edit-r]").forEach((b) => b.onclick = () =>
@@ -423,7 +423,7 @@ $("#brainExport").onclick = async () => {
     a.download = `lodestone-brain-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(a.href);
-    toast("Brain exported ✓");
+    toast("Brain exported");
   } catch (e) { toast(String(e)); }
 };
 $("#brainImport").onclick = () => $("#brainImportFile").click();

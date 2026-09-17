@@ -38,17 +38,95 @@ bar that is followed by more work is a lie.
 Cancel → `POST /api/sync/cancel` (cooperative). It never blocks on a full first
 sync.
 
+## Build — and when it is allowed to end
+
+The build screen used to hand over on a **timer**: 4.5s minimum, 45s cap. That
+is before the first enrichment pass has typed a single entity, so onboarding
+ended on four cards reading "still sorting" — true, and a terrible finale.
+
+It now waits for real state, in three stages, each reporting its own numbers:
+
+| stage | the screen says | driven by |
+|---|---|---|
+| sync | `Reading your sources…` · `N memories read so far…` | `/api/brain/stats` · `/api/sync/status` |
+| enrichment | `Working out who's who — 600 of 1,200` | `/api/brain/enrich/status` |
+| snapshot | `Assembling your snapshot…` | `/api/brain/digest` |
+
+The first enrichment pass is **started by onboarding** (`/api/brain/enrich/start`,
+once real memories have landed and settled), not left to the workspace. Handover
+happens only when that pass is over **and** at least one persona is `grounded`.
+
+Three things stop it becoming a hostage situation:
+
+- enrichment that never shows life within `ENRICH_GRACE` (no model connected) is
+  treated as unavailable and skipped, not waited on;
+- while nothing is groundable the digest is re-asked every `DIGEST_RETRY` — the
+  sync is still running, so the answer really does change;
+- after `PATIENCE` a **Continue anyway →** appears. Both jobs keep running in the
+  app. (`Skip for now` in the header is hidden once `.stage.on` is set, so the
+  build screen needs its own way out.)
+
+The block is bracketed by `// >>> build-progress >>>` and is **executed** by
+`tests/js/onboarding_build.mjs` against a scripted backend and a scripted clock —
+a 150-second patience window costs the suite no seconds.
+
 ## Digest — "Here's your brain"
 
 Cards stay hidden until `POST /api/brain/digest` returns, then fade in.
 
-The digest is **LLM-written from the real brain** and uses the caller's
-provider/model, passed in the body — the server default is `mock`. A computed
-counts-and-themes fallback plus a timeout means it can never hang.
+**Every line on a card is measured or absent.** There is no written-in-advance
+sentence anywhere — not in the markup, not as a server fallback, not as a client
+one. "What you're building and working on." used to ship in all three, on a
+screen a person reads as the app's first finding about them.
 
-The cards in `onboarding.html` are **neutral placeholders**; `fillCards`
-populates them from the real brain. Nothing in them may be specific to one
-person or one machine.
+### The contract
+
+```jsonc
+{ "generated": true,      // a model wrote the summaries
+  "total": 4200,          // memories in the brain
+  "typed": true,          // the graph has worked out WHAT things are
+  "reason": null,         // else: no_data | no_model | not_written | model_failed
+  "personas": [ { "key": "work",        // work | learning | comm | personal
+                  "title": "Work",      // what a person reads
+                  "items": 1280,        // memories backing it — exact, needs facts
+                  "mentions": 3100,     // times named — exists from the first sync
+                  "themes": ["Atlas"],  // entities really typed into this area
+                  "sources": ["gmail"], // connectors those memories came from
+                  "summary": "…",       // null unless a model wrote it
+                  "grounded": true } ]  // false ⇒ the card shows no claim
+}
+```
+
+- An area is chosen **by entity type**, in `brain/graph.py::DIGEST_AREAS` — never
+  by which connector a memory arrived from. `thing` is deliberately unmapped.
+- `items` and `mentions` are different true numbers and the card labels each as
+  what it is. `items` needs relations, which only enrichment produces.
+- `sources` is derived from `relations.source_mem → memories.source`, so a
+  connector added tomorrow appears without touching this code. It is **exact or
+  absent** — a vector search stood in for it briefly and was pulled, because
+  `embedding_provider` defaults to `hash`.
+- `?written=0` returns the measured half without calling a model. The page asks
+  for it when the written pass is slow, instead of computing personas of its own.
+
+### `typed` is why the empty states differ
+
+Before enrichment every entity is an untyped `thing`, so all four areas count
+zero. That is **not** an empty brain, and the card says so:
+
+| state | the card reads |
+|---|---|
+| `total == 0` | Nothing here yet. |
+| `typed == false` | Still sorting your memories into this one. |
+| `typed == true`, area empty | Nothing here yet. |
+| grounded, no summary | Read from Gmail and Notion. + what to do |
+| summary | the model's sentence |
+
+A model summary stands even when `typed` is false — it read the real recall
+context, which is grounding the type check cannot see.
+
+The render block is bracketed by `// >>> digest-render >>>` markers and is
+**executed** by `tests/js/onboarding_digest.mjs`; a grep over the page would
+pass while the cards rendered nothing.
 
 ## First entry — the Agent Library
 

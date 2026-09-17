@@ -38,8 +38,10 @@ def test_the_harness_reached_the_handlers(clicked):
     assert clicked["error"] is None, clicked["error"]
 
 
-@pytest.mark.parametrize("nav,panel", [("model", "model"), ("sources", "connectors"),
-                                       ("inbox", "inbox")])
+@pytest.mark.parametrize("nav,panel", [
+    ("model", "model"), ("settings", "model"), ("sources", "connectors"),
+    ("inbox", "inbox"), ("tools", "tools"),
+])
 def test_a_settings_item_opens_the_screen_on_its_own_panel(clicked, nav, panel):
     """Model and Connectors share one shell, so opening the screen is only half
     of it — landing on the wrong panel shows the screen with the other page on
@@ -50,39 +52,41 @@ def test_a_settings_item_opens_the_screen_on_its_own_panel(clicked, nav, panel):
         f"{nav} opened the settings screen on the {got['panel']!r} panel")
 
 
-@pytest.mark.parametrize("nav", ["tasks", "tools"])
-def test_the_remaining_drawers_are_still_drawers(clicked, nav):
-    """The delegation must catch the two that became screens and nothing else."""
-    got = clicked["opened"][nav]
-    assert got["modelScreen"] is False and got["drawer"] is True, (
-        f"{nav} was dragged onto the settings screen — the openDrawer "
-        "delegation is matching more than it should"
-    )
+def test_the_drawer_has_no_survivors():
+    """`tasks` moved into Inbox, beside the other three kinds of pending work,
+    and `tools` was a read-only copy of the Agents & tools panel — same
+    endpoint, same grouping, no switches. Those were the drawer's only two
+    panels, so it went with them. A left-over `#drawerBg` would be an invisible
+    full-screen overlay sitting at z-index 55 over everything."""
+    assert "drawerBg" not in INDEX
+    assert 'class="dpanel"' not in INDEX
+    assert "closeDrawer" not in (WEB / "app.js").read_text()
 
 
 def test_the_screen_can_be_closed(clicked):
     assert clicked["opened"]["closeButtonWorks"] is True
 
 
-# ── the panel really left the drawer ──────────────────────────────────────
-def test_routines_and_reminders_left_the_tasks_drawer():
-    """Two homes for the same list means one of them is the stale one."""
-    tasks_panel = INDEX.split('data-d="tasks"', 1)[1].split("</div>\n\n", 1)[0]
-    assert 'id="routineList"' not in tasks_panel
-    assert 'id="reminderList"' not in tasks_panel
+# ── one home per list ─────────────────────────────────────────────────────
+def test_every_pending_list_has_exactly_one_home():
+    """Two homes for the same list means one of them is the stale one. Tasks,
+    reminders and routines are all "work that is pending", and they are all in
+    Inbox now — `#taskList` was the one still outside it."""
+    for element_id in ("taskList", "routineList", "reminderList", "approvals"):
+        assert INDEX.count(f'id="{element_id}"') == 1, (
+            f"#{element_id} appears more than once — the renderer fills "
+            f"whichever the DOM happens to return first")
 
 
-def test_no_sources_panel_is_left_inside_the_drawer():
-    assert 'data-d="sources"' not in INDEX, (
-        "the drawer still has a sources panel — two copies of #connectors would "
-        "mean the renderer fills whichever the DOM happens to return first")
+def test_tasks_live_in_the_inbox_panel():
+    inbox = INDEX.split('data-sp="inbox"', 1)[1].split('data-sp="tools"', 1)[0]
+    assert 'id="taskList"' in inbox
+    assert 'id="taskInput"' in inbox and 'id="taskAdd"' in inbox
 
 
-def test_no_model_panel_is_left_inside_the_drawer():
-    assert 'data-d="model"' not in INDEX, (
-        "the drawer still has a model panel — two copies of these ids would "
-        "mean loadProviders() fills whichever the DOM happens to return first"
-    )
+def test_no_panel_is_left_inside_the_drawer():
+    for gone in ('data-d="sources"', 'data-d="model"', 'data-d="tasks"', 'data-d="tools"'):
+        assert gone not in INDEX, f"{gone} outlived the drawer"
 
 
 def test_the_screen_exists_and_starts_hidden():

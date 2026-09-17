@@ -78,7 +78,7 @@ function renderEnrich(s) {
   const rate = s.elapsed > 0 ? s.processed / s.elapsed : 0;
   const eta = s.running && s.remaining > 0 && rate > 0 ? ` · ~${fmtEta(s.remaining / rate)} left` : "";
   const tok = LOCAL[s.provider] ? "local · free"
-    : (s.tokens ? `${fmtTokens(s.tokens_in)}↑ ${fmtTokens(s.tokens_out)}↓ tokens${s.estimated ? " (est)" : ""}` : "");
+    : (s.tokens ? `${fmtTokens(s.tokens_in)} in · ${fmtTokens(s.tokens_out)} out${s.estimated ? " (est)" : ""}` : "");
   const capNote = s.cap ? ` · recent ${s.cap}/bulk source` : "";
   if (meta) meta.innerHTML =
     `${(s.processed || 0).toLocaleString()} of ${total.toLocaleString()} memories${capNote} · +${s.entities || 0} entities · +${s.facts || 0} facts${eta}` + (tok ? `<br>${tok}` : "");

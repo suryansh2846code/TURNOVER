@@ -105,6 +105,21 @@ const IC = {
   cloud: _S('<path d="M5 12a3 3 0 0 1 .3-6 3.5 3.5 0 0 1 6.6.8A2.6 2.6 0 0 1 11.5 12z"/>', 13),
   clock: _S('<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.4"/>'),
   bolt: _S('<path d="M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z"/>'),
+  //: The glyph set. These replaced the emoji and dingbats that were doing an
+  //: icon's job — 🔒 in nine places, 📁, ✨, ⚠️, and ✕/✓/↗ as button faces.
+  //: An emoji is a colour font the OS picks: it ignores `currentColor`, so it
+  //: could not take the gold accent, sat at a different weight to every drawn
+  //: icon beside it, and rendered differently per macOS version. A typographic
+  //: arrow inside a sentence ("Add agent →") is deliberately NOT one of these —
+  //: the design brief asks for exactly that.
+  close: _S('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>', 14),
+  check: _S('<path d="M3.5 8.4l3 3 6-6.4"/>', 14),
+  warn: _S('<path d="M8 2.6l6 10.8H2z"/><path d="M8 6.6v3.1"/><circle cx="8" cy="11.6" r=".6" fill="currentColor" stroke="none"/>', 14),
+  external: _S('<path d="M6.5 3.5H3.4v9.1h9.1V9.5"/><path d="M9.2 3.5h3.3v3.3M12.5 3.5L7.4 8.6"/>', 13),
+  folder: _S('<path d="M2 4.6h4l1.2 1.6h6.8v6.4a1.2 1.2 0 0 1-1.2 1.2H3.2A1.2 1.2 0 0 1 2 12.6z"/>', 13),
+  chevronDown: _S('<path d="M4 6.2L8 10l4-3.8"/>', 12),
+  arrowLeft: _S('<path d="M12.5 8h-9M7 3.5L2.5 8 7 12.5"/>', 14),
+  settings: _S('<circle cx="8" cy="8" r="2.3"/><path d="M8 1.9v1.7M8 12.4v1.7M2.6 8H4.3M11.7 8h1.7M4.2 4.2l1.2 1.2M10.6 10.6l1.2 1.2M11.8 4.2l-1.2 1.2M5.4 10.6l-1.2 1.2"/>'),
   attach: _S('<path d="M12 6.5l-5 5a2.4 2.4 0 0 1-3.4-3.4l5.2-5.2a1.6 1.6 0 0 1 2.3 2.3l-5.2 5.2a.8.8 0 0 1-1.1-1.1L9.5 5"/>', 17),
 };
 

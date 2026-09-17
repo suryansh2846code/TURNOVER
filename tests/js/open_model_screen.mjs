@@ -1,9 +1,11 @@
 /**
  * Click the left-nav items for real and report which surface opened.
  *
- * "AI model" used to be one of four panels inside the slide-over drawer, and
+ * "AI model" used to be one of four panels inside the slide-over drawer. That
  * is now a full-window screen of its own. Four call sites reach it, so the
- * move is done by delegating inside openDrawer() rather than by editing each
+ * drawer is gone entirely now — `tasks` moved into Inbox and `tools` became the
+ * Agents & tools panel — so EVERY left-nav item has to land on a screen. The
+ * routing is still one delegation inside openDrawer() rather than
  * one — and a delegation that matches too greedily would silently send Tasks,
  * Connectors and Tools to the model screen too. Source order cannot see that;
  * clicking can.
@@ -32,14 +34,17 @@ const el = (sel) => {
   return registry.get(sel);
 };
 
-// The nav buttons app.js binds at load, one per data-nav value.
-const NAVS = ["brain", "inbox", "sources", "tasks", "tools", "model"];
+// The nav buttons app.js binds at load, one per data-nav value — READ OUT OF
+// index.html rather than typed here. A hardcoded copy of this list is how the
+// harness kept believing in a "tasks" drawer for a release after it moved.
+const PAGE = fs.readFileSync(path.join(path.dirname(APP_JS), "index.html"), "utf8");
+const NAVS = [...PAGE.matchAll(/data-nav="([a-z]+)"/g)].map((m) => m[1]);
 const navButtons = NAVS.map((nav) => Object.assign(makeEl("button"), { dataset: { nav } }));
 
 // Model and Connectors share one shell, so "did the screen open" is only half
 // the question — the other half is which panel it opened on. Both panels have
 // to exist for showSettingsPanel() to have anything to hide.
-const panels = ["inbox", "connectors", "model"].map((sp) =>
+const panels = ["inbox", "connectors", "model", "tools"].map((sp) =>
   Object.assign(makeEl("div"), { dataset: { sp }, hidden: true }));
 const railItems = ["inbox", "brain", "connectors", "model"].map((msnav) =>
   Object.assign(makeEl("button"), { dataset: { msnav } }));
@@ -64,16 +69,16 @@ globalThis.cancelAnimationFrame = () => {};
 
 new Function(appSource(path.dirname(APP_JS)))();
 
-// Both surfaces start closed, whatever load-time code did to them.
+// The screen starts closed, whatever load-time code did to it.
 el("#modelScreen").hidden = true;
-el("#drawerBg").hidden = true;
 
 const opened = {};
 let error = null;
 try {
-  for (const nav of ["model", "tasks", "tools", "sources", "inbox"]) {
+  // Every nav item the page declares, so a new one cannot be added without a
+  // harness that already clicks it. Brain and Library raise their own screens.
+  for (const nav of NAVS.filter((n) => n !== "brain" && n !== "library")) {
     el("#modelScreen").hidden = true;
-    el("#drawerBg").hidden = true;
     panels.forEach((p) => { p.hidden = true; });
     const btn = navButtons.find((b) => b.dataset.nav === nav);
     if (typeof btn.onclick !== "function") { opened[nav] = "unbound"; continue; }
@@ -81,7 +86,6 @@ try {
     const shown = panels.filter((p) => p.hidden === false).map((p) => p.dataset.sp);
     opened[nav] = {
       modelScreen: el("#modelScreen").hidden === false,
-      drawer: el("#drawerBg").hidden === false,
       panel: shown.length === 1 ? shown[0] : shown,   // an array means ambiguous
     };
   }

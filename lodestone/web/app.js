@@ -36,7 +36,9 @@ let CONNECTORS = [];
 function applyIcons() {
   document.querySelectorAll(".snav").forEach((b) => {
     const el = b.querySelector(".snav-ic"); if (!el) return;
-    const key = b.id === "helpBtn" ? "help" : (b.dataset.nav === "sources" ? "connectors" : b.dataset.nav);
+    const key = b.id === "helpBtn" ? "help"
+      : b.dataset.nav === "sources" ? "connectors"
+      : b.dataset.nav;
     el.innerHTML = IC[key] || "";
   });
   document.querySelectorAll(".ms-nav-item").forEach((b) => {
@@ -97,7 +99,7 @@ async function loadAgents() {
         <div class="n">${esc(a.name)}</div>
         <div class="r">${esc(a.role)}</div>
       </div>
-      ${a.custom ? `<button type="button" class="del-agent" data-del-agent="${a.id}" aria-label="Delete agent ${esc(a.name)}">✕</button>`
+      ${a.custom ? `<button type="button" class="del-agent" data-del-agent="${a.id}" aria-label="Delete agent ${esc(a.name)}">${IC.close}</button>`
         : (a.id === current ? `<span class="dot"></span>` : "")}
     </div>`; }).join("");
   document.querySelectorAll(".agent").forEach((el) => {
@@ -124,32 +126,25 @@ async function loadAgents() {
 }
 
 
-// ── slide-over drawers opened from the left nav ─────────────────────────────
-const DRAWER_TITLES = { tasks: "Tasks", tools: "Tools & skills" };  // model, connectors and inbox are screens
-
+// ── the left nav ────────────────────────────────────────────────────────────
+// Every destination is a screen now. The slide-over drawer is gone: `tasks`
+// moved into Inbox, beside the other three kinds of pending work, and `tools`
+// was a read-only copy of the Agents & tools panel — same endpoint, same
+// grouping, no switches, and the untruncated descriptions that panel already
+// fixed. Those two were the drawer's only panels.
 function openDrawer(name) {
-  if (name === "model") return openModelScreen();        // no longer a drawer
-  if (name === "sources") return openConnectorsScreen();  // nor is this one
-  if (name === "inbox") return openInboxScreen();
-  const bg = $("#drawerBg"); if (!bg) return;
-  $("#drawerTitle").textContent = DRAWER_TITLES[name] || name;
-  document.querySelectorAll(".dpanel").forEach((p) => p.hidden = p.dataset.d !== name);
-  bg.hidden = false;
-  if (name === "tasks") { loadTasks(); loadReminders(); loadRoutines(); }
-  if (name === "tools") loadTools();
+  if (name === "model" || name === "settings") return openModelScreen();
+  if (name === "sources") return openConnectorsScreen();
+  if (name === "tools") return openToolsScreen();
+  if (name === "inbox" || name === "tasks") return openInboxScreen();
+  if (name === "brain") return openBrainScreen();
+  if (name === "library") return openLibrary();
 }
-function closeDrawer() { const bg = $("#drawerBg"); if (bg) bg.hidden = true; }
 document.querySelectorAll(".snav").forEach((b) => b.onclick = () => {
   if (b.id === "helpBtn") { window.location.href = "/onboarding?replay=1"; return; }  // re-experience onboarding (won't wipe)
-  if (b.dataset.nav === "brain") return openBrainScreen();   // Brain → full-screen viz + tools
-  if (b.dataset.nav === "library") return openLibrary();     // Agent Library → full-screen picker
   openDrawer(b.dataset.nav);
 });
-$("#drawerClose").onclick = closeDrawer;
-$("#drawerBg").onclick = (e) => { if (e.target.id === "drawerBg") closeDrawer(); };
-{ const v = $("#viewBrainBtn"); if (v) v.onclick = () => { closeDrawer(); openBrainScreen(); }; }
 { const nr = $("#newAgentRow"); if (nr) nr.onclick = () => $("#newAgentBtn").click(); }
-window.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#drawerBg") && !$("#drawerBg").hidden) closeDrawer(); });
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#modelScreen") && !$("#modelScreen").hidden) closeModelScreen(); });
 
 // Cmd/Ctrl+R → refresh the workspace in place (picks up new code — assets are
