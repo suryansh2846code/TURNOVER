@@ -11,6 +11,7 @@ holds.
 | `page.py` | a page as bounded, ref-bearing, quarantined text |
 | `session.py` | navigating, and the landing check after every navigation |
 | `chromium.py` | the profile, the one-time download, cleaning up what we spawn |
+| `signin.py` | connecting a site once, and what a lapsed session looks like |
 | `driver.py` | a real Chromium: ARIA snapshots, parsed, on a thread of its own |
 
 - **The unit of consent is the origin**, granted per capability. A browser has no
@@ -27,6 +28,20 @@ holds.
   cannot be made safe; it can be made unmistakably marked. See `page._defuse`.
 - **Refs, never selectors.** A model that can emit JavaScript into a logged-in
   page controls that account.
+- **Signing in drives the driver, never `Session`.** Connecting has to reach a
+  site nobody has granted yet — that is what connecting *is* — so
+  `chromium.open_driver()` exists and the boundary gained no exception.
+  `Session` is what agents hold; a boundary with an exception in it is not one.
+- **Only a path may stop a read; a title may only advise.** `is_sign_in_url`
+  blocks, `looks_like_sign_in` suggests. "Sign up for our newsletter | BBC News"
+  is an article, and refusing it would make a legitimate page unreadable with
+  nothing on screen saying why.
+- **A lapsed session is not a refusal.** A granted site landing on its own login
+  page returns `needs_signin` and **drops the page** — an agent handed a login
+  form reads one and reports on it, which the user sees as us being broken.
+- **Disconnect ends the session, not just the permission.** `forget_site()`
+  clears that host's cookies; a grant dropped while the user stays signed in is
+  a lie about what the button did.
 - **Reading only, today.** `may_act` exists and nothing grants it. A write tool
   must join `permissions.NEVER_UNATTENDED` in the same commit that adds it, and
   `tests/test_browse_tools.py` fails if it does not.

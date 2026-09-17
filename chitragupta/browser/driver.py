@@ -131,6 +131,10 @@ class PlaywrightDriver:
     def back(self) -> tuple[str, str, list[Node]]:
         return self._call("back")
 
+    def clear_cookies(self, domain: str) -> None:
+        """Forget the sign-in for one site, leaving every other one alone."""
+        self._call("clear_cookies", domain)
+
     def close(self) -> None:
         """Safe to call twice, and safe to call before anything started."""
         if self._thread is None:
@@ -178,6 +182,9 @@ class PlaywrightDriver:
                     self._profile, **launch)
                 page = context.pages[0] if context.pages else context.new_page()
                 page.set_default_timeout(TIMEOUT_MS)
+                # Cookies belong to the context, not the page, and signing a
+                # site out is the one command that needs to reach them.
+                self._context = context
                 self._ready.set()
                 self._serve(page)
         except Exception as exc:
@@ -206,6 +213,15 @@ class PlaywrightDriver:
         elif command.name == "back":
             page.go_back(wait_until="load")
             settle(page)
+        elif command.name == "clear_cookies":
+            # Playwright filters by domain including subdomains, which is what
+            # signing out of a site means — a token left on `www.` or `m.` is a
+            # session the user was told had ended.
+            context = getattr(self, "_context", None)
+            if context is None:
+                raise BrowserError("the browser is not holding a profile")
+            context.clear_cookies(domain=command.args[0])
+            return None
         elif command.name != "current":
             raise BrowserError(f"unknown command {command.name!r}")
         return read_page(page)
