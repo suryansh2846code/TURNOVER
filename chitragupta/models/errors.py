@@ -94,7 +94,7 @@ def parse_reset_at(text: str, *, now: datetime | None = None) -> datetime | None
 
     tz: tzinfo = UTC
     if zone:
-        with suppressed(f"resolving the timezone {zone!r} the provider named"):
+        with suppressed("resolving the timezone a provider named"):
             tz = ZoneInfo(zone)
     local = now.astimezone(tz)
     reset = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -148,7 +148,16 @@ class ProviderError:
         """
         text = self.message
         if self.retry_at:
+            # A limit is rendered as a card with a countdown, so it needs no
+            # marker in the text — the card IS the marker.
             text = f'<limit until="{self.retry_at}">{text}</limit>'
+        else:
+            # Everything else still does. Without it an outage or a rejected
+            # key arrives in the transcript looking exactly like something the
+            # model said, which is the confusion the marker exists to prevent —
+            # and is what dropping it for the limit case did to every other
+            # error on the way past.
+            text = f"⚠️ {text}"
         if self.detail and self.detail.lower() not in self.message.lower():
             text += f"\n\n_{self.detail}_"
         return text
