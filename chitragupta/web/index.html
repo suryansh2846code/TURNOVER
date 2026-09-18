@@ -421,6 +421,34 @@
           <button id="webAdd" class="tiny">Allow site</button>
         </div>
         <div id="webErr" class="cn-web-err" hidden></div>
+
+        <!-- ── Sign in to a site, once ──────────────────────────────────────
+             Allowing a site lets agents read its public pages. Connecting one
+             signs you in, in a real browser window you can watch, so they read
+             it AS YOU. Two different things, so two different controls: the
+             one above grants, this one grants and signs in.
+             Contract: docs/development/connected-sites.md -->
+        <div class="cn-web-connect" id="webConnect">
+          <div class="cn-web-connect-head">
+            <div class="cn-web-title">Sign in to a site</div>
+            <div class="cn-web-sub">Opens a real browser window. You type your password
+              into the site itself — never into this app — and it stays signed in afterwards.</div>
+          </div>
+          <div id="webConnectIdle" class="cn-web-add">
+            <input id="webConnectInput" class="set-input" type="text" autocomplete="off"
+                   placeholder="linkedin.com" aria-label="Website to sign in to" />
+            <button id="webConnectGo" class="tiny">Connect…</button>
+          </div>
+          <div id="webConnectRisk" class="cn-web-risk" hidden></div>
+          <div id="webConnectLive" class="cn-web-live" hidden>
+            <div class="cn-web-live-msg" id="webConnectMsg"></div>
+            <div class="cn-web-live-btns">
+              <button id="webConnectDone" class="tiny">Done</button>
+              <button id="webConnectCancel" class="tiny ghost">Cancel</button>
+            </div>
+          </div>
+          <div id="webConnectErr" class="cn-web-err" hidden></div>
+        </div>
         <button id="webForget" class="tiny ghost" hidden>Forget every sign-in</button>
       </section>
     </div>

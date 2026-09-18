@@ -825,7 +825,61 @@ function addMsg(role, text, images) {
   }
   box.appendChild(el); box.scrollTop = 1e9; return el;
 }
+//: A session that lapsed, pulled out of the tool results.
+//:
+//: `browser/session.py` writes this sentence when a granted site lands on its
+//: own login page, and it is the ONE place the wording lives — matched here
+//: rather than re-composed, so the two cannot drift into saying different
+//: things. No match renders nothing, so a change upstream costs a card, never
+//: a broken screen.
+//:
+//: It must not go in the fold. The trace is collapsed by default and this is
+//: not trace detail — it is the user's account having logged itself out, and
+//: an answer that says "I could not find anything" reads as the app being
+//: broken until somebody tells them otherwise.
+function lapsedSites(steps) {
+  const out = [];
+  for (const s of steps || []) {
+    if (s.kind !== "tool_result") continue;
+    // Non-greedy up to the sentence's full stop, not to the first dot — a host
+    // HAS dots in it, and `[^\s.]+` turned linkedin.com into "linkedin".
+    const m = /You are signed out of (\S+?)\.(?:\s|$)/.exec(String(s.result || ""));
+    if (m && !out.includes(m[1])) out.push(m[1]);
+  }
+  return out;
+}
+
+function reconnectCard(host) {
+  const el = document.createElement("div");
+  el.className = "msg assistant";
+  el.innerHTML = `<div class="signout-card">
+      <div class="signout-head">
+        <span class="signout-ic">${IC.lock}</span>
+        <span class="signout-msg">You are signed out of <b>${esc(host)}</b>.
+          Agents can still reach it — the permission is fine, the login ended.</span>
+      </div>
+      <button type="button" class="signout-go">Reconnect ${esc(host)}</button>
+    </div>`;
+  el.querySelector(".signout-go").onclick = () => {
+    // Straight to the control that fixes it, with the address already filled
+    // in. "Go to Connectors and find it" is a instruction, not a fix.
+    if (typeof openConnectorsScreen === "function") openConnectorsScreen();
+    const input = $("#webConnectInput");
+    if (input) {
+      input.value = host;
+      if (typeof renderConnectRisk === "function") renderConnectRisk();
+      input.focus();
+      input.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
+  return el;
+}
+
 function addTrace(steps) {
+  // Before the fold, and whether or not there is a trace worth folding.
+  for (const host of lapsedSites(steps)) {
+    $("#messages").appendChild(reconnectCard(host));
+  }
   if (!steps.length) return;
   const calls = steps.filter((s) => s.kind === "tool_call");
   if (!calls.length) return;
