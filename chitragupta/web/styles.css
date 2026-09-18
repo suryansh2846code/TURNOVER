@@ -917,6 +917,14 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
    under the settings and brain screens (70) — "+ Add a connector" fired, built
    its modal, and painted it behind the page the button was on. The handler
    worked; nothing appeared. Keep this above every screen in the file. */
+/* A local server has no account to show, so its card is a status line and the
+   one action that helps: look again. */
+.ts-card.local-server .ts-card-actions { display: flex; align-items: center; gap: 12px; }
+.ts-card.local-server .ts-card-sub { color: var(--muted); }
+.ts-card-hint { margin: 10px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--faint); }
+.pc-badge.ready { color: var(--ok); }
+.pc-badge.local { color: var(--muted); }
+
 /* ── a plan limit, with the wait made legible ──────────────────────────────
    The provider hands us one sentence — "5-hour session limit · resets 12am
    (Asia/Calcutta)" — which used to land in the transcript styled exactly like
