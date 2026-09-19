@@ -925,6 +925,23 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .pc-badge.ready { color: var(--ok); }
 .pc-badge.local { color: var(--muted); }
 
+/* ── the websites shelf ────────────────────────────────────────────────────
+   One card per site, its own mark, and whichever account is signed in. A row
+   rather than a grid of tiles: the thing a person scans for here is "am I
+   connected to that one", which reads fastest down a single column. */
+.cn-web-shelf { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.site-card { display: flex; align-items: center; gap: 12px;
+  background: var(--panel-2); border-radius: 11px; padding: 11px 13px; }
+.site-mark { width: 30px; height: 30px; border-radius: 9px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(223,231,242,.06); }
+.site-card.is-on .site-mark { background: rgba(245,200,119,.10); }
+.site-text { flex: 1; min-width: 0; }
+.site-nm { font-size: 13px; color: var(--star); }
+.site-sub { font-size: 11.5px; color: var(--faint); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-card.is-on .site-sub { color: var(--north); }
+
 /* ── signing in to a site, once ────────────────────────────────────────────
    Allowing a site and connecting one are different promises, so they are
    different blocks rather than two buttons on one input. */

@@ -408,12 +408,17 @@
       <section class="cn-web" id="cnWeb">
         <div class="cn-web-head">
           <div>
-            <div class="cn-web-title">Websites agents can read</div>
-            <div class="cn-web-sub" id="webSub">Agents can only open sites you list here. They can read and report; they cannot click, type or buy anything.</div>
+            <div class="cn-web-title">Websites</div>
+            <div class="cn-web-sub" id="webSub">Sign in once and agents read the site as you. They can read and report; they cannot click, type or buy anything.</div>
           </div>
           <button id="webSetup" class="tiny" hidden>Set up browsing</button>
         </div>
         <div id="webSetupState" class="cn-web-setup" hidden></div>
+        <!-- The shelf: one card per site, its own mark, and whichever account
+             is signed in. Built from SITE_CATALOG in browser.js merged with the
+             grants the server returns, so a site the user connected by hand
+             still gets a card rather than disappearing into the list below. -->
+        <div id="webShelf" class="cn-web-shelf"></div>
         <div id="webSites" class="cn-web-list"></div>
         <div class="cn-web-add">
           <input id="webInput" class="set-input" type="text" autocomplete="off"
