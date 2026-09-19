@@ -53,12 +53,22 @@ CATEGORIES = (
 #: user's own agent sit next to a connected Notion it could not read.
 #: `forget_fact` and `run_python` are absent on purpose — see `presets`-era
 #: notes in `brain_tools.py` and `code_tools.py`. Both are opt-in per agent.
+#: Reading websites the user has allowed. Read-only: `may_act` exists in
+#: `browser/origins.py` and nothing grants it, and a write tool has to join
+#: `permissions.NEVER_UNATTENDED` in the same commit that adds it.
+_BROWSE = ["browse_sites", "browse_open", "browse_read", "browse_find"]
+
+
 BASE_TOOLS = [
     "search_brain", "who_is", "whats_true_about_me", "timeline",
     "why_do_you_think_that", "correct_fact", "remember", "list_entities",
     "web_search", "ask_agent", "ask_agents", "update_plan",
     "list_routines", "pause_routine", "list_pending_approvals", "list_scheduled",
     MCP_TOOLS,
+    # Offered to every agent and gated at execution, like the connector tools
+    # beside it: an agent that cannot see the tool tells the user it cannot
+    # read a website, which is false — it can, with one tap.
+    *_BROWSE,
 ]
 
 #: Reading and writing files is safe to ship with any agent: it reaches nothing
@@ -73,10 +83,6 @@ _MAIL = ["search_source", "sync_source", "gmail_search",
 #: Which apps are reachable at all: docs/MESSAGING.md.
 _MESSAGES = ["list_chats", "read_chat"]
 _DIARY = ["calendar_lookup", "sync_source"]
-#: Reading websites the user has allowed. Read-only: `may_act` exists in
-#: `browser/origins.py` and nothing grants it, and a write tool has to join
-#: `permissions.NEVER_UNATTENDED` in the same commit that adds it.
-_BROWSE = ["browse_sites", "browse_open", "browse_read", "browse_find"]
 #: Numbers over time. The agent that plans training and food had none of these
 #: and was still asked to "review honestly" — so every answer about progress was
 #: a model estimating from recalled prose. See `chitragupta/metrics.py`.
@@ -87,7 +93,15 @@ _MEASURE = ["whats_tracked", "measurement_history", "log_measurement",
 #: Writing is the `log_workout` action, so the user can correct a card.
 _TRAINING = ["list_exercises", "lift_progress", "training_load"]
 
-_ALL_ACTIONS = ["send_email", "create_event", "set_reminder", "create_routine"]
+#: What every agent can do, whatever else it can.
+#:
+#: A reminder is a notification on the user's own laptop and a routine is this
+#: same agent, later, with these same tools — neither reaches anybody and
+#: neither widens what the agent can do. They only decide *when*, which is the
+#: difference between an agent that answers and one that notices.
+_PROACTIVE = ["set_reminder", "create_routine"]
+
+_ALL_ACTIONS = ["send_email", "create_event", *_PROACTIVE]
 #: Only for agents that can actually reach an inbox or a chat. An agent taught
 #: to propose a change it has no tool to address is an agent that will claim it
 #: archived something.
@@ -146,8 +160,17 @@ class Template:
     unrestricted_connectors: bool = False
 
     def resolved_tools(self) -> list[str]:
-        """What this template actually grants, with `EVERYTHING` expanded."""
-        return expand_tools(list(self.tools))
+        """What this template actually grants, with `EVERYTHING` expanded.
+
+        Deduplicated, order kept. A template's list is assembled from shared
+        constants — `_MAIL` and `_DIARY` both carry `sync_source` — so an agent
+        holding both listed it twice, and the next constant to overlap would
+        have done it again silently.
+        """
+        seen: dict[str, None] = {}
+        for tool in expand_tools(list(self.tools)):
+            seen.setdefault(tool, None)
+        return list(seen)
 
     def to_agent(self) -> Agent:
         return Agent(
@@ -258,7 +281,8 @@ TEMPLATES: tuple[Template, ...] = (
         # be taught how, and then cannot claim it did. That is also what makes
         # it the right agent to give the browser to first — it can read every
         # site the user allowed and act on none of them.
-        tools=[*BASE_TOOLS, *_FILES, *_BROWSE],
+        tools=[*BASE_TOOLS, *_FILES],
+        actions=[*_PROACTIVE],
         works_with=["browser"],
     ),
     Template(
@@ -277,6 +301,7 @@ TEMPLATES: tuple[Template, ...] = (
             "are not sure a change is right, say which part you are unsure of."
         ),
         tools=[*BASE_TOOLS, *_FILES, "run_python", *_TASKS, *_LOOPS],
+        actions=[*_PROACTIVE],
         recall_sources=["github", "linear"],
         works_with=["github", "linear", "files"],
     ),
@@ -416,6 +441,7 @@ TEMPLATES: tuple[Template, ...] = (
             "that is the first step rather than describing what you would find."
         ),
         tools=[*BASE_TOOLS, *_FILES, "run_python", *_TASKS],
+        actions=[*_PROACTIVE],
         works_with=["files"],
         needs=["files"],
     ),
@@ -451,7 +477,8 @@ TEMPLATES: tuple[Template, ...] = (
         # The agent `docs/BROWSER.md` argues for: reading and reporting covers a
         # large part of the value with none of the transactional risk, which
         # makes it the right thing to ship on a read-only browser.
-        tools=[*BASE_TOOLS, *_BROWSE, "run_python", *_TASKS],
+        tools=[*BASE_TOOLS, "run_python", *_TASKS],
+        actions=[*_PROACTIVE],
         works_with=["browser"],
         needs=["browser"],
     ),

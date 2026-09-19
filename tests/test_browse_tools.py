@@ -230,29 +230,44 @@ def test_the_browse_tools_are_grouped_where_a_person_would_look():
     assert tools.tool_label("browse_open")[1] == "Websites you allow"
 
 
-def test_an_agent_with_browse_tools_says_so_on_its_card():
+def test_the_browser_is_refused_until_the_user_grants_it():
+    """What replaced "an agent holding the tool must declare it on its card".
+
+    That rule was written when holding the tool meant having the capability, so
+    an agent with it and a silent card was an agent with the most dangerous
+    thing in the app and nothing saying so.
+
+    The browser is a connector now. Every agent is offered the tools — hiding
+    them makes an agent say it cannot read a website, which is false — and the
+    tool is refused until the user grants it, for that agent, once or always.
+    The origin list still decides which sites. So the tool grants nothing, and
+    the gate is what has to be pinned.
+    """
+    from chitragupta.agents import connector_grants
+
+    for tool in ("browse_sites", "browse_open", "browse_read", "browse_find"):
+        assert connector_grants.connector_of(tool) == "browser", (
+            f"{tool} reaches the browser without asking anybody")
+
+    assert not connector_grants.may_use("research", "browser"), (
+        "an agent could open a browser with no grant at all")
+
+
+def test_an_agent_the_browser_is_part_of_says_so_on_its_card():
     """Informed consent, in the place the decision is actually made.
 
-    `resolved_tools()`, not `tools` — the first version of this test read the raw
-    list and passed for the wrong reason. Chief of Staff is `tools=["*"]`, which
-    exists precisely so a tool added tomorrow reaches it, so the browse tools
-    *are* on it and the raw list never says the word "browse".
-
-    Two kinds of agent may have them, and both are legible before anyone adds
-    one: the generalist, whose card already says it has everything, and an agent
-    that declares `works_with=["browser"]` — which is what puts "works with:
-    websites you allow" on the card. An agent with the most dangerous capability
-    in the app and nothing on its card saying so is the case this forbids.
+    Not every agent that *can* ask — that is all of them now — but every agent
+    the browser is a stated part of. `needs=["browser"]` is the claim that it
+    does not work without one, and a card that does not mention it is a card
+    that lied about what the user was taking on.
     """
     from chitragupta.agents import library
 
     for template in library.TEMPLATES:
-        if not any(x.startswith("browse_") for x in template.resolved_tools()):
+        if "browser" not in template.needs:
             continue
-        declared = (library.EVERYTHING in template.tools
-                    or "browser" in template.works_with)
-        assert declared, (
-            f"{template.id} can read websites and its card never mentions it")
+        assert "browser" in template.works_with, (
+            f"{template.id} needs a browser and its card never mentions it")
 
 
 def test_holding_the_tool_grants_no_access_at_all():

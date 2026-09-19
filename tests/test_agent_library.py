@@ -68,8 +68,12 @@ def test_the_library_spans_the_shelves():
 
 
 def test_an_agent_with_nothing_to_send_is_not_taught_how():
+    """Nothing outbound, rather than nothing at all — a reminder and a routine
+    reach nobody, and an agent that cannot notice anything is half an agent."""
+    from chitragupta.agents.permissions import OUTBOUND_ACTIONS
+
     researcher = BY_ID["research"]
-    assert researcher.actions == []
+    assert not set(researcher.actions) & OUTBOUND_ACTIONS
     assert "send_email" not in researcher.to_agent().system_message()
 
 

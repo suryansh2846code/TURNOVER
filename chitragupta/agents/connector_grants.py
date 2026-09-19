@@ -89,6 +89,13 @@ FIRST_PARTY_TOOLS: dict[str, str] = {
     "list_mail": "gmail",
     "read_thread": "gmail",
     "calendar_lookup": "gcal",
+    # The browser is a connector too. Which SITES it may reach is a separate
+    # question, answered per origin in `browser/origins.py`; this answers
+    # whether this agent may open one at all.
+    "browse_sites": "browser",
+    "browse_open": "browser",
+    "browse_read": "browser",
+    "browse_find": "browser",
 }
 
 
@@ -111,6 +118,16 @@ def first_party_labels() -> dict[str, str]:
     """
     labels: dict[str, str] = {}
     for connector_id in set(FIRST_PARTY_TOOLS.values()):
+        if connector_id == "browser":
+            # Not in the connector registry — it is the browser subsystem, and
+            # "set up" means the one-time download has happened. Offering it
+            # before that would be offering a control that cannot work.
+            with suppressed("checking whether the browser is set up"):
+                from ..browser import chromium
+
+                if chromium.is_installed():
+                    labels[connector_id] = "Browser"
+            continue
         with suppressed("naming a built-in connector for the permission picker"):
             from ..connectors import get_connector
 

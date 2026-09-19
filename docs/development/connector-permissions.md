@@ -129,6 +129,21 @@ this time" into a thing the user has to remember to undo.
 told, in words it can pass on. Silence here would produce the answer this whole
 project started with: a confident reply built from the wrong source.
 
+## 8a. The browser is one of these
+
+It was gated a level up — an agent could browse if whoever built its template
+happened to include the tools, a decision made once and never revisited, which
+is the shape of the bug at the top of this page.
+
+It is a connector now. `FIRST_PARTY_TOOLS` maps the four `browse_*` tools to
+`browser`, every agent carries them through `BASE_TOOLS`, and the gate refuses
+until the user grants — once, always, or for one message with `@browser`.
+
+**Two gates, two questions.** This one asks *may this agent open a browser at
+all*. `browser/origins.py` still asks *which sites*, per origin. The same
+shape as Gmail: the connector grant says whether the agent may reach it, the
+provider's own scopes say what it can do there. Neither replaces the other.
+
 ## 9. Deliberately still open
 
 * **Per-tool grants.** The unit is the connector, not the tool. "Gmail but only

@@ -79,13 +79,25 @@ def test_a_turn_that_spends_its_budget_still_answers(monkeypatch):
 
 
 # ── the prompt ───────────────────────────────────────────────────────────
-def test_an_agent_with_no_actions_is_not_taught_how_to_send_email():
+def test_an_agent_that_cannot_send_is_not_taught_how_to_send_email():
+    """The claim is about reaching people, not about having no actions at all.
+
+    Research can set a reminder and offer a routine — a notification on the
+    user's own laptop, and itself later with the same tools. Neither reaches
+    anybody. `OUTBOUND_ACTIONS` is the list that does.
+    """
+    from chitragupta.agents.permissions import OUTBOUND_ACTIONS
+
     research = get_agent("research")
-    assert research.actions == []
+    assert not set(research.actions) & OUTBOUND_ACTIONS, (
+        "Research was given a way to reach somebody")
     text = research.system_message()
     assert "send_email" not in text, "Research carries the email protocol"
-    assert "create_routine" not in text
-    assert "at=" not in text, "and the scheduling rules that depend on it"
+    # The scheduling block itself, not `at=` — that now appears in
+    # set_reminder's own syntax, which reaches nobody. `_SCHEDULING` is the
+    # part that only exists because something can be sent.
+    assert "To send or create something at a FUTURE time" not in text, (
+        "the send-scheduling rules reached an agent that cannot send")
 
 
 def test_an_agent_that_can_send_still_gets_the_whole_protocol():

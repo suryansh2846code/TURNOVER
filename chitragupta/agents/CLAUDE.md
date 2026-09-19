@@ -42,6 +42,13 @@ permissions — and `library.py`, which is what Chitragupta *offers*.
 - A routine pre-authorises the routine, not the stranger who wrote the email it
   read. Outbound actions need a recipient on the explicit allow-list; everything
   else queues for one tap. Interactive chat is deliberately not gated.
+- **Every agent can notice, and every agent can ask for a browser.**
+  `_PROACTIVE` (a reminder and a routine) is on all of them: neither reaches
+  anybody, and a routine is the same agent later with the same tools — it
+  decides *when*, not *what*. `_BROWSE` is in `BASE_TOOLS` for the same reason
+  the connector sentinel is: offered to everyone, refused until granted.
+  What an agent may *send* is still per-template, and `OUTBOUND_ACTIONS` is the
+  list that says which actions reach a person.
 - Every new capability gets a case in `evaluation.py`.
 
 Providers and entitlements belong to `../models/`; recall order belongs to
