@@ -108,6 +108,19 @@ function placeFlyout(el) {
   if (r.left < 8) el.classList.add("opens-right");
 }
 
+//: Why a model cannot be picked, said in terms of what the user would do.
+//:
+//: It used to be "Connect in Models" for everything, which is read on the
+//: Models screen itself — and for a local server there is no connect step at
+//: all, so it pointed at a button that does not and should not exist.
+function lockReason(p) {
+  const caps = (p && p.capabilities) || {};
+  if (p && p.locality === "local" && !caps.api_key_supported && !caps.oauth_supported) {
+    return p.reason ? "Not running" : "Start it first";
+  }
+  return "Connect first";
+}
+
 function closeAllPickerFlyouts() {
   const pf = $("#cmpProvFlyout");
   const mf = $("#cmpModelFlyout");
@@ -202,14 +215,14 @@ function renderModelFlyout() {
       name: "Auto",
       desc: autoLocked ? "Provider not connected" : "Recommended model automatically",
       locked: autoLocked,
-      plan_required: autoLocked ? "Connect in Models" : null
+      plan_required: autoLocked ? lockReason(p) : null
     },
     ...models.map((m) => ({
       id: m.id,
       name: m.name,
       desc: m.desc,
       locked: !isProvConn || Boolean(m.locked),
-      plan_required: !isProvConn ? "Connect in Models" : (m.plan_required || null),
+      plan_required: !isProvConn ? (m.plan_required || lockReason(p)) : (m.plan_required || null),
     })),
   ];
 
@@ -720,10 +733,17 @@ function loadProviderCards() {
       providers: ["gemini"],
     },
     {
+      id: "local",
+      title: "On your Mac",
+      subtitle: "Run open models locally through Ollama. No account, no key, no "
+        + "tokens billed — and nothing leaves this machine.",
+      providers: ["ollama"],
+    },
+    {
       id: "other",
       title: "Other ways to run models",
-      subtitle: "Free models, OpenRouter, and local Ollama models.",
-      providers: ["deepseek", "openrouter", "ollama"],
+      subtitle: "Free models and OpenRouter.",
+      providers: ["deepseek", "openrouter"],
     },
   ];
 

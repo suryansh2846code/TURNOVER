@@ -59,6 +59,12 @@ async function loadBrowserSites() {
 
   const forget = $("#webForget");
   if (forget) forget.hidden = !(s.sites || []).length && !s.installed;
+
+  // Pick a sign-in back up. The state is the server's, so reloading the page
+  // mid-sign-in has to find the flow again — otherwise a refresh strands a
+  // browser window that nobody can now finish or cancel. This is the one
+  // entry point the section has, so it is where that belongs.
+  loadConnectState();
 }
 
 /** The one-time download, and what to say while there isn't one. */
@@ -168,5 +174,178 @@ function stopBrowserPoll() {
       toast("Every sign-in forgotten");
     } catch (e) { toast(`Could not do that — ${String(e)}`); }
     loadBrowserSites();
+  };
+}
+
+
+// ── connecting a site: signing in once, in a window you can watch ──────────
+//
+// The state lives on the SERVER (`browser/signin.py`), which is what makes this
+// survive a refresh: reload mid-sign-in and the panel picks the flow back up
+// rather than stranding a browser window nobody can now finish or cancel.
+//
+// Three states, and the middle one is the one that is easy to get wrong:
+//
+//   idle              → an address and a Connect button
+//   connecting        → "the window is open", Done, and Cancel
+//   still_signing_in  → NOT a failure. It is our guess that you are still on
+//                       the login page, and pressing Done again overrules it.
+//
+// That last one matters more than it looks. The check is a heuristic over the
+// address the browser landed on; it will be wrong on some site, and a user who
+// cannot overrule it is locked out of an account that is already theirs.
+let CONNECT_POLL = null;
+
+//: Sites where connecting is worth a word of warning first, per
+//: docs/development/connected-sites.md — "say the risk in the UI, once, before
+//: the user connects one of the bottom four. Not buried in a doc."
+//:
+//: Editorial copy, not capability: these are judgements about how each company
+//: treats automation, and they belong with the site catalogue in the backend
+//: the day one exists. Matched on the registered domain so `www.` and `m.` do
+//: not slip past it.
+const CONNECT_RISK = {
+  "linkedin.com": "LinkedIn watches for automation. Reading your own feed at "
+    + "human pace is not scraping, but accounts have been restricted for less — "
+    + "connect it only if you accept that risk.",
+  "x.com": "X watches for automation and restricts accounts that look automated.",
+  "twitter.com": "X watches for automation and restricts accounts that look automated.",
+  "whatsapp.com": "This signs in through WhatsApp Web, the same as linking a "
+    + "device. Safer than a reimplemented protocol, but not risk-free.",
+  "discord.com": "Discord's rules do not allow automating a user account. A real "
+    + "browser session is less clearly against them, not clearly within them.",
+};
+
+function connectRisk(value) {
+  const host = String(value || "").trim().toLowerCase()
+    .replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "");
+  const parts = host.split(".");
+  // Check the registered domain, so m.linkedin.com and www.x.com both match.
+  for (let i = 0; i < parts.length - 1; i++) {
+    const hit = CONNECT_RISK[parts.slice(i).join(".")];
+    if (hit) return hit;
+  }
+  return "";
+}
+
+function renderConnectRisk() {
+  const box = $("#webConnectRisk"), input = $("#webConnectInput");
+  if (!box) return;
+  const why = connectRisk(input && input.value);
+  box.hidden = !why;
+  box.textContent = why;
+}
+
+/** Draw whichever of the three states the server says we are in. */
+function renderConnect(st) {
+  const idle = $("#webConnectIdle"), live = $("#webConnectLive");
+  const msg = $("#webConnectMsg"), done = $("#webConnectDone");
+  if (!idle || !live) return;
+
+  if (!st || !st.connecting) {
+    idle.hidden = false;
+    live.hidden = true;
+    stopConnectPoll();
+    return;
+  }
+
+  idle.hidden = true;
+  live.hidden = false;
+  live.classList.toggle("is-waiting", Boolean(st.still_signing_in));
+  // The server's sentence when it has one — it knows whether this is the first
+  // ask or the "that still looks like a login page" one, and writing our own
+  // here would mean two places deciding what the user is being told.
+  if (msg) {
+    msg.textContent = st.note || (st.host
+      ? `A browser window is open at ${st.host}. Sign in there — it is a separate `
+        + `window, not part of this app — then come back and press Done.`
+      : "A browser window is open. Sign in there, then press Done.");
+  }
+  // Second press means "I really am in", and says so rather than looking like
+  // the same button failing twice.
+  if (done) done.textContent = st.still_signing_in ? "Done anyway" : "Done";
+  startConnectPoll();
+}
+
+async function loadConnectState() {
+  try { renderConnect(await api("/api/browser/connect")); }
+  catch (_) { /* a failed poll must not tear down a live sign-in */ }
+}
+
+function startConnectPoll() {
+  if (CONNECT_POLL) return;
+  CONNECT_POLL = setInterval(loadConnectState, 2000);
+}
+function stopConnectPoll() {
+  if (!CONNECT_POLL) return;
+  clearInterval(CONNECT_POLL);
+  CONNECT_POLL = null;
+}
+
+{
+  const err = $("#webConnectErr");
+  const show = (m) => { if (err) { err.hidden = !m; err.textContent = m || ""; } };
+
+  const input = $("#webConnectInput");
+  if (input) input.oninput = renderConnectRisk;
+
+  const go = $("#webConnectGo");
+  if (go) go.onclick = async () => {
+    const url = (input && input.value || "").trim();
+    if (!url) return;
+    go.disabled = true; show("");
+    try {
+      const r = await api("/api/browser/connect", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }) });
+      // The endpoint answers `{ok: false, error}` rather than raising, so a
+      // refusal has to be read out of the body — awaiting it and assuming
+      // success is how "already signing in to X" became a silent no-op.
+      if (r && r.ok === false) show(r.error || "Could not open that site.");
+      else if (input) input.value = "";
+    } catch (e) {
+      show(String(e).replace(/^Error:\s*/, ""));
+    }
+    go.disabled = false;
+    renderConnectRisk();
+    loadConnectState();
+  };
+
+  const done = $("#webConnectDone");
+  if (done) done.onclick = async () => {
+    done.disabled = true; show("");
+    // `force` is the second press. The first asks the server to check; the
+    // second says the user knows better, which is the whole point of the flag.
+    const force = done.textContent.trim() === "Done anyway";
+    try {
+      const r = await api("/api/browser/connect/finish", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force }) });
+      if (r && r.ok) {
+        toast(r.detail || `${r.host || "That site"} is connected`);
+        show("");
+      } else if (r && r.still_signing_in) {
+        show("");                 // the live message says it; a red line as well is shouting
+      } else {
+        show((r && r.error) || "Could not finish connecting.");
+      }
+    } catch (e) {
+      show(String(e).replace(/^Error:\s*/, ""));
+    }
+    done.disabled = false;
+    await loadConnectState();
+    loadBrowserSites();
+  };
+
+  const cancel = $("#webConnectCancel");
+  if (cancel) cancel.onclick = async () => {
+    cancel.disabled = true;
+    try {
+      const r = await api("/api/browser/connect/cancel", { method: "POST" });
+      if (r && r.detail) toast(r.detail);
+    } catch (e) { toast(`Could not stop that — ${String(e)}`); }
+    cancel.disabled = false;
+    show("");
+    loadConnectState();
   };
 }

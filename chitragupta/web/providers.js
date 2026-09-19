@@ -616,7 +616,53 @@ function renderProviderConnectBox(boxEl, providerId, options = {}) {
     `;
   }
 
+  // ── a local server is not an account ──────────────────────────────────────
+  // Ollama has no key, no sign-in and nothing to disconnect, so every card
+  // above renders empty for it — which is what left its box with no way to
+  // connect at all while each of its models said "Connect in Models" to
+  // somebody already standing in Models.
+  //
+  // Asked of the capabilities, not of the id: anything that runs locally,
+  // discovers its own models and has no credential to collect gets this card.
+  const isLocalServer = Boolean(
+    p.locality === "local" &&
+    !caps.api_key_supported && !caps.oauth_supported &&
+    !caps.browser_login_supported && !caps.device_login_supported &&
+    caps.model_discovery_supported);
+
+  let localCardHtml = "";
+  if (isLocalServer) {
+    const installed = models.filter((m) => !m.locked).length;
+    // "Detection is not consent" does not apply to a thing with no credential:
+    // there is nothing to consent to. Reachable IS connected here, and the only
+    // honest action is to look again.
+    const line = isReady
+      ? `${installed} model${installed === 1 ? "" : "s"} installed and ready to run.`
+      : esc(p.reason || "Not running. Start Ollama, then check again.");
+    localCardHtml = `
+      <div class="ts-card local-server">
+        <div class="ts-card-row">
+          <div class="ts-card-left">
+            <div class="ts-card-title">${esc(providerLabel)}</div>
+            <div class="ts-card-sub">${line}</div>
+          </div>
+          <div class="ts-card-actions">
+            ${isReady
+              ? `<span class="pc-badge ready">Running</span>`
+              : `<span class="pc-badge local">Not running</span>`}
+            <button type="button" class="ts-btn-link ts-refresh-btn">Check again</button>
+            ${!isReady && keyUrl
+              ? `<a class="pc-link" href="${esc(keyUrl)}" target="_blank" rel="noopener">Get Ollama ${IC.external}</a>`
+              : ""}
+          </div>
+        </div>
+        ${isReady ? "" : `<p class="ts-card-hint">Nothing is sent anywhere — these run on this Mac.
+          Install Ollama and run a model once, and it appears here.</p>`}
+      </div>`;
+  }
+
   boxEl.innerHTML = `
+    ${localCardHtml}
     ${activeCardHtml}
     ${signinCardHtml}
     ${apiKeyCardHtml}
