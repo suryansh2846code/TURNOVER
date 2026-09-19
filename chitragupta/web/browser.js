@@ -59,6 +59,8 @@ async function loadBrowserSites() {
       loadBrowserSites();
     });
 
+  renderSiteShelf(s.sites || []);
+
   const forget = $("#webForget");
   if (forget) forget.hidden = !(s.sites || []).length && !s.installed;
 
@@ -67,6 +69,87 @@ async function loadBrowserSites() {
   // browser window that nobody can now finish or cancel. This is the one
   // entry point the section has, so it is where that belongs.
   loadConnectState();
+}
+
+//: What a connected site says about itself.
+//:
+//: The grant carries `{origin, host, may_read, may_act, note}` and no account,
+//: so there is no username to print — and printing one we do not have is worse
+//: than printing none. The note is shown when it is a real one; the sign-in
+//: flow writes "signed in from Connectors", which is where the connection came
+//: from rather than who it is, so that is not an account either.
+function siteAccount(grant) {
+  const note = String((grant && grant.note) || "").trim();
+  if (!note || /^signed in from /i.test(note)) return "";
+  return note;
+}
+
+/** One card per site: its mark, whether it is connected, and as whom. */
+function renderSiteShelf(grants) {
+  const box = $("#webShelf");
+  if (!box) return;
+
+  const byHost = new Map();
+  for (const g of grants) byHost.set(String(g.host || "").toLowerCase(), g);
+
+  // The catalogue first, then anything the user connected that is not in it —
+  // a site added by hand belongs on the shelf too, with a generic mark.
+  const rows = SITE_CATALOG.map((spec) => ({
+    spec, grant: [...byHost.values()].find((g) => siteSpec(g.host) === spec) || null,
+  }));
+  for (const g of byHost.values()) {
+    if (siteSpec(g.host)) continue;
+    rows.push({ spec: { id: g.host, label: g.host, host: g.host,
+                        url: "https://" + g.host, tint: "var(--muted)",
+                        blurb: "", risk: "", icon: IC.connectors }, grant: g });
+  }
+
+  box.innerHTML = rows.map(({ spec, grant }) => {
+    const on = Boolean(grant);
+    const who = on ? siteAccount(grant) : "";
+    const line = on
+      ? (who ? esc(who) : "Signed in")
+      : esc(spec.blurb || spec.host);
+    return `
+      <div class="site-card${on ? " is-on" : ""}" data-site-id="${esc(spec.id)}">
+        <span class="site-mark" style="color:${esc(spec.tint)}">${spec.icon}</span>
+        <div class="site-text">
+          <div class="site-nm">${esc(spec.label)}</div>
+          <div class="site-sub">${line}</div>
+        </div>
+        ${on
+          ? `<button type="button" class="tiny ghost" data-site-off="${esc(grant.host)}">Disconnect</button>`
+          : `<button type="button" class="tiny" data-site-on="${esc(spec.id)}">Connect</button>`}
+      </div>`;
+  }).join("");
+
+  box.querySelectorAll("[data-site-on]").forEach((b) => b.onclick = () => {
+    const spec = SITE_CATALOG.find((x) => x.id === b.dataset.siteOn);
+    if (!spec) return;
+    // Straight into the flow that already exists, with the address filled in.
+    const input = $("#webConnectInput");
+    if (input) { input.value = spec.url; renderConnectRisk(); }
+    const go = $("#webConnectGo");
+    if (go) go.onclick();
+  });
+
+  box.querySelectorAll("[data-site-off]").forEach((b) => b.onclick = async () => {
+    const host = b.dataset.siteOff;
+    // Disconnect ends the SESSION, not just the permission — say so, because a
+    // button that signs you out while promising less is a lie about what it did.
+    if (!confirm(`Disconnect ${host}? Agents stop reading it and the sign-in `
+                 + "is cleared, so you would sign in again next time.")) return;
+    b.disabled = true;
+    try {
+      await api(`/api/browser/sites/${encodeURIComponent(host)}`, { method: "DELETE" });
+      toast(`${host} disconnected`);
+    } catch (e) {
+      toast(`Could not disconnect that — ${String(e)}`);
+      b.disabled = false;
+      return;
+    }
+    loadBrowserSites();
+  });
 }
 
 /** The one-time download, and what to say while there isn't one. */
@@ -198,34 +281,78 @@ function stopBrowserPoll() {
 // cannot overrule it is locked out of an account that is already theirs.
 let CONNECT_POLL = null;
 
-//: Sites where connecting is worth a word of warning first, per
+//: The sites on the shelf — mark, where signing in starts, and the warning if
+//: there is one. One row per site, because a logo that lives apart from the
+//: address that opens it is two things to keep in step.
+//:
+//: The warnings are the contract's, not invented here:
 //: docs/development/connected-sites.md — "say the risk in the UI, once, before
 //: the user connects one of the bottom four. Not buried in a doc."
 //:
-//: Editorial copy, not capability: these are judgements about how each company
-//: treats automation, and they belong with the site catalogue in the backend
-//: the day one exists. Matched on the registered domain so `www.` and `m.` do
-//: not slip past it.
-const CONNECT_RISK = {
-  "linkedin.com": "LinkedIn watches for automation. Reading your own feed at "
-    + "human pace is not scraping, but accounts have been restricted for less — "
-    + "connect it only if you accept that risk.",
-  "x.com": "X watches for automation and restricts accounts that look automated.",
-  "twitter.com": "X watches for automation and restricts accounts that look automated.",
-  "whatsapp.com": "This signs in through WhatsApp Web, the same as linking a "
-    + "device. Safer than a reimplemented protocol, but not risk-free.",
-  "discord.com": "Discord's rules do not allow automating a user account. A real "
-    + "browser session is less clearly against them, not clearly within them.",
-};
+//: This is editorial copy — judgements about how each company treats
+//: automation — and it belongs beside a site catalogue in the backend the day
+//: one exists. Until then it is here, said once, rather than in a document
+//: nobody opens.
+const SITE_CATALOG = [
+  {
+    id: "linkedin", label: "LinkedIn", host: "linkedin.com",
+    url: "https://www.linkedin.com/login", tint: "#3f7fe0",
+    blurb: "Your feed, messages and connections.",
+    risk: "LinkedIn watches for automation. Reading your own feed at human pace "
+      + "is not scraping, but accounts have been restricted for less — connect "
+      + "it only if you accept that risk.",
+    icon: `<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M4.98 3.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM3 9h4v12H3V9zm6.5 0h3.8v1.7h.05c.53-.95 1.83-1.95 3.77-1.95 4.03 0 4.78 2.5 4.78 5.76V21h-4v-5.6c0-1.34-.02-3.06-1.9-3.06-1.9 0-2.2 1.45-2.2 2.96V21h-4V9z"/></svg>`,
+  },
+  {
+    id: "whatsapp", label: "WhatsApp", host: "web.whatsapp.com",
+    url: "https://web.whatsapp.com", tint: "#5fcf8e",
+    blurb: "Your chats, through WhatsApp Web.",
+    risk: "This signs in through WhatsApp Web, the same as linking a device. "
+      + "Safer than a reimplemented protocol, but not risk-free.",
+    icon: `<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.05L2 22l5.1-1.33A10 10 0 1 0 12 2zm0 2a8 8 0 1 1-4.1 14.86l-.3-.18-2.6.68.7-2.53-.2-.32A8 8 0 0 1 12 4zm-3.2 4.3c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.68 2.68 4.14 3.65 2.05.8 2.47.64 2.91.6.44-.04 1.43-.58 1.63-1.15.2-.56.2-1.05.14-1.15-.06-.1-.22-.16-.46-.28-.24-.12-1.43-.7-1.65-.78-.22-.08-.38-.12-.54.12-.16.24-.62.78-.76.94-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.02-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78-.19-.46-.39-.4-.54-.41h-.01z"/></svg>`,
+  },
+  {
+    id: "x", label: "X", host: "x.com",
+    url: "https://x.com/login", tint: "#dfe7f2",
+    blurb: "Your timeline and messages.",
+    risk: "X watches for automation and restricts accounts that look automated.",
+    icon: `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M18.24 2.25h3.31l-7.23 8.26 8.5 11.24H16.17l-5.21-6.82L4.99 21.75H1.68l7.73-8.84L1.25 2.25H8.08l4.71 6.23zm-1.16 17.52h1.83L7.01 4.13H5.05z"/></svg>`,
+  },
+  {
+    id: "discord", label: "Discord", host: "discord.com",
+    url: "https://discord.com/login", tint: "#b498f0",
+    blurb: "Your servers and direct messages.",
+    risk: "Discord's rules do not allow automating a user account. A real "
+      + "browser session is less clearly against them, not clearly within them.",
+    icon: `<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M19.3 5.4A16.8 16.8 0 0 0 15.1 4l-.3.6a12.6 12.6 0 0 1 3.7 1.9 17.8 17.8 0 0 0-12.9 0A12.7 12.7 0 0 1 9.2 4.6L8.9 4a16.9 16.9 0 0 0-4.2 1.4C2 9.6 1.3 13.6 1.7 17.6a17 17 0 0 0 5.1 2.6l1-1.7c-.9-.3-1.7-.7-2.4-1.2l.5-.4a12.1 12.1 0 0 0 10.2 0l.5.4c-.7.5-1.5.9-2.4 1.2l1 1.7a17 17 0 0 0 5.1-2.6c.5-4.6-.6-8.6-2-12.2zM8.7 15.2c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm6.6 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>`,
+  },
+  {
+    id: "reddit", label: "Reddit", host: "reddit.com",
+    url: "https://www.reddit.com/login", tint: "#e0a45e",
+    blurb: "Your feed and saved posts.",
+    // No warning: Reddit does not treat a signed-in reader the way the four
+    // above do. A direct Reddit connection is the better path and is planned;
+    // this works today, which is why it is here.
+    risk: "",
+    icon: `<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M22 12a2.1 2.1 0 0 0-3.56-1.5 10.4 10.4 0 0 0-5.4-1.7l.92-4.33 3.01.64a1.8 1.8 0 1 0 .2-1.02l-3.7-.78a.5.5 0 0 0-.6.39l-1.06 5.09a10.4 10.4 0 0 0-5.35 1.7A2.1 2.1 0 1 0 4 15.62a4.1 4.1 0 0 0-.05.63c0 3.2 3.61 5.8 8.06 5.8s8.06-2.6 8.06-5.8a4 4 0 0 0-.05-.62A2.1 2.1 0 0 0 22 12zM8.4 13.5a1.5 1.5 0 1 1 1.5 1.5 1.5 1.5 0 0 1-1.5-1.5zm7.7 4.35a5.3 5.3 0 0 1-4.09 1.3 5.3 5.3 0 0 1-4.09-1.3.44.44 0 0 1 .62-.62 4.5 4.5 0 0 0 3.47 1.04 4.5 4.5 0 0 0 3.47-1.04.44.44 0 1 1 .62.62zm-.2-2.85a1.5 1.5 0 1 1 1.5-1.5 1.5 1.5 0 0 1-1.5 1.5z"/></svg>`,
+  },
+];
+
+function siteSpec(host) {
+  const h = String(host || "").toLowerCase().replace(/^www\./, "");
+  return SITE_CATALOG.find((x) => h === x.host || h.endsWith("." + x.host)
+    || x.host.endsWith("." + h)) || null;
+}
 
 function connectRisk(value) {
   const host = String(value || "").trim().toLowerCase()
     .replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "");
   const parts = host.split(".");
-  // Check the registered domain, so m.linkedin.com and www.x.com both match.
+  // Walk up to the registered domain, so m.linkedin.com and www.x.com both
+  // match the row that warns about them.
   for (let i = 0; i < parts.length - 1; i++) {
-    const hit = CONNECT_RISK[parts.slice(i).join(".")];
-    if (hit) return hit;
+    const spec = siteSpec(parts.slice(i).join("."));
+    if (spec && spec.risk) return spec.risk;
   }
   return "";
 }

@@ -4,7 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Chitragupta — your AI that knows you</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='25' x='3' font-size='24' fill='%23f5c877'%3E%E2%97%86%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/static/favicon-64.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
@@ -408,12 +409,17 @@
       <section class="cn-web" id="cnWeb">
         <div class="cn-web-head">
           <div>
-            <div class="cn-web-title">Websites agents can read</div>
-            <div class="cn-web-sub" id="webSub">Agents can only open sites you list here. They can read and report; they cannot click, type or buy anything.</div>
+            <div class="cn-web-title">Websites</div>
+            <div class="cn-web-sub" id="webSub">Sign in once and agents read the site as you. They can read and report; they cannot click, type or buy anything.</div>
           </div>
           <button id="webSetup" class="tiny" hidden>Set up browsing</button>
         </div>
         <div id="webSetupState" class="cn-web-setup" hidden></div>
+        <!-- The shelf: one card per site, its own mark, and whichever account
+             is signed in. Built from SITE_CATALOG in browser.js merged with the
+             grants the server returns, so a site the user connected by hand
+             still gets a card rather than disappearing into the list below. -->
+        <div id="webShelf" class="cn-web-shelf"></div>
         <div id="webSites" class="cn-web-list"></div>
         <div class="cn-web-add">
           <input id="webInput" class="set-input" type="text" autocomplete="off"
