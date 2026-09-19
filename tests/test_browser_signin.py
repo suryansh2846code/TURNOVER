@@ -44,7 +44,7 @@ class FakeDriver:
         return self.url, self.title, []
 
     def current(self):
-        return self.url, self.title, []
+        return self.url, self.title, getattr(self, "nodes", [])
 
     def clear_cookies(self, domain):
         self.cleared.append(domain)
@@ -270,3 +270,61 @@ def test_disconnecting_clears_the_sign_in_too(monkeypatch, driver):
     assert chromium.forget_site("linkedin.com") is True
     assert driver.cleared == [".linkedin.com"], (
         "the subdomain form matters — a token left on www. is a live session")
+
+
+# ── which account, when the page says so unmistakably ────────────────────
+def test_it_records_the_account_when_the_page_says_one():
+    """The browser is on the signed-in page, so the answer is already there."""
+    from chitragupta.browser.page import Node
+
+    assert signin.account_in([
+        Node("img", "Suryansh Singh"),
+        Node("button", "suryansh2846@gmail.com"),
+    ]) == "suryansh2846@gmail.com"
+
+
+def test_a_handle_counts_too():
+    from chitragupta.browser.page import Node
+
+    assert signin.account_in([Node("link", "@suryansh_s")]) == "@suryansh_s"
+
+
+def test_it_refuses_to_guess_a_name():
+    """A heading can read as a person. Showing the wrong account is worse than
+    showing none — it reads as confirmation."""
+    from chitragupta.browser.page import Node
+
+    assert signin.account_in([
+        Node("heading", "Suryansh Singh"),
+        Node("link", "Feed"),
+        Node("heading", "Sign up for our newsletter"),
+    ]) == ""
+
+
+def test_the_site_cannot_use_the_note_as_a_billboard():
+    """The snapshot is text the website wrote, and it lands on the user's
+    Connectors screen."""
+    from chitragupta.browser.page import Node
+
+    shouty = "x" * 400 + "@example.com"
+    assert len(signin.account_in([Node("link", shouty)])) <= signin.MAX_ACCOUNT_CHARS
+
+
+def test_the_account_reaches_the_grant(driver):
+    from chitragupta.browser.page import Node
+
+    signin.begin("https://www.linkedin.com")
+    driver.url, driver.title = "https://www.linkedin.com/feed/", "Feed"
+    driver.nodes = [Node("button", "suryansh2846@gmail.com")]
+
+    signin.finish()
+
+    assert origins.list_grants()[0].note == "signed in as suryansh2846@gmail.com"
+
+
+def test_a_site_that_names_nobody_still_connects(driver):
+    signin.begin("https://www.linkedin.com")
+    driver.url, driver.title = "https://www.linkedin.com/feed/", "Feed"
+
+    assert signin.finish()["ok"]
+    assert origins.list_grants()[0].note == "signed in from Connectors"

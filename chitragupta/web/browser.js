@@ -34,6 +34,8 @@ async function loadBrowserSites() {
         <div class="cn-web-row" data-site="${esc(site.host)}">
           <span class="cn-web-host">${esc(site.host)}</span>
           <span class="cn-web-cap">${site.may_act ? "read &amp; change" : "read only"}</span>
+          ${site.note && !site.note.startsWith("signed in from")
+            ? `<span class="cn-web-note">${esc(site.note)}</span>` : ""}
           <button class="tiny ghost" data-webdel="${esc(site.host)}">Remove</button>
         </div>`).join("")
     // Not an error: this is the correct starting state, and saying so beats an

@@ -144,5 +144,8 @@ def test_a_locked_model_no_longer_says_connect_in_models():
 
 
 def test_the_reason_a_model_is_locked_is_about_what_you_would_do():
-    fn = MODELS_JS.split("function lockReason(p) {", 1)[1].split("\n}", 1)[0]
+    # Split on the name, not the signature — the claim is about what the
+    # function returns, and pinning the parameter's spelling made a
+    # rename look like a broken feature.
+    fn = MODELS_JS.split("function lockReason(", 1)[1].split("\n}", 1)[0]
     assert "Not running" in fn and "Connect first" in fn

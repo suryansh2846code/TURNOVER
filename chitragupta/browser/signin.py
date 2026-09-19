@@ -29,6 +29,7 @@ if they are rather than recording a connection that does not work.
 """
 from __future__ import annotations
 
+import re
 import threading
 from dataclasses import dataclass, field
 from typing import Any
@@ -169,7 +170,7 @@ def finish(force: bool = False) -> dict[str, Any]:
     if live is None:
         return {"ok": False, "error": "Nothing is being connected."}
 
-    where, title = _where_is_the_browser(session)
+    where, title, nodes = _where_is_the_browser(session)
     if not force and where and looks_like_sign_in(where, title):
         with _state.lock:
             if _state.current is not None:
@@ -183,8 +184,10 @@ def finish(force: bool = False) -> dict[str, Any]:
                          "in, then press Done — or press Done again to record "
                          "it anyway."}
 
-    grant = origins.grant(live.url, may_read=True,
-                          note="signed in from Connectors")
+    account = account_in(nodes)
+    grant = origins.grant(
+        live.url, may_read=True,
+        note=f"signed in as {account}" if account else "signed in from Connectors")
     _clear(close_browser=False)
     log.info("browser sign-in finished for %s", live.host)
     return {"ok": True, "host": live.host,
@@ -204,18 +207,46 @@ def cancel() -> dict[str, Any]:
     return {"ok": True, "detail": f"Stopped connecting {live.host}."}
 
 
-def _where_is_the_browser(driver: Any) -> tuple[str, str]:
-    """The address the browser is actually on, and its title.
+#: An identifier a page cannot accidentally look like. A heading can read as a
+#: person's name; nothing reads as an email address or an @handle by accident.
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+_HANDLE = re.compile(r"@[A-Za-z0-9_]{2,30}\b")
+
+#: Long enough for an email, short enough that a page cannot use the note as a
+#: billboard on the user's Connectors screen.
+MAX_ACCOUNT_CHARS = 60
+
+
+def account_in(nodes: Any) -> str:
+    """The account this page is signed in as, if it says so unmistakably.
+
+    Reads the accessibility tree, which is written by the site — so this looks
+    only for shapes that cannot be anything else. "Suryansh Singh" next to an
+    avatar is a guess; `suryansh@example.com` is not.
+
+    Returns "" when nothing qualifies, and that is the common case. A generic
+    note is right far more often than a confident wrong one.
+    """
+    for node in list(nodes or [])[:400]:
+        text = f"{getattr(node, 'name', '')} {getattr(node, 'value', '')}"
+        found = _EMAIL.search(text) or _HANDLE.search(text)
+        if found:
+            return found.group(0)[:MAX_ACCOUNT_CHARS]
+    return ""
+
+
+def _where_is_the_browser(driver: Any) -> tuple[str, str, list]:
+    """Where the browser actually is, what it is called, and what is on it.
 
     Never the address we asked for — the whole question is where signing in
     took them, and the two differ on every site that redirects after login.
     """
     if driver is None:
-        return "", ""
+        return "", "", []
     with suppressed("asking the browser where it ended up"):
-        url, title, _nodes = driver.current()
-        return str(url), str(title)
-    return "", ""
+        url, title, nodes = driver.current()
+        return str(url), str(title), list(nodes or [])
+    return "", "", []
 
 
 def _clear(*, close_browser: bool) -> None:

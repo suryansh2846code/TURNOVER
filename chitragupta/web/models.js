@@ -113,10 +113,11 @@ function placeFlyout(el) {
 //: It used to be "Connect in Models" for everything, which is read on the
 //: Models screen itself — and for a local server there is no connect step at
 //: all, so it pointed at a button that does not and should not exist.
-function lockReason(p) {
-  const caps = (p && p.capabilities) || {};
-  if (p && p.locality === "local" && !caps.api_key_supported && !caps.oauth_supported) {
-    return p.reason ? "Not running" : "Start it first";
+function lockReason(provider) {
+  const caps = (provider && provider.capabilities) || {};
+  if (provider && provider.locality === "local"
+      && !caps.api_key_supported && !caps.oauth_supported) {
+    return provider.reason ? "Not running" : "Start it first";
   }
   return "Connect first";
 }
@@ -202,6 +203,11 @@ function renderModelFlyout() {
   if (!list) return;
 
   const isProvConn = isProviderConnected(activePickerProvider);
+  // The provider itself, for `lockReason` — which wants capabilities and
+  // locality, not the catalogue entry. Both were called `p` in the source this
+  // came from, and the merge kept the name that was no longer in scope.
+  const provider = (PROVIDERS || []).find((x) =>
+    (x.name || "").toLowerCase() === String(activePickerProvider || "").toLowerCase());
   const normId = (activePickerProvider === "claude-code" || activePickerProvider === "anthropic") ? "claude" : activePickerProvider;
   const pEntry = (MODEL_CATALOG || []).find((c) => c.id === activePickerProvider)
               || (MODEL_CATALOG || []).find((c) => c.id === normId);
@@ -215,14 +221,14 @@ function renderModelFlyout() {
       name: "Auto",
       desc: autoLocked ? "Provider not connected" : "Recommended model automatically",
       locked: autoLocked,
-      plan_required: autoLocked ? lockReason(p) : null
+      plan_required: autoLocked ? lockReason(provider) : null
     },
     ...models.map((m) => ({
       id: m.id,
       name: m.name,
       desc: m.desc,
       locked: !isProvConn || Boolean(m.locked),
-      plan_required: !isProvConn ? (m.plan_required || lockReason(p)) : (m.plan_required || null),
+      plan_required: !isProvConn ? (m.plan_required || lockReason(provider)) : (m.plan_required || null),
     })),
   ];
 
