@@ -39,6 +39,13 @@ holds.
 - **A lapsed session is not a refusal.** A granted site landing on its own login
   page returns `needs_signin` and **drops the page** — an agent handed a login
   form reads one and reports on it, which the user sees as us being broken.
+- **An identity provider refusing us is not our bug, and must not read like
+  one.** Google blocks OAuth from any automated browser — ours reports
+  `navigator.webdriver = true` and a Chrome for Testing user agent — so
+  "Continue with Google" lands on *"This browser or app may not be secure"*.
+  `signin.sso_was_refused` names that page and says to sign in to the site
+  directly instead. **Do not fingerprint-spoof past it**: it is an arms race on
+  Google's schedule, and losing it costs the user their real Google account.
 - **Disconnect ends the session, not just the permission.** `forget_site()`
   clears that host's cookies; a grant dropped while the user stays signed in is
   a lie about what the button did.
