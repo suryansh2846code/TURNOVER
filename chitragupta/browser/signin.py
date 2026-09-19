@@ -53,6 +53,49 @@ SIGN_IN_MARKERS = (
 SIGN_IN_TITLES = ("sign in", "log in", "login", "sign up", "verify",
                   "two-factor", "authenticate")
 
+#: Where an identity provider lands you when it refuses to sign you in *because
+#: of the browser*, rather than because of anything you typed.
+#:
+#: Google is the one that matters — "Continue with Google" is the first button on
+#: a great many sign-in pages — and its refusal reads *"This browser or app may
+#: not be secure"*, which sounds like our fault and is not. Any automated browser
+#: is refused: ours reports `navigator.webdriver = true`, ships a Chrome for
+#: Testing user agent, and has no `userAgentData.brands`, all of which are
+#: checked. That is Google's anti-abuse policy working as intended.
+#:
+#: **We do not try to look like something else.** Defeating it means forging the
+#: fingerprint of a browser we are not, in an arms race whose schedule Google
+#: sets — and the cost of losing lands on the user's real Google account, which
+#: is worth far more to them than this feature. So the honest move is to
+#: recognise the wall and say what gets past it: sign in to the site directly.
+SSO_REFUSED = (
+    "accounts.google.com/v3/signin/rejected",
+    "accounts.google.com/signin/rejected",
+    "accounts.google.com/deniedsigninrejected",
+)
+
+#: What to tell someone staring at that page. Names the provider, says whose
+#: decision it was, and gives the way through — a refusal with no route out is
+#: the "it just doesn't work" this app is built to avoid.
+SSO_REFUSED_ADVICE = (
+    "Google would not sign you in through this browser — it only allows its "
+    "own sign-in from an ordinary browser window. This is Google's rule, not "
+    "something wrong with your setup. Go back and sign in to the site "
+    "directly with your email and password instead of “Continue with "
+    "Google”; that works normally here."
+)
+
+
+def sso_was_refused(url: str) -> bool:
+    """Did an identity provider refuse us for being an automated browser?
+
+    Matched on the address, never on the page text — the same rule the rest of
+    this module follows, and the reason a translated version of that page is
+    still recognised.
+    """
+    lowered = (url or "").lower()
+    return any(marker in lowered for marker in SSO_REFUSED)
+
 
 def is_sign_in_url(url: str) -> bool:
     """Is this address a sign-in page? Judged on the path alone.
@@ -171,6 +214,21 @@ def finish(force: bool = False) -> dict[str, Any]:
         return {"ok": False, "error": "Nothing is being connected."}
 
     where, title, nodes = _where_is_the_browser(session)
+
+    # Checked before the sign-in heuristic, and separately from it. Google's
+    # refusal page *is* a sign-in page, so the generic branch would catch it and
+    # answer "finish signing in, then press Done" — advice that cannot be
+    # followed, about a page that will never let them finish. Naming the real
+    # cause is the difference between a user retrying forever and a user signing
+    # in the way that works.
+    if where and sso_was_refused(where):
+        with _state.lock:
+            if _state.current is not None:
+                _state.current.still_signing_in = True
+                _state.current.note = SSO_REFUSED_ADVICE
+        return {"ok": False, "still_signing_in": True, "sso_refused": True,
+                "host": live.host, "error": SSO_REFUSED_ADVICE}
+
     if not force and where and looks_like_sign_in(where, title):
         with _state.lock:
             if _state.current is not None:

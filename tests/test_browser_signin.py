@@ -328,3 +328,107 @@ def test_a_site_that_names_nobody_still_connects(driver):
 
     assert signin.finish()["ok"]
     assert origins.list_grants()[0].note == "signed in from Connectors"
+
+
+# ── when the identity provider is the thing refusing ─────────────────────
+#
+# Reported from a real machine: "Continue with Google" on LinkedIn lands on
+# Google's *"Couldn't sign you in — This browser or app may not be secure"*.
+# Google refuses OAuth from any automated browser, and ours is one: it reports
+# `navigator.webdriver = true`, carries a Chrome for Testing user agent, and has
+# no `userAgentData.brands`. All three are checked, all three are true, and the
+# refusal is Google's anti-abuse policy working exactly as designed.
+#
+# Nothing here tries to look like a different browser. The point of these tests
+# is the opposite: that the app *recognises the wall* and says what gets past it,
+# instead of leaving somebody pressing Done at a page that will never let them
+# finish.
+@pytest.mark.parametrize("url", [
+    "https://accounts.google.com/v3/signin/rejected?continue=https%3A%2F%2Fwww.linkedin.com",
+    "https://accounts.google.com/signin/rejected",
+    "https://accounts.google.com/deniedsigninrejected",
+    "https://ACCOUNTS.GOOGLE.COM/v3/signin/REJECTED?x=1",
+])
+def test_a_refused_sso_page_is_recognised(url):
+    assert signin.sso_was_refused(url) is True
+
+
+@pytest.mark.parametrize("url", [
+    "https://accounts.google.com/v3/signin/identifier",
+    "https://accounts.google.com/v3/signin/challenge",
+    "https://www.linkedin.com/feed/",
+    "https://example.com/signin/rejected-applications",
+    "",
+])
+def test_an_ordinary_sign_in_page_is_not_mistaken_for_a_refusal(url):
+    """The generic sign-in heuristic still owns those. Claiming Google refused
+    us on a page where the user simply has not finished typing would send them
+    away from a sign-in that was about to work."""
+    assert signin.sso_was_refused(url) is False
+
+
+def test_the_refusal_explains_itself_instead_of_saying_try_again(driver):
+    """The bug as reported. Google's refusal page *is* a sign-in page, so the
+    generic branch caught it and answered "finish signing in, then press Done" —
+    advice that cannot be followed, about a page that will never let them
+    finish."""
+    signin.begin("https://www.linkedin.com")
+    driver.url = ("https://accounts.google.com/v3/signin/rejected"
+                  "?continue=https%3A%2F%2Fwww.linkedin.com")
+    driver.title = "Couldn't sign you in"
+
+    out = signin.finish()
+
+    assert out["ok"] is False
+    assert out["sso_refused"] is True
+    assert "Google's rule" in out["error"]
+    assert "not something wrong with your setup" in out["error"].lower()
+
+
+def test_the_refusal_says_what_actually_works(driver):
+    """A wall with no way round it is the "it just doesn't work" this app exists
+    to avoid. Signing in to the site directly is unaffected — it is only the
+    identity provider that refuses."""
+    signin.begin("https://www.linkedin.com")
+    driver.url = "https://accounts.google.com/v3/signin/rejected"
+
+    error = signin.finish()["error"]
+
+    assert "email and password" in error
+    assert "Continue with" in error
+
+
+def test_a_refused_sso_never_records_a_connection(driver):
+    """The important half. Nobody is signed in, so claiming the site is
+    connected would hand agents a grant that reads a logged-out page."""
+    signin.begin("https://www.linkedin.com")
+    driver.url = "https://accounts.google.com/v3/signin/rejected"
+
+    signin.finish()
+
+    assert origins.list_grants() == []
+    assert signin.status()["connecting"] is True, "still connecting, not done"
+
+
+def test_the_advice_survives_to_the_panel(driver):
+    """`status()` is what the Connectors screen polls, so the explanation has to
+    be there and not only in the response to the press."""
+    signin.begin("https://www.linkedin.com")
+    driver.url = "https://accounts.google.com/v3/signin/rejected"
+    signin.finish()
+
+    assert "Google" in (signin.status().get("note") or "")
+
+
+def test_forcing_past_a_refused_sso_is_still_refused(driver):
+    """`force` exists so a wrong heuristic cannot lock somebody out of their own
+    account. This is not a heuristic being wrong: Google said no, nobody is
+    signed in, and recording it anyway would create a connection that reads a
+    logged-out page forever."""
+    signin.begin("https://www.linkedin.com")
+    driver.url = "https://accounts.google.com/v3/signin/rejected"
+
+    out = signin.finish(force=True)
+
+    assert out["ok"] is False
+    assert origins.list_grants() == []
